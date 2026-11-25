@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertRenderablePreview } from "./preview-profile.js";
+import { assertRenderablePreview, summarizeDraftTimeline } from "./preview-profile.js";
 import type { EditPlanDraftV1 } from "#video-editor/contracts/v1";
 
 function draft(overrides: Partial<EditPlanDraftV1> = {}): EditPlanDraftV1 {
@@ -74,5 +74,25 @@ describe("assertRenderablePreview", () => {
     const retime = draft();
     retime.trimOperations[0]!.recordRange.duration = { num: "2", den: "1" };
     expect(() => assertRenderablePreview(retime)).toThrow("Retiming is not supported");
+  });
+
+  it("summarizes the timeline without touching media", () => {
+    const two = draft();
+    const second = structuredClone(two.trimOperations[0]!);
+    Object.assign(second, { opId: "trim-2", order: "2", clipId: "clip-2" });
+    second.recordRange.start = { num: "1", den: "1" };
+    two.trimOperations.push(second);
+    two.transitionOperations.push({
+      opId: "tr-1", order: "1", trackId: "v1", clipId: "clip-2", leftClipId: "clip-1", rightClipId: "clip-2",
+      kind: "crossfade", duration: { num: "500", den: "1000" },
+    });
+    const summary = summarizeDraftTimeline(two);
+    expect(summary.mainTrackSegments).toBe(2);
+    expect(summary.mainDurationSeconds).toBe("2.000");
+    expect(summary.transitionCount).toBe(1);
+    expect(summary.transitionOverlapSeconds).toBe("0.500");
+    expect(summary.effectiveMainDurationSeconds).toBe("1.500");
+    expect(summary.segments).toHaveLength(2);
+    expect(summary.segments[1]!.sourceAssetId).toBe("asset-1");
   });
 });
