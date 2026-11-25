@@ -813,6 +813,33 @@ export const analyzeAssetRpc = {
   input: AnalyzeAssetInputSchema,
   output: CreateJobResultSchema,
 };
+
+export const GetAnalysisInputSchema = z
+  .object({ requestId, projectId: id, assetId: id })
+  .strict();
+export type GetAnalysisInput = z.infer<typeof GetAnalysisInputSchema>;
+export const AnalysisSummarySchema = z
+  .object({
+    projectId: id,
+    assetId: id,
+    contentHash: sha256,
+    jobId: id,
+    state: JobStateSchema,
+    revision: uint,
+    analysisRate: z.string().regex(/^[1-9][0-9]*\/[1-9][0-9]*$/).nullable(),
+    artifacts: z.array(ArtifactRefSchema),
+    error: EditorErrorSchema.nullable(),
+    note: z.string(),
+  })
+  .strict();
+export type AnalysisSummary = z.infer<typeof AnalysisSummarySchema>;
+export const GetAnalysisResultSchema = AnalysisSummarySchema.extend({ requestId }).strict();
+export const getAnalysisRpc = {
+  name: "video.v1.get_analysis",
+  input: GetAnalysisInputSchema,
+  output: GetAnalysisResultSchema,
+};
+
 export const contactSheetRpc = {
   name: "video.v1.contact_sheet",
   input: ContactSheetRequestSchema,
