@@ -267,6 +267,39 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
       </View>
     );
   }
+  function timelineBars(
+    ops: Array<{
+      opId: string;
+      trackId: string;
+      clipId: string;
+      sourceRange: { start: { num: string; den: string }; duration: { num: string; den: string } };
+      recordRange: { start: { num: string; den: string }; duration: { num: string; den: string } };
+    }>,
+  ) {
+    return (
+      <>
+        {["v1", "v2"].filter((t) => ops.some((o) => o.trackId === t)).map((t) => {
+          const trackOps = ops
+            .filter((o) => o.trackId === t)
+            .sort((a, b) => Number(a.recordRange.start.num) / Number(a.recordRange.start.den) - Number(b.recordRange.start.num) / Number(b.recordRange.start.den));
+          return (
+            <View key={t} style={styles.timelineRow}>
+              <Text style={[styles.muted, styles.trackLabel]}>{t}</Text>
+              {trackOps.map((o) => {
+                const durMs = (Number(o.recordRange.duration.num) / Number(o.recordRange.duration.den)) * 1000;
+                const srcMs = (Number(o.sourceRange.start.num) / Number(o.sourceRange.start.den)) * 1000;
+                return (
+                  <View key={o.opId} style={[t === "v1" ? styles.seg : styles.segV2, { flexGrow: Math.max(durMs, 1) }]}>
+                    <Text style={styles.segText} numberOfLines={1}>{o.clipId} {srcMs / 1000}s</Text>
+                  </View>
+                );
+              })}
+            </View>
+          );
+        })}
+      </>
+    );
+  }
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={heading}>{project?.title ?? "打开剪辑项目"}</Text>
@@ -494,6 +527,19 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   setBgm(next);
                 })}
               </View>
+              {(() => {
+                try {
+                  const draft = proposeCut(project, selected, start, end);
+                  return (
+                    <View style={row}>
+                      <Text style={muted}>草稿时间线:</Text>
+                      {timelineBars(draft.trimOperations)}
+                    </View>
+                  );
+                } catch {
+                  return null;
+                }
+              })()}
               {button("提交裁剪方案", async () => {
                 const draft = proposeCut(
                   project,
@@ -750,6 +796,14 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   await controlJob({ requestId: requestId(`cancel:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "cancel" });
                   show(await read({ projectId: project.projectId }));
                 })}
+              {(job.state === "failed" || job.state === "cancelled") &&
+                button("重试任务", async () => {
+                  await controlJob({ requestId: requestId(`retry:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "retry" });
+                  show(await read({ projectId: project.projectId }));
+                })}
+              {job.state === "failed" && job.error && (
+                <Text style={styles.error}>{job.error.code} · {job.error.sanitizedDetail}</Text>
+              )}
               {job.kind === "export" && job.state === "completed" && job.artifacts.map(a =>
                 a.projectId === project.projectId && a.jobId === job.jobId && (a.kind === "export" || a.kind === "manifest")
                   ? mediaControl(a.kind === "export" ? "准备下载成品视频" : "准备下载导出清单", a.artifactId, a.revision, a.blob, a.kind)

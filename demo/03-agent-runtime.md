@@ -53,6 +53,12 @@ FilmCraft 是候选确定性执行后端，**不是新的 Agent 控制面**。�
 | `submit_edit_plan` | `EditPlanDraftV1`（不含持久标识） | daemon 分配 `planId/revision/planHash`，按 runId/toolCallId 幂等持久化 proposed plan 后 terminate |
 | `get_job_status` | `jobId` | daemon 真实快照，不根据工具事件推测 |
 | `get_qa_report` | `artifactId/jobId` | 原始检查结果、阈值版本和未确定项 |
+| `get_plan` | `planId` | 已采纳方案的完整操作列表，便于在其上迭代 |
+| `get_analysis` | `assetId + contentHash` | 最新 analysis job 元数据（含 scenecuts/waveform artifact 引用），采样图不出 CAS |
+| `get_scene_cuts` | `assetId + contentHash` | FFmpeg scene-score 确定性切点（整帧对齐、≥64 条、含 score/aligned），无像素 |
+| `get_planning_run` | `projectId` | 本次 run 的持久化事件与状态（有界只读），便于续跑时了解上下文 |
+| `diff_plans` | `planId + draft` | 已采纳 plan vs 候选稿的字段级 diff（新增/删除/字段级变更） |
+| `get_qa_summary` | `jobId` | 渲染 QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS |
 
 `VideoToolBroker` 没有 `approvePlan`、`applyPlan`、`rawRender`。所有工具输入在 Pi 和 daemon 各校验一次；Pi `tool_call` hook 不做安全关键参数改写，因为改写后不能依赖自动再次 schema validation。
 

@@ -541,6 +541,16 @@ export class MediaService {
     return plan;
   }
 
+  private fontconfigSupport?: Promise<boolean>;
+
+  /** Burn-in subtitles need libass + fontconfig fonts; probe once and cache. */
+  burnInSubtitlesAvailable(): Promise<boolean> {
+    this.fontconfigSupport ??= this.run("fc-list", ["--version"])
+      .then(() => true)
+      .catch(() => false);
+    return this.fontconfigSupport;
+  }
+
   private async probe(
     source: string,
   ): Promise<{ document: ProbeDocument; streams: StreamDescriptor[] }> {
@@ -1155,6 +1165,14 @@ export class MediaService {
     assertRenderablePreview(plan);
     if (plan.deterministicBackendId !== "ffmpeg")
       editorFailure("CAPABILITY_UNAVAILABLE", "The approved backend is unavailable");
+    if (
+      plan.subtitleOperations.some((c) => c.mode === "burn-in") &&
+      !(await this.burnInSubtitlesAvailable())
+    )
+      editorFailure(
+        "CAPABILITY_UNAVAILABLE",
+        "Burn-in subtitles need fontconfig fonts; use mode=metadata (mov_text sidecar) on this host",
+      );
     const ops = plan.trimOperations;
     const first = ops[0]!;
     const firstVideo = firstAsset.streams.find(
