@@ -62,7 +62,7 @@ jobs:
           - { runner: windows-2025, target: win-x64 }
           - { runner: ubuntu-24.04, target: linux-x64 }
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 50
+    timeout-minutes: 80
     defaults:
       run:
         shell: bash
@@ -92,7 +92,15 @@ jobs:
           BUILD_SHA: ${{ needs.sample.outputs.sha }}
           TARGET: ${{ matrix.target }}
         run: |
-          gh run download "$BUILD_RUN" -n "AVE-$BUILD_SHA-$TARGET" -D package
+          artifact="AVE-$BUILD_SHA-$TARGET"
+          while ! gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN/artifacts?per_page=100" --jq '.artifacts[].name' | grep -Fxq "$artifact"; do
+            if [[ $(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" --jq .status) == completed ]]; then
+              echo "Build finished without $artifact" >&2
+              exit 1
+            fi
+            sleep 30
+          done
+          gh run download "$BUILD_RUN" -n "$artifact" -D package
           python release/desktop/verify-candidate.py package "$BUILD_SHA"
           gh run download "$GITHUB_RUN_ID" -n demo-source -D sample
           python - <<'PY'
