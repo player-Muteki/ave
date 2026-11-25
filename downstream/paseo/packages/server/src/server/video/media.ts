@@ -259,7 +259,12 @@ export class MediaService {
         scale: tr.scale,
         rotationDegrees: tr.rotationDegrees,
       })),
-      subtitleCues: plan.subtitleOperations.length,
+      subtitleCues: plan.subtitleOperations.map((cue) => ({
+        opId: cue.opId,
+        cueId: cue.cueId,
+        range: cue.range,
+        mode: cue.mode,
+      })),
       audioOperations: plan.audioOperations.map((op) => ({
         opId: op.opId,
         clipId: op.clipId,
