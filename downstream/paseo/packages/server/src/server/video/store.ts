@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { presentationSpans, probeStartTime, type FrameIndex } from "./presentation-duration.js";
 import type { ProbeDocument } from "./media.js";
 import type { SqliteDatabase } from "./sqlite-types.js";
 import { DatabaseSync } from "./sqlite.js";
@@ -388,30 +389,37 @@ export class EditorStore {
     if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
 
     const probe: ProbeDocument = JSON.parse((await this.cas.readBytes(asset.probe)).toString("utf8"));
-    const index = JSON.parse((await this.cas.readBytes(asset.presentationIndex)).toString("utf8")) as {
-      frames: { stream_index: number }[];
-    };
+    const index = JSON.parse((await this.cas.readBytes(asset.presentationIndex)).toString("utf8")) as FrameIndex;
     const primaryVideo = asset.streams.find(stream => stream.kind === "video");
+    if (primaryVideo && !Array.isArray(index.frames)) editorFailure("SCHEMA_UNSUPPORTED", "Missing presentation index frames");
     const frameCount = primaryVideo ? index.frames.reduce((n, f) => n + Number(f.stream_index === primaryVideo.streamIndex), 0) : null;
-    return { asset, probe, frameCount, durationSeconds: probe.format?.duration ?? null };
+    return { asset, probe, index, frameCount, durationSeconds: probe.format?.duration ?? null };
   }
 
   async plannerAssetMetadata(projectId: string, assetId: string, contentHash: string, principal: EditorPrincipal) {
-    const { asset, probe, frameCount, durationSeconds } = await this.readAssetMetadata(projectId, assetId, principal, contentHash);
+    const { asset, probe, index, frameCount, durationSeconds } = await this.readAssetMetadata(projectId, assetId, principal, contentHash);
     const byIndex = new Map(probe.streams.map(stream => [stream.index, stream]));
+    const withoutDuration = asset.streams.filter(({ streamIndex, kind }) =>
+      (kind === "audio" || kind === "video") && byIndex.get(streamIndex)?.duration_ts === undefined,
+    );
+    const spans = presentationSpans(index, asset, withoutDuration);
     return PlannerAssetMetadataSchema.parse({
-      assetId, contentHash, frameCount, durationSeconds,
+      assetId, contentHash, frameCount, durationSeconds, inputStartTime: probeStartTime(probe.format?.start_time),
       streams: asset.streams.map(({ streamIndex, streamUid, kind, codec, timeBase, averageRate, width, height, sampleRate }) => {
         const stream = byIndex.get(streamIndex);
         const sameClock = stream?.codec_type === kind && stream.time_base === `${timeBase.num}/${timeBase.den}`;
         const start = sameClock ? stream.start_pts : undefined;
         const duration = sameClock ? stream.duration_ts : undefined;
+        const span = sameClock ? spans.get(streamIndex) : undefined;
+        // A header can include preroll or an edit list outside the decoded frame span.
+        const measured = span && (start === undefined || (Number.isSafeInteger(start) && BigInt(start) === span.first))
+          ? span : undefined;
         // The saved probe uses JSON numbers. Publish only ticks that survived parsing exactly.
         return {
           streamUid, kind, codec, timeBase, averageRate, width, height, sampleRate,
-          startPts: Number.isSafeInteger(start) ? String(start) : undefined,
+          startPts: Number.isSafeInteger(start) ? String(start) : measured?.first.toString(),
           durationTicks: duration !== undefined && duration >= 0 && Number.isSafeInteger(duration)
-            ? String(duration) : undefined,
+            ? String(duration) : measured && (measured.end - measured.first).toString(),
         };
       }),
     });

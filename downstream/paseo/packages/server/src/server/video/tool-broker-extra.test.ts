@@ -1,4 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { PlannerAssetMetadataSchema } from "#video-editor/contracts/v1";
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
@@ -18,7 +22,7 @@ it("projects asset metadata, fails closed on unknown jobs, and reports snapshot 
     const principal = service.principalForOwner();
     const { projectId } = store.createProject({ requestId: "p", title: "Planner", principal });
     const blob = await service.cas.writeBytes(Buffer.from("broker-extra"), "application/octet-stream");
-    const probe = await service.cas.writeJson({ streams: [
+    const probe = await service.cas.writeJson({ format: { start_time: "-0.080000" }, streams: [
       { index: 1, codec_type: "audio", time_base: "1/48000", start_pts: 0, duration_ts: 2 ** 53 },
       { index: 0, codec_type: "video", time_base: "1/90000", start_pts: -7200, duration_ts: 90000 },
     ] });
@@ -48,6 +52,7 @@ it("projects asset metadata, fails closed on unknown jobs, and reports snapshot 
       contentHash: blob.sha256,
       durationSeconds: null,
       frameCount: 1,
+      inputStartTime: { num: "-80000", den: "1000000" },
       streams: [
         { streamUid: "stream:0", kind: "video", codec: "h264", timeBase: { num: "1", den: "90000" },
           averageRate: { num: "24", den: "1" }, startPts: "-7200", durationTicks: "90000" },
@@ -62,6 +67,59 @@ it("projects asset metadata, fails closed on unknown jobs, and reports snapshot 
       hasMoreAssets: false,
       assets: [{ assetId: "clip", contentHash: blob.sha256 }],
     });
+  } finally {
+    await service.stop();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+it("measures a nonzero-start Matroska stream from its decoded frame index", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "planner-index-duration-"));
+  const service = await EditorService.create({ paseoHome: home });
+  try {
+    const source = path.join(home, "offset.mkv");
+    await promisify(execFile)("ffmpeg", [
+      "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=32x32:rate=25:duration=2",
+      "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=8000:duration=2",
+      "-vf", "select='gte(n,3)*not(eq(n,5))'", "-fps_mode", "vfr", "-c:v", "ffv1", "-c:a", "pcm_s16le",
+      "-output_ts_offset", "2", source,
+    ]);
+    await service.start();
+    const principal = service.principalForOwner();
+    const { projectId } = service.store.createProject({ requestId: "p", title: "VFR", principal });
+    const bytes = await readFile(source);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const { uploadId } = service.store.createUpload({
+      projectId, principal, requestId: "upload", displayName: "offset.mkv", mediaType: "video/x-matroska",
+      expectedSize: String(bytes.length), expectedSha256: sha256,
+    });
+    await service.media.writeUploadChunk(uploadId, "0", bytes, principal);
+    const asset = await service.media.commitUpload(uploadId, "commit", sha256, principal);
+    const probe = JSON.parse((await service.cas.readBytes(asset.probe)).toString("utf8"));
+    expect(probe.streams.every((stream: { duration_ts?: number }) => stream.duration_ts === undefined)).toBe(true);
+    const broker = new VideoToolBroker(service.store, { projectId, runId: "cut", principal });
+    const metadata = (assetId: string) => broker.invoke({
+      protocolVersion: "1", toolCallId: "metadata", tool: "get_asset_metadata",
+      args: { assetId, contentHash: sha256 },
+    });
+    expect(await metadata(asset.assetId)).toMatchObject({
+      inputStartTime: { num: "2000000", den: "1000000" },
+      streams: [
+        { kind: "video", timeBase: { num: "1", den: "1000" }, startPts: "2120", durationTicks: "1880" },
+        { kind: "audio", timeBase: { num: "1", den: "1000" }, startPts: "2000", durationTicks: "2000" },
+      ],
+    });
+    const incomplete = JSON.parse((await service.cas.readBytes(asset.presentationIndex)).toString("utf8"));
+    const lastVideo = incomplete.frames.findLast((f: { media_type: string }) => f.media_type === "video");
+    delete lastVideo.duration;
+    delete lastVideo.pkt_duration;
+    const alternate = {
+      ...asset, assetId: "incomplete-index", presentationIndex: await service.cas.writeJson(incomplete),
+    };
+    service.store.addAsset(projectId, alternate, "add-incomplete", principal);
+    const result = PlannerAssetMetadataSchema.parse(await metadata(alternate.assetId));
+    expect(result.streams[0]!.durationTicks).toBeUndefined();
+    expect(result.streams[1]!.durationTicks).toBe("2000");
   } finally {
     await service.stop();
     await rm(home, { recursive: true, force: true });

@@ -4653,6 +4653,9 @@
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
+        "inputStartTime": {
+          "$ref": "urn:video-editor:v1:Rational"
+        },
         "streams": {
           "type": "array",
           "items": {

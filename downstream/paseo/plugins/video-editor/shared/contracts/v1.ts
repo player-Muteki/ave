@@ -66,6 +66,7 @@ export const PlannerAssetMetadataSchema = z.object({
   frameCount: z.number().int().min(0).nullable().optional(),
   assetId: id,
   contentHash: sha256,
+  inputStartTime: RationalSchema.optional(),
   streams: z.array(StreamDescriptorSchema.pick({
     streamUid: true, kind: true, codec: true, timeBase: true,
     averageRate: true, width: true, height: true, sampleRate: true,
