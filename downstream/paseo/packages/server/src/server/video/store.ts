@@ -35,6 +35,7 @@ import {
   type EditPlanDraftV1,
   type EditorPrincipal,
   type EditorEvent,
+  AnalysisRateSchema,
   type EditorRole,
   type JobSnapshot,
   type ProjectSnapshot,
@@ -47,12 +48,17 @@ const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
 /** Clamp the optional analysis sampling rate to a sane fps range. */
 function clampAnalysisRate(rate?: string): string {
-  if (!rate) return "25/1";
-  const [num, den] = rate.split("/");
-  const value = Number(num) / Number(den);
-  if (!Number.isFinite(value) || value <= 0) editorFailure("INVALID_ARGUMENT", "Analysis rate must be a positive rational");
-  const clamped = Math.min(1000, Math.max(1, Math.round(value)));
-  return `${clamped}/1`;
+  if (rate === undefined) return "25/1";
+  if (!AnalysisRateSchema.safeParse(rate).success)
+    editorFailure("INVALID_ARGUMENT", "Analysis rate must be a positive rational");
+  const [n, d] = rate.split("/");
+  const numerator = BigInt(n!);
+  const denominator = BigInt(d!);
+  if (numerator <= denominator) return "1/1";
+  if (numerator >= denominator * 1000n) return "1000/1";
+  let a = numerator, b = denominator;
+  while (b) [a, b] = [b, a % b];
+  return `${numerator / a}/${denominator / a}`;
 }
 
 interface ProjectRow {

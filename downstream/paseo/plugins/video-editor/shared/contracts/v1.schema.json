@@ -579,6 +579,12 @@
       ],
       "additionalProperties": false
     },
+    "AnalysisRate": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:AnalysisRate",
+      "type": "string",
+      "pattern": "^[1-9][0-9]*\\/[1-9][0-9]*$"
+    },
     "AnalysisSummary": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:AnalysisSummary",
@@ -610,8 +616,7 @@
         "analysisRate": {
           "anyOf": [
             {
-              "type": "string",
-              "pattern": "^[1-9][0-9]*\\/[1-9][0-9]*$"
+              "$ref": "urn:video-editor:v1:AnalysisRate"
             },
             {
               "type": "null"
@@ -670,8 +675,7 @@
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
         },
         "rate": {
-          "type": "string",
-          "pattern": "^[1-9][0-9]*\\/[1-9][0-9]*$"
+          "$ref": "urn:video-editor:v1:AnalysisRate"
         }
       },
       "required": [
@@ -2657,8 +2661,7 @@
         "analysisRate": {
           "anyOf": [
             {
-              "type": "string",
-              "pattern": "^[1-9][0-9]*\\/[1-9][0-9]*$"
+              "$ref": "urn:video-editor:v1:AnalysisRate"
             },
             {
               "type": "null"
@@ -4765,8 +4768,7 @@
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
         },
         "analysisRate": {
-          "type": "string",
-          "pattern": "^[1-9][0-9]*\\/[1-9][0-9]*$"
+          "$ref": "urn:video-editor:v1:AnalysisRate"
         }
       },
       "required": [

@@ -309,3 +309,9 @@
 生产规划 Worker 子进程从本地测试 provider 收到 `estimate_timeline({"planId":"<本次已保存方案>"})`。经过 Pi 工具调用与 daemon IPC 后，provider 收到同一 planId，`effectiveMainDurationSeconds="1.000"`、`valid=true`、`issue=null`，方案数未变化。此记录的 ID 已脱敏，provider 使用固定响应，覆盖工具链路。真实模型生成剪辑区间另在最终包演示中验收。
 
 `agent/planner-approval.test.ts` 覆盖上述调用；`tool-broker.test.ts` 同时验证原草稿和 ID，两种输入得到相同时长，未知及跨项目 ID 均返回 ASSET_NOT_FOUND。TS 工具与契约测试通过 170 项，Python 对 104 个定义验证 161 个线格式样例。
+
+## v0.1.0 · 分数分析采样率
+
+以 24000/1001 fps、2400 帧的 100.1 秒真实 MP4 做两次分析。24000/1001 和 30000/1001 从任务到 Python 映射及报告均保持精确，分别得到 2400 和 3000 个采样点，最后一个都映射到源帧 2399。实际 FFmpeg 场景切点位于帧 601、1202、1803，三个位置均逐个对照源 PTS，以整数交叉相乘确认零误差。原视频摘要未变。工作台的手输秒数字段维持毫秒精度。
+
+`analysis-rate.test.ts` 同时覆盖默认 25/1、等价分数去重、1 与 1000 fps 两端限幅及非法输入。TS 与 Python 通过 169 个契约样例，另通过 20 项 Python 采样映射检查。

@@ -552,7 +552,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 <View style={row}>
                   <Text style={muted}>切点（点击设为入点）:</Text>
                   {sceneCuts.doc.cuts.map((c, i) => {
-                    const t = String(Number(c.aligned.num) / Number(c.aligned.den) / 1000);
+                    const t = String(Math.round(Number(c.aligned.num) / Number(c.aligned.den)) / 1000);
                     return (
                       <View key={`${c.frameIndex}-${i}`} style={row}>
                         <DeskControl

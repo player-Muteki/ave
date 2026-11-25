@@ -159,5 +159,13 @@
   {"name": "list plans result rejects bad backend", "schema": "ListPlansResult", "valid": false, "value": {"requestId": "req-lpl-2", "projectId": "proj", "planCount": 1, "plans": [{"planId": "plan-2", "revision": "2", "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "intent": "x", "status": "proposed", "deterministicBackendId": "vulkan"}], "hasMore": false}},
   {"name": "planner estimate saved ID", "schema": "VideoToolCall", "valid": true, "value": {"protocolVersion": "1", "toolCallId": "estimate", "tool": "estimate_timeline", "args": {"planId": "plan-1"}}},
   {"name": "planner estimate foreign scope override", "schema": "VideoToolCall", "valid": false, "value": {"protocolVersion": "1", "toolCallId": "estimate", "tool": "estimate_timeline", "args": {"projectId": "q", "planId": "plan-1"}}},
-  {"name": "planner estimate empty arguments", "schema": "VideoToolCall", "valid": false, "value": {"protocolVersion": "1", "toolCallId": "estimate", "tool": "estimate_timeline", "args": {}}}
+  {"name": "planner estimate empty arguments", "schema": "VideoToolCall", "valid": false, "value": {"protocolVersion": "1", "toolCallId": "estimate", "tool": "estimate_timeline", "args": {}}},
+  {"name": "analysis input rate 25/1", "schema": "AnalyzeAssetInput", "valid": true, "value": {"requestId": "analysis", "projectId": "p", "assetId": "a", "rate": "25/1"}},
+  {"name": "analysis input rate 24000/1001", "schema": "AnalyzeAssetInput", "valid": true, "value": {"requestId": "analysis", "projectId": "p", "assetId": "a", "rate": "24000/1001"}},
+  {"name": "analysis input rate 30000/1001", "schema": "AnalyzeAssetInput", "valid": true, "value": {"requestId": "analysis", "projectId": "p", "assetId": "a", "rate": "30000/1001"}},
+  {"name": "analysis input rate 1/2", "schema": "AnalyzeAssetInput", "valid": true, "value": {"requestId": "analysis", "projectId": "p", "assetId": "a", "rate": "1/2"}},
+  {"name": "analysis input rate 1001/1", "schema": "AnalyzeAssetInput", "valid": true, "value": {"requestId": "analysis", "projectId": "p", "assetId": "a", "rate": "1001/1"}},
+  {"name": "analysis input rate 1/0", "schema": "AnalyzeAssetInput", "valid": false, "value": {"requestId": "analysis", "projectId": "p", "assetId": "a", "rate": "1/0"}},
+  {"name": "analysis input rate 0/1", "schema": "AnalyzeAssetInput", "valid": false, "value": {"requestId": "analysis", "projectId": "p", "assetId": "a", "rate": "0/1"}},
+  {"name": "analysis input rate 1.5", "schema": "AnalyzeAssetInput", "valid": false, "value": {"requestId": "analysis", "projectId": "p", "assetId": "a", "rate": "1.5"}}
 ]

@@ -1094,8 +1094,8 @@ export class MediaService {
   /**
    * Deterministic scene-cut detection: one FFmpeg pass computing lavfi.scene_score
    * for every frame (select passes all frames, metadata=print dumps pts+score).
-   * Cuts are snapped to whole frames of the source average rate, so they can be
-   * used directly as frame-aligned trim boundaries.
+   * The filter clock matches the video stream. Use integer filter PTS for exact
+   * playback offsets, including on fractional-rate and variable-rate inputs.
    */
   private async sceneCutReport(
     asset: SourceAsset,
@@ -1115,7 +1115,7 @@ export class MediaService {
           "-nostdin", "-v", "error", "-xerror",
           "-i", this.cas.pathFor(asset.original),
           "-map", "0:v:0",
-          "-vf", `select='gte(scene,0)',metadata=print:file=${metadataPath}`,
+          "-vf", `settb=${video.timeBase.num}/${video.timeBase.den},select='gte(scene,0)',metadata=print:file=${metadataPath}`,
           "-f", "null", "-",
         ],
         signal,
@@ -1125,6 +1125,7 @@ export class MediaService {
       const cuts: SceneCutDocument["cuts"] = [];
       let candidateCount = 0;
       let frameIndex = -1;
+      let pts = 0n;
       let ptsTime = "0";
       let lastCut = -Infinity;
       let count = 0;
@@ -1133,7 +1134,10 @@ export class MediaService {
       for (const line of text.split("\n")) {
         if (line.startsWith("frame:")) {
           frameIndex = Number(/frame:(\d+)/.exec(line)?.[1] ?? "-1");
-          ptsTime = /pts_time:([0-9.]+)/.exec(line)?.[1] ?? "0";
+          const timestamp = /\bpts:(-?\d+)/.exec(line);
+          if (!timestamp) editorFailure("QA_FAILED", "Scene frame has no presentation timestamp");
+          pts = BigInt(timestamp[1]!);
+          ptsTime = rationalSeconds({ num: String(pts * BigInt(video.timeBase.num)), den: video.timeBase.den });
           continue;
         }
         if (!line.startsWith("lavfi.scene_score=")) continue;
@@ -1146,7 +1150,7 @@ export class MediaService {
         if (score >= threshold && Number(ptsTime) - lastCut >= minGap) {
           candidateCount += 1;
           if (cuts.length < MediaService.SCENE_CUT_MAX_CUTS) {
-            cuts.push({ frameIndex, ptsTime, score: scoreText, aligned: { num: String(Math.round(Number(ptsTime) * 1000)), den: "1" } });
+            cuts.push({ frameIndex, ptsTime, score: scoreText, aligned: { num: String(pts * BigInt(video.timeBase.num) * 1000n), den: video.timeBase.den } });
             lastCut = Number(ptsTime);
           }
         }

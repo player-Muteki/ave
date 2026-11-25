@@ -5,6 +5,7 @@ export const VIDEO_PLUGIN_ID = "video-editor" as const;
 export const VACE_PROFILE = "vace-local-9f-480p-v1";
 export const VACE_MODEL = "ec4d2cb062b548996b179d493fdd05340de702a1";
 
+export const AnalysisRateSchema = z.string().regex(/^[1-9][0-9]*\/[1-9][0-9]*$/);
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const requestId = id;
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
@@ -341,10 +342,7 @@ export const JobSnapshotSchema = z
     artifacts: z.array(ArtifactRefSchema),
     error: EditorErrorSchema.optional(),
     analysisAssetId: id.optional(),
-    analysisRate: z
-      .string()
-      .regex(/^[1-9][0-9]*\/[1-9][0-9]*$/)
-      .optional(),
+    analysisRate: AnalysisRateSchema.optional(),
   })
   .strict();
 export type JobSnapshot = z.infer<typeof JobSnapshotSchema>;
@@ -812,10 +810,7 @@ export const AnalyzeAssetInputSchema = z
     requestId,
     projectId: id,
     assetId: id,
-    rate: z
-      .string()
-      .regex(/^[1-9][0-9]*\/[1-9][0-9]*$/)
-      .optional(),
+    rate: AnalysisRateSchema.optional(),
   })
   .strict();
 export type AnalyzeAssetInput = z.infer<typeof AnalyzeAssetInputSchema>;
@@ -1004,7 +999,7 @@ export const AnalysisSummarySchema = z
     jobId: id,
     state: JobStateSchema,
     revision: uint,
-    analysisRate: z.string().regex(/^[1-9][0-9]*\/[1-9][0-9]*$/).nullable(),
+    analysisRate: AnalysisRateSchema.nullable(),
     artifacts: z.array(ArtifactRefSchema),
     error: EditorErrorSchema.nullable(),
     note: z.string(),
