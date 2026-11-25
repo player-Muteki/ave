@@ -314,6 +314,8 @@ test
         const pendingSequence = ProjectSnapshotSchema.parse(await invoke("get_project",{projectId:job.projectId})).approvals
           .find(a => a.subjectId===artifact.artifactId && a.status==="pending")!;
         expect(pendingSequence).toMatchObject({purpose:"input",subjectHash:artifact.blob.sha256});
+        await expect(invoke("propose_vace_preview",{projectId:job.projectId,requestId:"pending-generation",expectedRevision:job.revision,
+          maskApprovalId:pendingSequence.approvalId,manifestHash:artifact.blob.sha256,prompt:"blue",negativePrompt:"",seed:1})).rejects.toThrow();
         expect(await invoke("request_tracked_mask_review",{...reviewRequest,requestId:"same-input"})).toEqual(pendingSequence);
         await web("wait", "--text", "播放掩码传播审片");
         await clickDesk("播放掩码传播审片（9 帧/秒）");
@@ -345,6 +347,71 @@ test
           const rows = ledger.prepare("SELECT r.decided_by, a.grant FROM tracked_mask_reviews r JOIN approvals a USING(approval_id) WHERE r.job_id = ? ORDER BY r.rowid").all(job.jobId);
           expect(rows).toEqual([{decided_by:"owner",grant:null},{decided_by:"owner",grant:null}]);
         } finally {ledger.close();}
+
+        if (process.env.VIDEO_EDITOR_VACE_TEST === "1") {
+          const snapshot=async()=>ProjectSnapshotSchema.parse(await invoke("get_project",{projectId:job.projectId}));
+          const waitFor=async(kind:string,state:string,timeout:number)=>{
+            await expect.poll(async()=>{
+              const j=(await snapshot()).jobs.find(j=>j.kind===kind);
+              return j?.state===state || j?.state==="failed";
+            },{timeout,interval:800}).toBe(true);
+            const j=(await snapshot()).jobs.find(j=>j.kind===kind)!;
+            expect(j.state,JSON.stringify(j.error)).toBe(state);
+            return j;
+          };
+          await web("fill",'[aria-label="VACE 提示词"]',"A cobalt blue ceramic rectangle moving right on a dark navy background, fixed camera.");
+          await web("fill",'[aria-label="VACE 负面提示词"]',"orange, yellow, text");
+          await clickDesk("提交 VACE 预览方案");
+          await web("wait","--text","预览审批");
+          const proposed=await snapshot();
+          expect(proposed.jobs).toHaveLength(1);
+          expect(proposed.plans[0]?.generationRequests[0]).toMatchObject({maskApprovalId:pendingSequence.approvalId,referenceManifestHash:artifact.blob.sha256});
+          await clickDesk("批准并渲染预览");
+          const preview=await waitFor("preview","awaiting_review",300000);
+          const qa=JSON.parse((await cas.readBytes(preview.artifacts.find(a=>a.kind==="qa")!.blob)).toString());
+          expect(qa.generation.modelRun).toMatchObject({seed:732021,steps:20,manifestHash:artifact.blob.sha256});
+          expect(qa.generation.modelRun.protectedPixels).toEqual(manifest.frames.map(f=>320*192-f.foregroundPixels));
+          await clickDesk("刷新项目");
+          await clickDesk("观看预览候选");
+          const selector='video[aria-label="观看预览候选"]';
+          await web("wait",selector);
+          await web("eval",`(async()=>{const v=document.querySelector('${selector}');v.muted=true;await v.play()})()`);
+          await web("wait","--fn",`document.querySelector('${selector}').ended`);
+          await clickDesk("批准渲染成品候选");
+          const final=await waitFor("final","awaiting_delivery_approval",20000);
+          expect(final.artifacts.find(a=>a.kind==="candidate")?.blob).toEqual(qa.generation.master);
+          await clickDesk("刷新项目");
+          await clickDesk("观看成品审片代理");
+          await web("wait",'video[aria-label="观看成品审片代理"]');
+          await clickDesk("确认审片并批准导出");
+          const exported=await waitFor("export","completed",20000);
+          const delivery=exported.artifacts.find(a=>a.kind==="export")!;
+          expect(delivery.blob).toEqual(qa.generation.master);
+          const recipe=JSON.parse((await cas.readBytes(exported.artifacts.find(a=>a.kind==="manifest")!.blob)).toString());
+          expect(recipe.modelRuns).toEqual([qa.generation.modelRun]);
+          expect(recipe.maskLineageRoots).toEqual([artifact.blob.sha256]);
+          const media=cas.pathFor(delivery.blob);
+          const {stdout:decoded}=await execute("ffmpeg",["-v","error","-i",media,"-map","0:v:0","-pix_fmt","rgb24","-f","rawvideo","pipe:1"],{encoding:"buffer",maxBuffer:4<<20});
+          expect(decoded.length).toBe(rgb.length);
+          const refAudio=path.join(root,"source-audio.m4a");
+          await execute("ffmpeg",["-v","error","-i",source,"-map","0:a:0","-af","atrim=start=0:duration=0.36,asetpts=PTS-STARTPTS,aresample=48000","-c:a","aac",refAudio]);
+          const pcm=async(file:string)=>(await execute("ffmpeg",["-v","error","-i",file,"-map","0:a:0","-f","s16le","pipe:1"],{encoding:"buffer"})).stdout;
+          const originalAudio=await pcm(refAudio);
+          expect(originalAudio.byteLength).toBeGreaterThan(30000);
+          expect(await pcm(media)).toEqual(originalAudio);
+
+          let outside=0,inside=0,insidePixels=0;
+          for (const [i,row] of manifest.frames.entries()) {
+            const label=await cas.readBytes(row.label);
+            for (const [j,v] of label.entries()) {
+              const pos=(i*label.length+j)*3;
+              const error=[0,1,2].reduce((s,c)=>s+Math.abs(decoded[pos+c]!-rgb[pos+c]!),0)/3;
+              if (v) {inside+=error;insidePixels++;} else outside+=error;
+            }
+          }
+          expect(inside/insidePixels).toBeGreaterThan(15);
+          expect(outside/(rgb.length/3-insidePixels)).toBeLessThan(4);
+        }
 
 
         expect(createHash("sha256").update(await readFile(source)).digest("hex")).toBe(digest);
@@ -501,5 +568,5 @@ test
       }
     }
   },
-  120000,
+  process.env.VIDEO_EDITOR_VACE_TEST === "1" ? 420000 : 120000,
 );

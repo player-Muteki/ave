@@ -4,7 +4,7 @@
 
 ## 环境与复验
 
-固定 Diffusers 仓库快照 `ec4d2cb062b548996b179d493fdd05340de702a1`，17 个运行文件逐一核对摘要。PyTorch 2.13.0+cu130、Diffusers 0.36.0、Transformers 4.57.3、Accelerate 1.12.0、FFmpeg 8.0.1。文本编码器单独运行，BF16 权重按 GPU 4 GiB、CPU 2 GiB 配额及磁盘分层加载。释放文本编码器后以 BF16 transformer、FP32 VAE、分块 VAE 和 CPU offload 完成 20 步采样，guidance scale 为 5。报告中的显存为 PyTorch allocated 峰值，耗时为本机单次观察。[权重文件清单](vace-1.3b.json)
+固定 Diffusers 仓库快照 `ec4d2cb062b548996b179d493fdd05340de702a1`，17 个运行文件逐一核对摘要。PyTorch 2.13.0+cu130、Diffusers 0.36.0、Transformers 4.57.3、Accelerate 1.12.0、FFmpeg 8.0.1。文本编码器单独运行，BF16 权重按 GPU 4 GiB、CPU 2 GiB 配额及磁盘分层加载。释放文本编码器后以 BF16 transformer、FP32 VAE、分块 VAE 和 CPU offload 完成 20 步采样，guidance scale 为 5。报告中的显存为 PyTorch allocated 峰值，耗时为本机单次观察。[权重文件清单](../downstream/paseo/plugins/video-editor/worker/vace-1.3b.json)
 
 从仓库根目录执行，环境变量分别指向本地固定快照、E07 结果目录、SAM2 checkout 和 Tiny 权重。靠枕的 `prepare` 使用 SAM2 环境，`generate` 使用 VACE 环境。每次输出使用新目录。
 

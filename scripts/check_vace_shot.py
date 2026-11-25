@@ -15,6 +15,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "downstream/paseo/plugins/video-editor/worker"))
 from protected_composite import composite_rgb24
 from vace_shot import VaceCanvas, generate_shot
+from vace_model import digest, verify_model
 
 CANVAS = VaceCanvas((320, 192), (832, 480))
 PROMPT = ("A bright cobalt blue polished ceramic ball moving slowly to the right, "
@@ -22,30 +23,6 @@ PROMPT = ("A bright cobalt blue polished ceramic ball moving slowly to the right
 NEGATIVE = "yellow, orange ball, shaky camera, text, lettering, blurry"
 SEED = 732021
 STEPS = 20
-
-
-def digest(path, algorithm="sha256", prefix=b""):
-    result = hashlib.new(algorithm, prefix)
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(8 << 20), b""):
-            result.update(block)
-    return result.hexdigest()
-
-
-def verify_model(model):
-    lock = json.loads((ROOT / "research/vace-1.3b.json").read_bytes())
-    for name, entry in lock["files"].items():
-        path = model / name
-        if path.stat().st_size != entry["bytes"]:
-            raise ValueError(f"model file size mismatch: {name}")
-        if "sha256" in entry:
-            valid = digest(path) == entry["sha256"]
-        else:
-            header = f"blob {entry['bytes']}\0".encode()
-            valid = digest(path, "sha1", header) == entry["gitBlobSha1"]
-        if not valid:
-            raise ValueError(f"model digest mismatch: {name}")
-    return lock["revision"]
 
 
 def media(*args, data=None):

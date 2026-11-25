@@ -419,6 +419,10 @@
                 "type": "string",
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
               },
+              "maskApprovalId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
               "referenceAssetIds": {
                 "maxItems": 16,
                 "type": "array",
@@ -1745,6 +1749,10 @@
                 "type": "string",
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
               },
+              "maskApprovalId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
               "referenceAssetIds": {
                 "maxItems": 16,
                 "type": "array",
@@ -2835,6 +2843,58 @@
         "approvals",
         "jobs",
         "latestSeq"
+      ],
+      "additionalProperties": false
+    },
+    "ProposeVacePreview": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ProposeVacePreview",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "expectedRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "maskApprovalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "manifestHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "negativePrompt": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "projectId",
+        "requestId",
+        "expectedRevision",
+        "maskApprovalId",
+        "manifestHash",
+        "prompt",
+        "negativePrompt",
+        "seed"
       ],
       "additionalProperties": false
     },

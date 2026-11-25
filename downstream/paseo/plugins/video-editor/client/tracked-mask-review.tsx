@@ -8,6 +8,7 @@ import {
   type JobSnapshot,
   type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
+import { VaceForm } from "./vace-form.js";
 import { ReviewPlayer } from "./review-player.js";
 
 interface Props {
@@ -39,6 +40,12 @@ export function TrackedMaskReview(props: Props) {
       proxy={proxy}
     />
   );
+}
+
+function statusText(status: string | undefined, pending: boolean) {
+  if (status === "approved") return "整段掩码已批准";
+  if (status === "rejected") return "整段掩码已拒绝";
+  return pending ? "等待整段掩码审批" : "审批已失效";
 }
 
 function Review({
@@ -81,9 +88,7 @@ function Review({
     }),
     [theme.colors],
   );
-  let status = pending ? "等待整段掩码审批" : "审批已失效";
-  if (approval?.status === "approved") status = "整段掩码已批准";
-  if (approval?.status === "rejected") status = "整段掩码已拒绝";
+  const status = statusText(approval?.status, pending);
   const action = async (choice: "submit" | "approve" | "reject") => {
     setBusy(true);
     setError("");
@@ -159,6 +164,9 @@ function Review({
           () => void action("submit"),
           locked,
         )}
+      {approval?.status === "approved" && approval.diffSummary.operationCount === 9 && (
+        <VaceForm approval={approval} refresh={refresh} theme={theme} disabled={locked} />
+      )}
       {!!error && (
         <Text accessibilityLiveRegion="polite" style={styles.text}>
           {error}

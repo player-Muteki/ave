@@ -29,12 +29,13 @@ interface IndexFrame {
   best_effort_timestamp?: string;
 }
 
-async function prepareFrames(
+export async function prepareFrames(
   cas: ContentAddressedStore,
   asset: SourceAsset,
   revision: MaskAnchorRevision,
   request: TrackMaskRequest,
   executeMedia: (args: string[]) => Promise<{ stderr: string }>,
+  format: "jpeg" | "rgb24" = "jpeg",
 ) {
   const h = revision.anchor;
   if (
@@ -76,13 +77,9 @@ async function prepareFrames(
     "passthrough",
     "-frames:v",
     String(request.frameCount),
-    "-start_number",
-    "0",
-    "-q:v",
-    "2",
-    "-threads:v",
-    "1",
-    "frames/%05d.jpg",
+    "-threads:v", "1",
+    ...(format === "rgb24" ? ["-pix_fmt","rgb24","-f","rawvideo","source.rgb"]
+      : ["-start_number","0","-q:v","2","frames/%05d.jpg"]),
   ]);
   const records = [
     ...stderr.matchAll(

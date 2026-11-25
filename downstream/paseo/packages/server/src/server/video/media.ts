@@ -9,6 +9,7 @@ import { ContentAddressedStore, sha256File } from "./cas.js";
 import { EditorError, editorFailure } from "./errors.js";
 import { assertRenderablePreview } from "./preview-profile.js";
 import { encodeFramedChunk } from "#video-editor/bytes";
+import { generateMaster, generationDraft, sourceClock, vaceRuntime } from "./vace-preview.js";
 import { trackMaskJob } from "./mask-tracking.js";
 import { FrameInspector } from "./frame-inspector.js";
 import { PyWorker } from "./py-worker.js";
@@ -26,7 +27,7 @@ import {
   type ContactSheetResult,
   type InspectFrameRequest,
   type CreateMaskRevisionRequest,
-  type MaskAnchorRevision, TrackedMaskManifestSchema,
+  type MaskAnchorRevision, TrackedMaskManifestSchema, BlobRefSchema, type ProposeVacePreview,
 } from "#video-editor/contracts/v1";
 
 const execFileAsync = promisify(execFile);
@@ -186,6 +187,35 @@ export class MediaService {
         );
       await this.cas.readBytes(frame.label);
     }
+    return doc;
+  }
+
+  async proposeVace(request: ProposeVacePreview, principal: EditorPrincipal) {
+    const input = this.store.approvedSequence(
+      request.projectId,
+      request.maskApprovalId,
+      request.manifestHash,
+      request.expectedRevision,
+      principal,
+    );
+    await vaceRuntime();
+    const doc = await this.verifyTrackedMaskFiles(input);
+    const project = this.store.project(request.projectId, principal);
+    const asset = this.store.asset(
+      project.projectId,
+      doc.assetId,
+      request.expectedRevision,
+      principal,
+    );
+    const clock = await sourceClock(this.cas, asset, doc);
+    const draft = generationDraft(request, input, doc, clock, project.baseAssetManifestHash);
+    return this.store.createPlan({
+      draft,
+      requestId: request.requestId,
+      runId: request.requestId,
+      toolCallId: "propose-vace",
+      principal,
+    });
   }
 
   async readMaskRevision(projectId: string, maskRevisionId: string, principal: EditorPrincipal) {
@@ -289,16 +319,25 @@ export class MediaService {
       assets.set(asset.assetId, asset);
     }
     const firstAsset = assets.get(plan.trimOperations[0]!.source.assetId)!;
-    const directory = await mkdtemp(path.join(tmpdir(), "video-render-"));
     let outputBlob: BlobRef;
-    let recipeSha256 = "";
-    try {
-      const output = path.join(directory, "candidate.mp4");
-      recipeSha256 = await this.render(assets, firstAsset, plan, job.kind, output, signal);
-      this.throwIfCancelled(signal);
-      outputBlob = await this.cas.importFile(output, "video/mp4");
-    } finally {
-      await rm(directory, { recursive: true, force: true });
+    let recipeSha256: string;
+    let generation: Awaited<ReturnType<typeof generateMaster>> | undefined;
+    if (plan.generationRequests.length) {
+      generation=await this.generationForJob(job,plan,firstAsset,signal);
+      await this.verifyCandidateDecode(generation.master,signal);
+      checkCandidate((await this.probe(this.cas.pathFor(generation.master))).document,firstAsset,plan,"final",firstAsset.streams.find(s=>s.kind==="audio"));
+      outputBlob=job.kind==="preview" ? await this.createFinalReviewProxy(generation.master,signal) : generation.master;
+      recipeSha256=createHash("sha256").update(JSON.stringify([plan.planHash,generation.modelRun.modelRevision,generation.master.sha256])).digest("hex");
+    } else {
+      const directory = await mkdtemp(path.join(tmpdir(), "video-render-"));
+      try {
+        const output = path.join(directory, "candidate.mp4");
+        recipeSha256 = await this.render(assets, firstAsset, plan, job.kind, output, signal);
+        this.throwIfCancelled(signal);
+        outputBlob = await this.cas.importFile(output, "video/mp4");
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
     }
     const probe = await this.probe(this.cas.pathFor(outputBlob));
     await this.verifyCandidateDecode(outputBlob, signal);
@@ -328,7 +367,8 @@ export class MediaService {
       subjectHash: outputBlob.sha256,
       reviewProxyHash: reviewProxy?.sha256,
       revision: job.candidateRevision,
-      thresholdsVersion: "deterministic-v1",
+      thresholdsVersion: generation ? "vace-local-v1" : "deterministic-v1",
+      generation,
       audioLoudness,
       gates: [
         {
@@ -364,6 +404,44 @@ export class MediaService {
     }, reviewProxy && { ...artifact, artifactId: `${jobId}:review-proxy`, kind: "proxy", blob: reviewProxy });
   }
 
+  private async generationForJob(
+    job: JobSnapshot,
+    plan: AcceptedEditPlan,
+    firstAsset: SourceAsset,
+    signal: AbortSignal,
+  ): Promise<Awaited<ReturnType<typeof generateMaster>>> {
+    const { projectId, jobId } = job;
+    const g = plan.generationRequests[0]!;
+    const principal = { principalId: "worker", role: "owner" as const, projectIds: null };
+    const input = this.store.approvedSequence(
+      projectId,
+      g.maskApprovalId!,
+      g.referenceManifestHash,
+      job.revision,
+      principal,
+    );
+    const doc = await this.verifyTrackedMaskFiles(input);
+    if (job.kind === "preview") {
+      this.store.updateJob(projectId, jobId, (j) => ({
+        ...j,
+        phaseDetail: "VACE 正在生成 9 帧预览",
+      }));
+      return generateMaster(this.cas, this.tools, firstAsset, input, doc, plan, signal);
+    } else {
+      const reviewed = this.store.reviewedGeneration(job);
+      const qa = JSON.parse((await this.cas.readBytes(reviewed.qa.blob)).toString("utf8"));
+      const master = BlobRefSchema.parse(qa.generation?.master);
+      if (
+        qa.subjectHash !== reviewed.candidate.blob.sha256 ||
+        qa.planHash !== plan.planHash ||
+        qa.generation.modelRun.manifestHash !== g.referenceManifestHash ||
+        (await sha256File(this.cas.pathFor(master))) !== master.sha256
+      )
+        editorFailure("ARTIFACT_HASH_MISMATCH", "The reviewed generation master has changed");
+      return { master, modelRun: qa.generation.modelRun };
+    }
+  }
+
   private async deliver(
     job: JobSnapshot,
     plan: AcceptedEditPlan,
@@ -393,8 +471,8 @@ export class MediaService {
       planHash: plan.planHash,
       ffmpegBuildHash: report.ffmpegBuildHash,
       renderRecipeHash: report.renderRecipeHash ?? null,
-      modelRuns: [],
-      maskLineageRoots: [],
+      modelRuns: report.generation ? [report.generation.modelRun] : [],
+      maskLineageRoots: plan.generationRequests.map(g => g.referenceManifestHash),
       encoding: report.probe.streams,
       qaReport: report,
       approvalId: job.approvalId,

@@ -18,9 +18,10 @@ import {
   PreviewFramesRequestSchema,
   CreateMaskRevisionRequestSchema,
   MaskRevisionReviewRequestSchema,
-  TrackMaskRequestSchema, RequestTrackedMaskReviewSchema,
+  TrackMaskRequestSchema, RequestTrackedMaskReviewSchema, ProposeVacePreviewSchema, VACE_PROFILE,
   type EditorPrincipal,
 } from "#video-editor/contracts/v1";
+import { configuredVacePython } from "./vace-preview.js";
 import { decodeFramedChunk } from "#video-editor/bytes";
 import { authorizeVideoMethod, type EditorCaller } from "./authorization.js";
 import { editorFailure } from "./errors.js";
@@ -45,7 +46,7 @@ export class EditorRpcService {
               reason: "Full source build and media conformance have not been verified",
             },
           ],
-          workerProfiles: [],
+          workerProfiles: await configuredVacePython() ? [{profileId:VACE_PROFILE,engine:"vace",maxFrames:"9",maxWidth:832,maxHeight:480,colorSpaces:["SDR RGB24"]}] : [],
         };
       case "video.v1.create_project":
         return this.editor.store.createProject({
@@ -127,6 +128,8 @@ export class EditorRpcService {
         this.editor.jobs.enqueue(request.projectId, result.job.jobId);
         return result;
       }
+      case "video.v1.propose_vace_preview":
+        return this.editor.media.proposeVace(ProposeVacePreviewSchema.parse(input), principal);
       case "video.v1.request_tracked_mask_review":
         return this.editor.store.requestTrackedMaskReview(RequestTrackedMaskReviewSchema.parse(input), principal);
       case "video.v1.track_mask": {
