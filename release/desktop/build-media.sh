@@ -27,7 +27,7 @@ esac
 ./configure --disable-autodetect --disable-shared --enable-static --disable-debug \
   --disable-doc --disable-network --disable-ffplay --enable-gpl --enable-libx264 --enable-zlib \
   --pkg-config-flags=--static ${platform_flags[@]+"${platform_flags[@]}"}
-make -j"$jobs" ffmpeg ffprobe
+make -j"$jobs"
 for tool in ffmpeg ffprobe; do
   suffix=""
   if [[ -f "$tool.exe" ]]; then suffix=.exe; fi
