@@ -940,6 +940,81 @@
       ],
       "additionalProperties": false
     },
+    "ApprovalStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ApprovalStatus",
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "superseded",
+        "expired",
+        "revoked"
+      ]
+    },
+    "ArtifactInfo": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ArtifactInfo",
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "kind": {
+          "$ref": "urn:video-editor:v1:ArtifactKind"
+        },
+        "sizeBytes": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "artifactId",
+        "jobId",
+        "revision",
+        "kind",
+        "sizeBytes",
+        "sha256",
+        "mediaType"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactKind": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ArtifactKind",
+      "type": "string",
+      "enum": [
+        "probe",
+        "proxy",
+        "mask",
+        "candidate",
+        "export",
+        "qa",
+        "manifest",
+        "contact",
+        "scenecuts",
+        "waveform"
+      ]
+    },
     "ArtifactRef": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:ArtifactRef",
@@ -962,19 +1037,7 @@
           "pattern": "^(0|[1-9][0-9]*)$"
         },
         "kind": {
-          "type": "string",
-          "enum": [
-            "probe",
-            "proxy",
-            "mask",
-            "candidate",
-            "export",
-            "qa",
-            "manifest",
-            "contact",
-            "scenecuts",
-            "waveform"
-          ]
+          "$ref": "urn:video-editor:v1:ArtifactKind"
         },
         "blob": {
           "$ref": "urn:video-editor:v1:BlobRef"
@@ -1094,6 +1157,60 @@
         "sha256",
         "bytes",
         "mediaType"
+      ],
+      "additionalProperties": false
+    },
+    "CancelUploadRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:CancelUploadRequest",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "uploadId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "uploadId"
+      ],
+      "additionalProperties": false
+    },
+    "CancelUploadResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:CancelUploadResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "uploadId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "cancelled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "uploadId",
+        "cancelled"
       ],
       "additionalProperties": false
     },
@@ -2126,21 +2243,48 @@
     "EstimateTimelineRequest": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:EstimateTimelineRequest",
-      "type": "object",
-      "properties": {
-        "requestId": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "requestId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "draft": {
+              "$ref": "urn:video-editor:v1:EditPlanDraftV1"
+            }
+          },
+          "required": [
+            "requestId",
+            "draft"
+          ],
+          "additionalProperties": false
         },
-        "draft": {
-          "$ref": "urn:video-editor:v1:EditPlanDraftV1"
+        {
+          "type": "object",
+          "properties": {
+            "requestId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "planId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            }
+          },
+          "required": [
+            "requestId",
+            "projectId",
+            "planId"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "requestId",
-        "draft"
-      ],
-      "additionalProperties": false
+      ]
     },
     "EstimateTimelineResult": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2152,6 +2296,10 @@
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
         },
         "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "planId": {
           "type": "string",
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
         },
@@ -2556,6 +2704,185 @@
       ],
       "additionalProperties": false
     },
+    "GetApprovalInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetApprovalInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "approvalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "approvalId"
+      ],
+      "additionalProperties": false
+    },
+    "GetApprovalResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetApprovalResult",
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "subjectType": {
+          "type": "string",
+          "enum": [
+            "mask_revision",
+            "keyframe_set",
+            "edit_plan",
+            "candidate_revision",
+            "export"
+          ]
+        },
+        "subjectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "subjectRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "subjectHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "planHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "baseTimelineRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "purpose": {
+          "type": "string",
+          "enum": [
+            "input",
+            "preview",
+            "final",
+            "export"
+          ]
+        },
+        "requiredInputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "revision",
+              "hash"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "diffSummary": {
+          "type": "object",
+          "properties": {
+            "intent": {
+              "type": "string"
+            },
+            "operationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "intent",
+            "operationCount",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "generationCostCapMicros": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "externalDestinations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "superseded",
+            "expired",
+            "revoked"
+          ]
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "approvalId",
+        "projectId",
+        "subjectType",
+        "subjectId",
+        "subjectRevision",
+        "subjectHash",
+        "baseTimelineRevision",
+        "purpose",
+        "requiredInputs",
+        "diffSummary",
+        "generationCostCapMicros",
+        "externalDestinations",
+        "status",
+        "expiresAt",
+        "requestId"
+      ],
+      "additionalProperties": false
+    },
     "GetAssetMetadataInput": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:GetAssetMetadataInput",
@@ -2832,6 +3159,90 @@
         "audioOperationCount",
         "audioLoudness",
         "requestId"
+      ],
+      "additionalProperties": false
+    },
+    "GetMutationResultInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetMutationResultInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "GetMutationResultResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetMutationResultResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "mutation": {
+          "anyOf": [
+            {
+              "$ref": "urn:video-editor:v1:GetMutationResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "mutation"
+      ],
+      "additionalProperties": false
+    },
+    "GetMutationResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetMutationResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "response": {},
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "fingerprint",
+        "response",
+        "createdAt"
       ],
       "additionalProperties": false
     },
@@ -3678,6 +4089,35 @@
       ],
       "additionalProperties": false
     },
+    "GetRunEventsInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetRunEventsInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "afterSeq": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "runId"
+      ],
+      "additionalProperties": false
+    },
     "GetSceneCutsInput": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:GetSceneCutsInput",
@@ -4362,6 +4802,219 @@
         "cancelled"
       ]
     },
+    "ListApprovalsInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListApprovalsInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "status": {
+          "$ref": "urn:video-editor:v1:ApprovalStatus"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "ListApprovalsResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListApprovalsResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "urn:video-editor:v1:ApprovalStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approvalCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "approvals": {
+          "maxItems": 256,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:ApprovalRequest"
+          }
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "status",
+        "approvalCount",
+        "approvals"
+      ],
+      "additionalProperties": false
+    },
+    "ListArtifactsInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListArtifactsInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "jobId"
+      ],
+      "additionalProperties": false
+    },
+    "ListArtifactsResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListArtifactsResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "analysis",
+            "preview",
+            "final",
+            "export"
+          ]
+        },
+        "state": {
+          "$ref": "urn:video-editor:v1:JobState"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "artifactCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "artifacts": {
+          "maxItems": 256,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:ArtifactInfo"
+          }
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "jobId",
+        "kind",
+        "state",
+        "revision",
+        "artifactCount",
+        "artifacts"
+      ],
+      "additionalProperties": false
+    },
+    "ListPlansInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListPlansInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "afterPlanId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "ListPlansResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListPlansResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "planCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "plans": {
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:PlanSummary"
+          }
+        },
+        "hasMore": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "planCount",
+        "plans",
+        "hasMore"
+      ],
+      "additionalProperties": false
+    },
     "MaskAnchorRevision": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:MaskAnchorRevision",
@@ -4615,6 +5268,49 @@
       "required": [
         "plan",
         "approval"
+      ],
+      "additionalProperties": false
+    },
+    "PlanSummary": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:PlanSummary",
+      "type": "object",
+      "properties": {
+        "planId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "planHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "intent": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "status": {
+          "type": "string",
+          "const": "proposed"
+        },
+        "deterministicBackendId": {
+          "type": "string",
+          "enum": [
+            "ffmpeg",
+            "filmcraft"
+          ]
+        }
+      },
+      "required": [
+        "planId",
+        "revision",
+        "planHash",
+        "intent",
+        "status",
+        "deterministicBackendId"
       ],
       "additionalProperties": false
     },
@@ -5290,6 +5986,227 @@
       ],
       "additionalProperties": false
     },
+    "RevokeApprovalRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RevokeApprovalRequest",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "approvalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "approvalId"
+      ],
+      "additionalProperties": false
+    },
+    "RevokeApprovalResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RevokeApprovalResult",
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "subjectType": {
+          "type": "string",
+          "enum": [
+            "mask_revision",
+            "keyframe_set",
+            "edit_plan",
+            "candidate_revision",
+            "export"
+          ]
+        },
+        "subjectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "subjectRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "subjectHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "planHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "baseTimelineRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "purpose": {
+          "type": "string",
+          "enum": [
+            "input",
+            "preview",
+            "final",
+            "export"
+          ]
+        },
+        "requiredInputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "revision",
+              "hash"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "diffSummary": {
+          "type": "object",
+          "properties": {
+            "intent": {
+              "type": "string"
+            },
+            "operationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "intent",
+            "operationCount",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "generationCostCapMicros": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "externalDestinations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "superseded",
+            "expired",
+            "revoked"
+          ]
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "approvalId",
+        "projectId",
+        "subjectType",
+        "subjectId",
+        "subjectRevision",
+        "subjectHash",
+        "baseTimelineRevision",
+        "purpose",
+        "requiredInputs",
+        "diffSummary",
+        "generationCostCapMicros",
+        "externalDestinations",
+        "status",
+        "expiresAt",
+        "requestId"
+      ],
+      "additionalProperties": false
+    },
+    "RunEventsResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RunEventsResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "events": {
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:EditorEvent"
+          }
+        },
+        "latestSeq": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "snapshotRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "runId",
+        "events",
+        "latestSeq",
+        "snapshotRequired"
+      ],
+      "additionalProperties": false
+    },
     "SceneCuts": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:SceneCuts",
@@ -5925,6 +6842,109 @@
       ],
       "additionalProperties": false
     },
+    "VerifyExportInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:VerifyExportInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "jobId"
+      ],
+      "additionalProperties": false
+    },
+    "VerifyExportResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:VerifyExportResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "state": {
+          "$ref": "urn:video-editor:v1:JobState"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "outputSha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manifestSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "renderRecipeHash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "planHash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "detail": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "jobId",
+        "state",
+        "verified",
+        "outputSha256",
+        "manifestSha256",
+        "renderRecipeHash",
+        "planHash",
+        "detail"
+      ],
+      "additionalProperties": false
+    },
     "VideoToolCall": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:VideoToolCall",
@@ -6012,6 +7032,43 @@
             "tool": {
               "type": "string",
               "const": "get_job_status"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "jobId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                }
+              },
+              "required": [
+                "jobId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "toolCallId",
+            "tool",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "type": "string",
+              "const": "1"
+            },
+            "toolCallId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "tool": {
+              "type": "string",
+              "const": "list_artifacts"
             },
             "args": {
               "type": "object",

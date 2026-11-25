@@ -178,6 +178,37 @@ export function proposeCut(
 }
 
 /** Delete the middle range [cutStart, cutEnd) and concatenate the rest: two contiguous trims. */
+/**
+ * Find the quietest fixed-length run (RMS buckets) inside [startSec, endSec].
+ * Returns seconds strings for a cut-out range, or null when the window is empty.
+ */
+export function findSilentRange(
+  doc: { bucketMs?: number; buckets: string[] },
+  startSec: string,
+  endSec: string,
+  minSeconds = 0.5,
+): { start: string; end: string } | null {
+  const bucketMs = doc.bucketMs ?? 100;
+  const from = Number(startSec) * 1000;
+  const to = Number(endSec) * 1000;
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return null;
+  const i0 = Math.max(0, Math.floor(from / bucketMs));
+  const i1 = Math.min(doc.buckets.length - 1, Math.ceil(to / bucketMs));
+  if (i1 - i0 + 1 < 1) return null;
+  const len = Math.max(1, Math.min(i1 - i0 + 1, Math.round((minSeconds * 1000) / bucketMs)));
+  let best = { sum: Infinity, at: -1 };
+  let sum = 0;
+  for (let i = i0; i <= i1; i++) {
+    sum += Number(doc.buckets[i] ?? "0");
+    if (i - i0 + 1 > len) sum -= Number(doc.buckets[i - len] ?? "0");
+    if (i - i0 + 1 >= len && sum < best.sum) best = { sum, at: i - len + 1 };
+  }
+  if (best.at < 0) return null;
+  const startMs = best.at * bucketMs;
+  const endMs = Math.min(to, startMs + len * bucketMs);
+  return { start: (startMs / 1000).toFixed(3), end: (endMs / 1000).toFixed(3) };
+}
+
 export function proposeCutOut(
   project: ProjectSnapshot,
   assetId: string,

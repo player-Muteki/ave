@@ -8,17 +8,17 @@ import {
   listProjectsRpc,
   submitPlanRpc,
   estimateTimelineRpc,
-  decideApprovalRpc,
+  decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
-  createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
-  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, getExportSummaryRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
+  createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc,
+  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc,
+  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
 import { TrackedMaskReview } from "./tracked-mask-review.js";
 import { ReviewPlayer } from "./review-player.js";
-import { proposeCut, proposeCutOut, proposeConcat, proposeOverlay } from "./cut.js";
+import { proposeCut, proposeCutOut, proposeConcat, proposeOverlay, findSilentRange } from "./cut.js";
 import { SourceImport } from "./import-source.js";
 import { mountSourcePicker, digestSource } from "./web.js";
 import { planningRunUpdate } from "./planning-events.js";
@@ -55,22 +55,29 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const submit = useRpc(submitPlanRpc);
   const estimate = useRpc(estimateTimelineRpc);
   const decide = useRpc(decideApprovalRpc);
+  const revoke = useRpc(revokeApprovalRpc);
   const runJob = useRpc(createJobRpc);
   const declare = useRpc(createUploadRpc);
   const status = useRpc(getUploadStatusRpc);
   const write = useRpc(writeUploadChunkRpc);
   const commit = useRpc(commitUploadRpc);
+  const cancelUp = useRpc(cancelUploadRpc);
   const startRun = useRpc(startPlanningRunRpc);
   const followUpRun = useRpc(followUpPlanningRunRpc);
   const stopRun = useRpc(stopPlanningRunRpc);
   const readEvents = useRpc(getEventsRpc);
+  const readRunEvents = useRpc(getRunEventsRpc);
+  const listApprovals = useRpc(listApprovalsRpc);
+  const listPlans = useRpc(listPlansRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
   const readQaSummary = useRpc(getQaSummaryRpc);
   const readSceneCuts = useRpc(getSceneCutsRpc);
   const readWaveform = useRpc(getWaveformRpc);
   const readPlan = useRpc(getPlanRpc);
+  const listArtifacts = useRpc(listArtifactsRpc);
   const readExportSummary = useRpc(getExportSummaryRpc);
+  const verifyExport = useRpc(verifyExportRpc);
   const readAssetMetadata = useRpc(getAssetMetadataRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
@@ -119,6 +126,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [runEvents, setRunEvents] = useState<EditorEvent[]>([]);
   const runActive = run?.state === "running" || run?.state === "awaiting_input";
   const afterSeq = useRef("0");
+  const runSeq = useRef("0");
   const locked = useRef(false);
   const pickerParent = useRef<View>(null);
   const projectId = project?.projectId;
@@ -386,10 +394,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             {sourceImport?.projectId === project.projectId ? <>
               <Text style={muted}>{sourceImport.file.name} · 已确认 {confirmed} / {sourceImport.file.size} 字节</Text>
               {button("导入所选视频", async () => {
-                const asset = await sourceImport.transfer({declare, status, write, commit}, digestSource, setConfirmed);
+                const asset = await sourceImport.transfer({declare, status, write, commit, cancel: cancelUp}, digestSource, setConfirmed);
                 show(await read({projectId: project.projectId}));
                 if (asset.streams.some(stream => stream.kind === "video")) select(asset.assetId);
                 setSourceImport(null);
+              })}
+              {button("取消上传", async () => {
+                await sourceImport.cancel({ cancel: cancelUp });
+                setSourceImport(null);
+                setConfirmed(0);
+                setNotice("已取消未完成的上传。");
               })}
             </> : <Text style={muted}>单个视频不超过 64 MiB。</Text>}
           </View>}
@@ -670,6 +684,21 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {button(fadeKind === "crossfade" ? "转场类型：叠化" : "转场类型：黑场", () =>
                   setFadeKind(fadeKind === "crossfade" ? "fade" : "crossfade"))}
               </View>
+              {button("静音挖洞", async () => {
+                if (!waveform || waveform.assetId !== selected) throw new Error("请先对当前素材运行「分析切点/波形」。");
+                const range = findSilentRange(waveform.doc, cutStart, cutEnd);
+                if (!range) throw new Error("该区间内没有足够长的静音段。");
+                const draft = proposeCutOut(project, selected, range.start, range.end, totalSec);
+                const token = requestId(JSON.stringify(draft));
+                await submit({
+                  requestId: token,
+                  runId: `manual-${token}`,
+                  toolCallId: token,
+                  draft,
+                });
+                setNotice(`已按静音区间 ${range.start}s–${range.end}s 生成挖洞方案，等待审批。`);
+                show(await read({ projectId: project.projectId }));
+              })}
               {button("删除中段并拼接", async () => {
                 const draft = proposeCutOut(project, selected, cutStart, cutEnd, totalSec);
                 const token = requestId(JSON.stringify(draft));
@@ -780,7 +809,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             const recent = update?.events ?? result.events.filter((event) => event.type.startsWith("run."));
             setRunEvents((prev) => [...prev, ...recent].slice(-12));
           })}
+          {project && run && button("run 事件", async () => {
+            const result = await readRunEvents({ requestId: requestId(`run-events:${run.runId}:${runSeq.current}`), projectId: project.projectId, runId: run.runId, afterSeq: runSeq.current });
+            runSeq.current = result.latestSeq;
+            setRunEvents((prev) => [...prev, ...result.events].slice(-12));
+          })}
           <Text style={heading}>已提议的时间线</Text>
+          {button("方案列表", async () => {
+            const r = await listPlans({ requestId: requestId("plans"), projectId: project.projectId });
+            setNotice(`方案 ${r.planCount} 条${r.hasMore ? "（还有更多，游标分页）" : ""} · 最新 ${r.plans.at(-1)?.planId.slice(0, 12) ?? "-"} · ${r.plans.at(-1)?.intent.slice(0, 40) ?? ""}`);
+          })}
           {!project.plans.length && <Text style={muted}>尚无裁剪方案。提交方案不会开始渲染。</Text>}
           {project.plans.map((plan) => (
             <View key={plan.planId} style={styles.clip}>
@@ -806,6 +844,15 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                     })}
                   </View>
                 );
+              })}
+              {button("预估时长", async () => {
+                const est = await estimate({
+                  requestId: requestId(`est-plan:${plan.planId}`),
+                  projectId: project.projectId,
+                  planId: plan.planId,
+                });
+                const warn = est.warnings?.length ? ` · 警告 ${est.warnings.slice(0, 3).join("；")}` : "";
+                setNotice(`方案 ${plan.planId.slice(0, 12)} · 主轨 ${est.mainDurationSeconds}s（扣转场 ${est.effectiveMainDurationSeconds}s）· 叠加 ${est.overlayDurationSeconds}s · 转场 ${est.transitionCount} · 音频 ${est.audioOperationCount} · 字幕 ${est.subtitleCueCount}${est.valid ? "" : ` · 方案问题：${est.issue ?? "未知错误"}`}${warn}`);
               })}
               {plan.transitionOperations.map((tr) => (
                 <Text key={tr.opId} style={muted}>
@@ -837,6 +884,10 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
           ))}
           {project.approvals.filter(a=>a.purpose === "preview" && a.status === "pending").map(approval => <View key={approval.approvalId} style={styles.clip}>
             <Text style={heading}>预览审批</Text>
+            {button("待审批", async () => {
+              const r = await listApprovals({ requestId: requestId("approvals:pending"), projectId: project.projectId, status: "pending" });
+              setNotice(`待审批 ${r.approvalCount} 条${r.approvals.length ? ` · 最新 ${r.approvals.at(-1)?.subjectType}/${r.approvals.at(-1)?.purpose}` : ""}`);
+            })}
             <Text style={ink}>{approval.diffSummary.intent}</Text>
             <Text selectable style={muted}>项目版本 {approval.baseTimelineRevision} · 方案 {approval.subjectHash}</Text>
             <Text style={muted}>{approval.diffSummary.operationCount} 项编辑 · {approval.diffSummary.summary}</Text>
@@ -849,9 +900,20 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               show(await read({projectId: project.projectId}));
             }, approval.baseTimelineRevision !== project.revision)}
             {button("批准并渲染预览", () => approveJob(approval, "preview"), approval.baseTimelineRevision !== project.revision)}
+            {button("撤销审批", async () => {
+              await revoke({
+                requestId: requestId(`revoke:${approval.approvalId}`),
+                projectId: project.projectId,
+                approvalId: approval.approvalId,
+              });
+              show(await read({ projectId: project.projectId }));
+            })}
           </View>)}
           {project.approvals.filter(a => a.purpose === "preview" && a.status === "rejected").map(a => (
             <Text key={a.approvalId} style={muted}>已拒绝预览 · {a.diffSummary.intent}</Text>
+          ))}
+          {project.approvals.filter(a => a.status === "revoked").map(a => (
+            <Text key={a.approvalId} style={muted}>已撤销 · {a.diffSummary.intent}</Text>
           ))}
           {project.jobs.map(job => {
             const preview = job.kind === "preview" && job.state === "awaiting_review"
@@ -882,6 +944,25 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   await controlJob({ requestId: requestId(`cancel:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "cancel" });
                   show(await read({ projectId: project.projectId }));
                 })}
+              {["analyzing", "rendering_preview", "rendering_final", "validating", "awaiting_inputs"].includes(job.state) &&
+                button("暂停任务", async () => {
+                  await controlJob({ requestId: requestId(`pause:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "pause" });
+                  show(await read({ projectId: project.projectId }));
+                })}
+              {job.state === "paused" &&
+                button("继续任务", async () => {
+                  await controlJob({ requestId: requestId(`resume:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "resume" });
+                  show(await read({ projectId: project.projectId }));
+                })}
+              {button("产物", async () => {
+                const arts = await listArtifacts({
+                  requestId: requestId(`arts:${job.jobId}`),
+                  projectId: project.projectId,
+                  jobId: job.jobId,
+                });
+                const summary = arts.artifacts.slice(0, 8).map((a) => `${a.kind} ${a.sizeBytes}B ${a.sha256.slice(0, 8)}`).join(", ");
+                setNotice(`任务 ${job.jobId.slice(0, 12)} · ${arts.artifactCount} 个产物${summary ? ` · ${summary}${arts.artifactCount > 8 ? " …" : ""}` : ""}`);
+              })}
               {button("方案", async () => {
                 const plan = project.plans.find((p) => p.planHash === job.planHash);
                 if (!plan) throw new Error("找不到该任务对应的方案。");
@@ -907,6 +988,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   jobId: job.jobId,
                 });
                 setNotice(`导出 ${ex.exportId ?? job.jobId.slice(0, 12)} · 段 ${ex.segmentCount} · 转场 ${ex.transitionCount} · 音频 ${ex.audioOperationCount} · 字幕 ${ex.subtitleCueCount} · recipe ${ex.renderRecipeHash?.slice(0, 12) ?? "-"} · plan ${ex.planHash?.slice(0, 12) ?? "-"} · 输出 ${ex.output ? `${ex.output.bytes}B ${ex.output.sha256.slice(0, 12)}` : "-"}`);
+              })}
+              {job.kind === "export" && job.state === "completed" && button("校验导出", async () => {
+                const v = await verifyExport({
+                  requestId: requestId(`verify:${job.jobId}`),
+                  projectId: project.projectId,
+                  jobId: job.jobId,
+                });
+                setNotice(v.verified
+                  ? `导出校验通过：输出 SHA-256 ${v.outputSha256?.slice(0, 12)} 与 manifest 一致（recipe ${v.renderRecipeHash?.slice(0, 12) ?? "-"}）`
+                  : `导出校验失败：${v.detail}`);
               })}
               {job.kind === "export" && job.state === "completed" && job.artifacts.map(a =>
                 a.projectId === project.projectId && a.jobId === job.jobId && (a.kind === "export" || a.kind === "manifest")

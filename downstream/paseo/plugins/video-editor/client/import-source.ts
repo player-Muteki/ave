@@ -4,6 +4,7 @@ import {
   type createUploadRpc,
   type getUploadStatusRpc,
   type commitUploadRpc,
+  type cancelUploadRpc,
   type SourceAsset,
 } from "../shared/contracts/v1.js";
 import type { z } from "zod";
@@ -17,6 +18,7 @@ interface UploadChannels {
   status(input: z.infer<typeof getUploadStatusRpc.input>): Promise<Status>;
   write(frame: Uint8Array): Promise<Uint8Array>;
   commit(input: z.infer<typeof commitUploadRpc.input>): Promise<SourceAsset>;
+  cancel(input: z.infer<typeof cancelUploadRpc.input>): Promise<z.infer<typeof cancelUploadRpc.output>>;
 }
 
 export interface DeskSource {
@@ -66,5 +68,17 @@ export class SourceImport {
     const asset = await rpc.commit({ uploadId, requestId: `${requestId}-commit`, finalSha256: this.digest });
     if (asset.original.sha256 !== this.digest || asset.original.bytes !== String(file.size)) throw new Error("素材回执与所选文件不符。");
     return asset;
+  }
+
+  /** Abort a pending upload; safe to call before any chunk was written. */
+  async cancel(rpc: Pick<UploadChannels, "cancel">) {
+    if (!this.uploadId) return;
+    await rpc.cancel({
+      requestId: `${this.requestId}-cancel`,
+      projectId: this.projectId,
+      uploadId: this.uploadId,
+    });
+    this.uploadId = undefined;
+    this.readyToCommit = false;
   }
 }

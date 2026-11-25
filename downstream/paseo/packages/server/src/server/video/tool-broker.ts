@@ -26,6 +26,10 @@ export class VideoToolBroker {
     switch (call.tool) {
       case "get_project_snapshot": {
         const p = this.store.project(projectId, principal);
+        const analysisState = new Map<string, string>();
+        for (const j of [...p.jobs].sort((a, b) => (a.jobId < b.jobId ? 1 : -1)))
+          if (j.analysisAssetId && !analysisState.has(j.analysisAssetId))
+            analysisState.set(j.analysisAssetId, j.state);
         return {
           projectId,
           revision: p.revision,
@@ -33,7 +37,11 @@ export class VideoToolBroker {
           assetCount: p.assets.length,
           assets: p.assets
             .slice(0, 64)
-            .map((a) => ({ assetId: a.assetId, contentHash: a.original.sha256 })),
+            .map((a) => ({
+              assetId: a.assetId,
+              contentHash: a.original.sha256,
+              analysisState: analysisState.get(a.assetId) ?? null,
+            })),
           hasMoreAssets: p.assets.length > 64,
           planCount: p.plans.length,
           plans: p.plans
@@ -45,6 +53,8 @@ export class VideoToolBroker {
               intent: plan.intent.slice(0, 200),
             })),
           hasMorePlans: p.plans.length > 32,
+          approvalCount: p.approvals.length,
+          pendingApprovalCount: p.approvals.filter((a) => a.status === "pending").length,
           jobCount: p.jobs.length,
           jobs: p.jobs
             .slice(0, 64)
@@ -60,6 +70,8 @@ export class VideoToolBroker {
       }
       case "get_asset_metadata":
         return this.store.plannerAssetMetadata(projectId, call.args.assetId, call.args.contentHash, principal);
+      case "list_artifacts":
+        return this.store.listArtifacts(projectId, call.args.jobId, principal);
       case "get_job_status": {
         const job = this.store.job(projectId, call.args.jobId, principal);
         return {

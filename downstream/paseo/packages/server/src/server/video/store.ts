@@ -6,7 +6,7 @@ import type { ProbeDocument } from "./media.js";
 import type { SqliteDatabase } from "./sqlite-types.js";
 import { DatabaseSync } from "./sqlite.js";
 import { assertRenderablePreview, summarizeDraftTimeline } from "./preview-profile.js";
-import { sha256Json, type ContentAddressedStore } from "./cas.js";
+import { sha256File, sha256Json, type ContentAddressedStore } from "./cas.js";
 import {
   BlobRefSchema,
   type BlobRef,
@@ -22,6 +22,9 @@ import {
   SourceAssetSchema,
   type ArtifactRef,
   type AcceptedEditPlan,
+  type CancelUploadRequest,
+  type RevokeApprovalRequest,
+  type CancelUploadResult,
   type ApprovalDecision,
   type CreateMaskRevisionRequest, type RequestTrackedMaskReview,
   TrackMaskRequestSchema, type TrackMaskRequest,
@@ -38,6 +41,19 @@ import {
   type SourceAsset,
 } from "#video-editor/contracts/v1";
 import { describeEditorError, EditorError, editorFailure } from "./errors.js";
+
+/** Server-side cap for a single chunked upload (clients cap at 64 MiB). */
+const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
+
+/** Clamp the optional analysis sampling rate to a sane fps range. */
+function clampAnalysisRate(rate?: string): string {
+  if (!rate) return "25/1";
+  const [num, den] = rate.split("/");
+  const value = Number(num) / Number(den);
+  if (!Number.isFinite(value) || value <= 0) editorFailure("INVALID_ARGUMENT", "Analysis rate must be a positive rational");
+  const clamped = Math.min(1000, Math.max(1, Math.round(value)));
+  return `${clamped}/1`;
+}
 
 interface ProjectRow {
   project_id: string;
@@ -299,18 +315,27 @@ export class EditorStore {
   project(projectId: string, principal: EditorPrincipal): ProjectSnapshot {
     this.authorize(projectId, principal, "viewer");
     const row = this.projectRow(projectId);
+    // Bound the snapshot arrays so long-lived projects stay small on the wire;
+    // the store keeps the full rows and dedicated readers (get_plan, get_job,
+    // get_approval, events) are unaffected.
     const plans = this.rows(
       "SELECT document FROM plans WHERE project_id = ? ORDER BY revision",
       projectId,
-    ).map((document) => AcceptedEditPlanSchema.parse(JSON.parse(document)));
+    )
+      .map((document) => AcceptedEditPlanSchema.parse(JSON.parse(document)))
+      .slice(-128);
     const approvals = this.rows(
       "SELECT request FROM approvals WHERE project_id = ? ORDER BY created_at, approval_id",
       projectId,
-    ).map((document) => ApprovalRequestSchema.parse(JSON.parse(document)));
+    )
+      .map((document) => ApprovalRequestSchema.parse(JSON.parse(document)))
+      .slice(-256);
     const jobs = this.rows(
       "SELECT document FROM jobs WHERE project_id = ? ORDER BY job_id",
       projectId,
-    ).map((document) => JobSnapshotSchema.parse(JSON.parse(document)));
+    )
+      .map((document) => JobSnapshotSchema.parse(JSON.parse(document)))
+      .slice(-256);
     return ProjectSnapshotSchema.parse({
       protocolVersion: "1",
       projectId,
@@ -515,6 +540,9 @@ export class EditorStore {
       mediaType,
     } = input;
     this.authorize(projectId, principal, "operator");
+    const size = Number(expectedSize);
+    if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_UPLOAD_BYTES)
+      editorFailure("INVALID_ARGUMENT", `Upload size must be a positive integer not exceeding ${MAX_UPLOAD_BYTES} bytes`);
     return this.mutate({
       projectId,
       requestId,
@@ -644,6 +672,37 @@ export class EditorStore {
     return { projectId: receipt.project_id, asset: SourceAssetSchema.parse(JSON.parse(receipt.response)) };
   }
 
+  /**
+   * Cancel a pending chunked upload: drop its chunks and row. Idempotent per
+   * requestId; committing first makes cancellation impossible.
+   */
+  cancelUpload(input: CancelUploadRequest, principal: EditorPrincipal): CancelUploadResult {
+    this.authorize(input.projectId, principal, "operator");
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: { uploadId: input.uploadId },
+      execute: () => {
+        const row = this.database
+          .prepare("SELECT project_id FROM uploads WHERE upload_id = ?")
+          .get(input.uploadId) as { project_id: string } | undefined;
+        if (!row) {
+          const receipt = this.database
+            .prepare("SELECT project_id FROM upload_receipts WHERE upload_id = ?")
+            .get(input.uploadId) as { project_id: string } | undefined;
+          if (receipt) editorFailure("INVALID_ARGUMENT", "The upload was already committed");
+          editorFailure("ASSET_NOT_FOUND", "No such pending upload in this project");
+        }
+        if (row.project_id !== input.projectId)
+          editorFailure("PERMISSION_DENIED", "The upload belongs to another project");
+        this.database.prepare("DELETE FROM upload_chunks WHERE upload_id = ?").run(input.uploadId);
+        this.database.prepare("DELETE FROM uploads WHERE upload_id = ?").run(input.uploadId);
+        this.emit(input.projectId, "upload.cancelled", { uploadId: input.uploadId });
+        return { requestId: input.requestId, projectId: input.projectId, uploadId: input.uploadId, cancelled: true };
+      },
+    });
+  }
+
   finishUpload(
     uploadId: string,
     asset: SourceAsset,
@@ -674,6 +733,51 @@ export class EditorStore {
       .plans.find((p) => p.planId === planId);
     if (!plan) editorFailure("ASSET_NOT_FOUND", "No such plan in the bound project");
     return plan;
+  }
+
+  /**
+   * Viewer-level approval listing with optional status filter; the page is
+   * bounded (latest 256) and full rows stay available via get_approval.
+   */
+  listApprovals(projectId: string, principal: EditorPrincipal, status?: string) {
+    this.authorize(projectId, principal, "viewer");
+    const approvals = this.rows(
+      "SELECT request FROM approvals WHERE project_id = ? ORDER BY created_at, approval_id",
+      projectId,
+    )
+      .map((document) => ApprovalRequestSchema.parse(JSON.parse(document)))
+      .filter((a) => !status || a.status === status)
+      .slice(-256);
+    return { projectId, status: status ?? null, approvalCount: approvals.length, approvals };
+  }
+
+  /**
+   * Viewer-level plan listing with a planId cursor; summaries only (no draft
+   * bodies), bounded to 128 per page. Full plans stay available via get_plan.
+   */
+  listPlans(projectId: string, principal: EditorPrincipal, afterPlanId?: string) {
+    this.authorize(projectId, principal, "viewer");
+    const plans = this.rows(
+      "SELECT document FROM plans WHERE project_id = ? ORDER BY revision",
+      projectId,
+    )
+      .map((document) => AcceptedEditPlanSchema.parse(JSON.parse(document)))
+      .filter((p) => !afterPlanId || p.planId > afterPlanId)
+      .slice(0, 129);
+    const page = plans.slice(0, 128);
+    return {
+      projectId,
+      planCount: page.length,
+      plans: page.map((p) => ({
+        planId: p.planId,
+        revision: p.revision,
+        planHash: p.planHash,
+        intent: p.intent.slice(0, 200),
+        status: p.status,
+        deterministicBackendId: p.deterministicBackendId,
+      })),
+      hasMore: plans.length > 128,
+    };
   }
 
   validateProposal(draft: EditPlanDraftV1, principal: EditorPrincipal): void {
@@ -729,20 +833,31 @@ export class EditorStore {
    * Read-only dry run of a plan draft: validation outcome plus a bounded
    * timeline summary. Never persists anything and never touches media.
    */
-  async estimateTimeline(input: { requestId: string; draft: EditPlanDraftV1 }, principal: EditorPrincipal) {
-    this.authorize(input.draft.projectId, principal, "operator");
+  async estimateTimeline(
+    input: { requestId: string; draft?: EditPlanDraftV1; projectId?: string; planId?: string },
+    principal: EditorPrincipal,
+  ) {
+    const draft =
+      input.draft ??
+      (() => {
+        if (!input.projectId || !input.planId)
+          editorFailure("INVALID_ARGUMENT", "Provide either a draft or a planId");
+        const plan = this.plan(input.projectId, input.planId, principal);
+        return { ...plan } as EditPlanDraftV1;
+      })();
+    this.authorize(draft.projectId, principal, "operator");
     let valid = true;
     let issue: string | null = null;
     try {
-      this.validatePlan(input.draft);
+      this.validatePlan(draft);
     } catch (error) {
       valid = false;
       issue = error instanceof Error ? error.message : String(error);
     }
     const warnings: string[] = [];
     if (this.cas) {
-      const project = this.project(input.draft.projectId, principal);
-      for (const op of input.draft.trimOperations) {
+      const project = this.project(draft.projectId, principal);
+      for (const op of draft.trimOperations) {
         const asset = project.assets.find((a) => a.assetId === op.source.assetId);
         if (!asset) continue;
         try {
@@ -763,11 +878,38 @@ export class EditorStore {
     }
     return {
       requestId: input.requestId,
-      projectId: input.draft.projectId,
+      projectId: draft.projectId,
+      ...(input.planId ? { planId: input.planId } : {}),
       valid,
       issue,
       warnings,
-      ...summarizeDraftTimeline(input.draft),
+      ...summarizeDraftTimeline(draft),
+    };
+  }
+
+  /**
+   * Viewer-level listing of a job's artifacts with blob metadata (no bytes):
+   * kind, size, hash and media type per artifact, bounded for the wire.
+   */
+  listArtifacts(projectId: string, jobId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    const job = this.job(projectId, jobId, principal);
+    return {
+      projectId,
+      jobId: job.jobId,
+      kind: job.kind,
+      state: job.state,
+      revision: job.revision,
+      artifactCount: job.artifacts.length,
+      artifacts: job.artifacts.slice(0, 256).map((a) => ({
+        artifactId: a.artifactId,
+        jobId: a.jobId,
+        revision: a.revision,
+        kind: a.kind,
+        sizeBytes: a.blob.bytes,
+        sha256: a.blob.sha256,
+        mediaType: a.blob.mediaType,
+      })),
     };
   }
 
@@ -1063,6 +1205,101 @@ export class EditorStore {
     }});
   }
 
+  /**
+   * Reconciliation read: return the stored response for a mutation requestId,
+   * or null when the request was never applied. Viewer-level.
+   */
+  mutationResult(projectId: string, requestId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    const row = this.database
+      .prepare("SELECT fingerprint, response, created_at FROM mutations WHERE project_id = ? AND request_id = ?")
+      .get(projectId, requestId) as { fingerprint: string; response: string; created_at: string } | undefined;
+    if (!row) return null;
+    return {
+      requestId,
+      projectId,
+      fingerprint: row.fingerprint,
+      response: JSON.parse(row.response),
+      createdAt: row.created_at,
+    };
+  }
+
+  /**
+   * Re-hash the delivered export bytes in CAS and compare with the manifest's
+   * recorded output hash. Operator-level; pure verification, no mutation.
+   */
+  async verifyExport(projectId: string, jobId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "operator");
+    if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
+    const job = this.job(projectId, jobId, principal);
+    if (job.kind !== "export") editorFailure("INVALID_ARGUMENT", "The job is not an export");
+    const manifest = job.artifacts.find((a) => a.kind === "manifest");
+    const output = job.artifacts.find((a) => a.kind === "export");
+    if (!manifest || !output) editorFailure("ASSET_NOT_FOUND", "The export job has no manifest/export artifact yet");
+    const doc = JSON.parse((await this.cas.readBytes(manifest.blob)).toString("utf8")) as {
+      output?: { sha256?: string };
+      renderRecipeHash?: string | null;
+      planHash?: string;
+    };
+    const expected = doc.output?.sha256;
+    if (!expected) editorFailure("ARTIFACT_HASH_MISMATCH", "The manifest does not record an output hash");
+    const actual = await sha256File(this.cas.pathFor(output.blob));
+    const verified = actual === expected && actual === output.blob.sha256;
+    return {
+      jobId,
+      state: job.state,
+      verified,
+      outputSha256: actual,
+      manifestSha256: manifest.blob.sha256,
+      renderRecipeHash: doc.renderRecipeHash ?? null,
+      planHash: doc.planHash ?? null,
+      detail: verified
+        ? "delivered bytes match the manifest output hash"
+        : "delivered bytes differ from the manifest output hash",
+    };
+  }
+
+  /** Read one approval (with its grant) by id. Viewer-level. */
+  approvalById(projectId: string, approvalId: string, principal: EditorPrincipal): ApprovalRequest {
+    this.authorize(projectId, principal, "viewer");
+    const stored = this.storedApproval(approvalId);
+    if (stored.request.projectId !== projectId)
+      editorFailure("PERMISSION_DENIED", "The approval belongs to another project");
+    return stored.request;
+  }
+
+  /**
+   * Revoke a pending or approved approval and its grant, so no job can be
+   * created from it afterwards. Idempotent per requestId.
+   */
+  revokeApproval(input: RevokeApprovalRequest, principal: EditorPrincipal): ApprovalRequest {
+    const approval = this.approval(input.approvalId);
+    this.authorize(approval.projectId, principal, "operator");
+    return this.mutate({
+      projectId: approval.projectId,
+      requestId: input.requestId,
+      payload: { approvalId: input.approvalId },
+      execute: () => {
+        const stored = this.storedApproval(input.approvalId);
+        const current = stored.request;
+        if (current.projectId !== input.projectId)
+          editorFailure("PERMISSION_DENIED", "The approval belongs to another project");
+        if (!["pending", "approved"].includes(current.status))
+          editorFailure("APPROVAL_CONSUMED", "Only pending or approved approvals can be revoked");
+        const revoked = { ...current, status: "revoked" as const };
+        this.updateApproval(
+          revoked,
+          stored.grant ? { ...stored.grant, revokedReason: "revoked by operator" } : undefined,
+        );
+        this.emit(current.projectId, "approval.decided", {
+          approvalId: current.approvalId,
+          decision: "revoked",
+        });
+        return revoked;
+      },
+    });
+  }
+
   decideApproval(
     input: ApprovalDecision,
     principal: EditorPrincipal,
@@ -1251,7 +1488,7 @@ export class EditorStore {
         });
         const asset = project.assets.find((a) => a.assetId === input.assetId);
         if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
-        const rate = input.rate ?? "25/1";
+        const rate = clampAnalysisRate(input.rate);
         const track = input.tracking;
         const planHash = track ? sha256Json(["track", track.anchorApprovalId, track.anchorHash, track.expectedRevision, track.firstFrame, track.frameCount])
           : sha256Json(["analysis", input.assetId, asset.original.sha256, rate]);
@@ -1781,8 +2018,9 @@ export class EditorStore {
 
   events(projectId: string, afterSeq: string, principal: EditorPrincipal) {
     this.authorize(projectId, principal, "viewer");
+    // Bounded page: callers continue with afterSeq = last received seq.
     const documents = this.rows(
-      "SELECT document FROM events WHERE project_id = ? AND CAST(seq AS INTEGER) > ? ORDER BY CAST(seq AS INTEGER)",
+      "SELECT document FROM events WHERE project_id = ? AND CAST(seq AS INTEGER) > ? ORDER BY CAST(seq AS INTEGER) LIMIT 500",
       projectId,
       afterSeq,
     );
@@ -1790,6 +2028,25 @@ export class EditorStore {
       events: documents.map((document) => EditorEventSchema.parse(JSON.parse(document))),
       snapshotRequired: false,
     };
+  }
+
+  /**
+   * Run-scoped bounded event page for live monitoring of one planning run.
+   * runId is filtered in memory after a wider read so interleaved project
+   * events do not starve the run's page; the page itself stays <= 200.
+   */
+  runEvents(projectId: string, runId: string, afterSeq: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    const documents = this.rows(
+      "SELECT document FROM events WHERE project_id = ? AND CAST(seq AS INTEGER) > ? ORDER BY CAST(seq AS INTEGER) LIMIT 2000",
+      projectId,
+      afterSeq,
+    );
+    const events = documents
+      .map((document) => EditorEventSchema.parse(JSON.parse(document)))
+      .filter((event) => event.runId === runId)
+      .slice(0, 200);
+    return { events, snapshotRequired: false, latestSeq: this.latestSeq(projectId) };
   }
 
   registerPrincipal(projectId: string, principal: EditorPrincipal): void {

@@ -300,13 +300,26 @@ export const JobStateSchema = z.enum([
 ]);
 export type JobState = z.infer<typeof JobStateSchema>;
 
+export const ArtifactKindSchema = z.enum([
+  "probe",
+  "proxy",
+  "mask",
+  "candidate",
+  "export",
+  "qa",
+  "manifest",
+  "contact",
+  "scenecuts",
+  "waveform",
+]);
+export type ArtifactKind = z.infer<typeof ArtifactKindSchema>;
 export const ArtifactRefSchema = z
   .object({
     artifactId: id,
     projectId: id,
     jobId: id,
     revision: uint,
-    kind: z.enum(["probe", "proxy", "mask", "candidate", "export", "qa", "manifest", "contact", "scenecuts", "waveform"]),
+    kind: ArtifactKindSchema,
     blob: BlobRefSchema,
   })
   .strict();
@@ -416,6 +429,10 @@ export const VideoToolCallSchema = z.discriminatedUnion("tool", [
   }),
   toolEnvelope.extend({
     tool: z.literal("get_job_status"),
+    args: z.object({ jobId: id }).strict(),
+  }),
+  toolEnvelope.extend({
+    tool: z.literal("list_artifacts"),
     args: z.object({ jobId: id }).strict(),
   }),
   toolEnvelope.extend({ tool: z.literal("validate_edit_plan"), args: EditPlanDraftV1Schema }),
@@ -529,6 +546,20 @@ export const CommitUploadRequestSchema = z
   .strict();
 export const UploadRequestSchema = z.object({ projectId: id, uploadId: id }).strict();
 
+export const CancelUploadRequestSchema = z
+  .object({ requestId, projectId: id, uploadId: id })
+  .strict();
+export type CancelUploadRequest = z.infer<typeof CancelUploadRequestSchema>;
+export const CancelUploadResultSchema = z
+  .object({ requestId, projectId: id, uploadId: id, cancelled: z.boolean() })
+  .strict();
+export type CancelUploadResult = z.infer<typeof CancelUploadResultSchema>;
+export const cancelUploadRpc = {
+  name: "video.v1.cancel_upload",
+  input: CancelUploadRequestSchema,
+  output: CancelUploadResultSchema,
+};
+
 export const getCapabilitiesRpc = {
   name: "video.v1.get_capabilities",
   input: z.object({}).strict(),
@@ -560,9 +591,10 @@ export const submitPlanRpc = {
   output: PlanReviewResultSchema,
 };
 
-export const EstimateTimelineRequestSchema = z
-  .object({ requestId, draft: EditPlanDraftV1Schema })
-  .strict();
+export const EstimateTimelineRequestSchema = z.union([
+  z.object({ requestId, draft: EditPlanDraftV1Schema }).strict(),
+  z.object({ requestId, projectId: id, planId: id }).strict(),
+]);
 export type EstimateTimelineRequest = z.infer<typeof EstimateTimelineRequestSchema>;
 export const TimelineSegmentSummarySchema = z
   .object({
@@ -577,6 +609,7 @@ export const EstimateTimelineResultSchema = z
   .object({
     requestId,
     projectId: id,
+    planId: id.optional(),
     valid: z.boolean(),
     issue: z.string().nullable(),
     warnings: z.array(z.string()).max(16).optional(),
@@ -604,6 +637,50 @@ export const decideApprovalRpc = {
   input: ApprovalDecisionSchema,
   output: DecideApprovalResultSchema,
 };
+
+export const GetApprovalInputSchema = z
+  .object({ requestId, projectId: id, approvalId: id })
+  .strict();
+export type GetApprovalInput = z.infer<typeof GetApprovalInputSchema>;
+export const GetApprovalResultSchema = ApprovalRequestSchema.extend({ requestId }).strict();
+export const getApprovalRpc = {
+  name: "video.v1.get_approval",
+  input: GetApprovalInputSchema,
+  output: GetApprovalResultSchema,
+};
+export const RevokeApprovalRequestSchema = z
+  .object({ requestId, projectId: id, approvalId: id })
+  .strict();
+export type RevokeApprovalRequest = z.infer<typeof RevokeApprovalRequestSchema>;
+export const RevokeApprovalResultSchema = ApprovalRequestSchema.extend({ requestId }).strict();
+export const revokeApprovalRpc = {
+  name: "video.v1.revoke_approval",
+  input: RevokeApprovalRequestSchema,
+  output: RevokeApprovalResultSchema,
+};
+
+export const GetMutationResultInputSchema = z
+  .object({ requestId, projectId: id })
+  .strict();
+export type GetMutationResultInput = z.infer<typeof GetMutationResultInputSchema>;
+export const GetMutationResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    fingerprint: sha256,
+    response: z.unknown(),
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+export type GetMutationResult = z.infer<typeof GetMutationResultSchema>;
+export const GetMutationResultResultSchema = z
+  .object({ requestId, projectId: id, mutation: GetMutationResultSchema.nullable() })
+  .strict();
+export const getMutationResultRpc = {
+  name: "video.v1.get_mutation_result",
+  input: GetMutationResultInputSchema,
+  output: GetMutationResultResultSchema,
+};
 export const createJobRpc = {
   name: "video.v1.create_job",
   input: CreateJobRequestSchema,
@@ -623,6 +700,86 @@ export const getEventsRpc = {
   name: "video.v1.get_events",
   input: EventsRequestSchema,
   output: EventsResultSchema,
+};
+
+export const GetRunEventsInputSchema = z
+  .object({ requestId, projectId: id, runId: id, afterSeq: uint.optional() })
+  .strict();
+export type GetRunEventsInput = z.infer<typeof GetRunEventsInputSchema>;
+export const RunEventsResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    runId: id,
+    events: z.array(EditorEventSchema).max(200),
+    latestSeq: uint,
+    snapshotRequired: z.boolean(),
+  })
+  .strict();
+export type RunEventsResult = z.infer<typeof RunEventsResultSchema>;
+export const getRunEventsRpc = {
+  name: "video.v1.get_run_events",
+  input: GetRunEventsInputSchema,
+  output: RunEventsResultSchema,
+};
+
+export const ApprovalStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "rejected",
+  "superseded",
+  "expired",
+  "revoked",
+]);
+export const ListApprovalsInputSchema = z
+  .object({ requestId, projectId: id, status: ApprovalStatusSchema.optional() })
+  .strict();
+export type ListApprovalsInput = z.infer<typeof ListApprovalsInputSchema>;
+export const ListApprovalsResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    status: ApprovalStatusSchema.nullable(),
+    approvalCount: z.number().int().min(0),
+    approvals: z.array(ApprovalRequestSchema).max(256),
+  })
+  .strict();
+export type ListApprovalsResult = z.infer<typeof ListApprovalsResultSchema>;
+export const listApprovalsRpc = {
+  name: "video.v1.list_approvals",
+  input: ListApprovalsInputSchema,
+  output: ListApprovalsResultSchema,
+};
+
+export const PlanSummarySchema = z
+  .object({
+    planId: id,
+    revision: uint,
+    planHash: sha256,
+    intent: z.string().max(200),
+    status: z.literal("proposed"),
+    deterministicBackendId: z.enum(["ffmpeg", "filmcraft"]),
+  })
+  .strict();
+export type PlanSummary = z.infer<typeof PlanSummarySchema>;
+export const ListPlansInputSchema = z
+  .object({ requestId, projectId: id, afterPlanId: id.optional() })
+  .strict();
+export type ListPlansInput = z.infer<typeof ListPlansInputSchema>;
+export const ListPlansResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    planCount: z.number().int().min(0),
+    plans: z.array(PlanSummarySchema).max(128),
+    hasMore: z.boolean(),
+  })
+  .strict();
+export type ListPlansResult = z.infer<typeof ListPlansResultSchema>;
+export const listPlansRpc = {
+  name: "video.v1.list_plans",
+  input: ListPlansInputSchema,
+  output: ListPlansResultSchema,
 };
 export const createUploadRpc = {
   name: "video.v1.create_upload",
@@ -990,6 +1147,41 @@ export const getPlanRpc = {
   output: GetPlanResultSchema,
 };
 
+export const ListArtifactsInputSchema = z
+  .object({ requestId, projectId: id, jobId: id })
+  .strict();
+export type ListArtifactsInput = z.infer<typeof ListArtifactsInputSchema>;
+export const ArtifactInfoSchema = z
+  .object({
+    artifactId: id,
+    jobId: id,
+    revision: uint,
+    kind: ArtifactKindSchema,
+    sizeBytes: uint,
+    sha256,
+    mediaType: z.string().min(1).max(128),
+  })
+  .strict();
+export type ArtifactInfo = z.infer<typeof ArtifactInfoSchema>;
+export const ListArtifactsResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    jobId: id,
+    kind: z.enum(["analysis", "preview", "final", "export"]),
+    state: JobStateSchema,
+    revision: uint,
+    artifactCount: z.number().int().min(0),
+    artifacts: z.array(ArtifactInfoSchema).max(256),
+  })
+  .strict();
+export type ListArtifactsResult = z.infer<typeof ListArtifactsResultSchema>;
+export const listArtifactsRpc = {
+  name: "video.v1.list_artifacts",
+  input: ListArtifactsInputSchema,
+  output: ListArtifactsResultSchema,
+};
+
 export const GetExportSummaryInputSchema = z
   .object({ requestId, projectId: id, jobId: id })
   .strict();
@@ -1025,6 +1217,31 @@ export const getExportSummaryRpc = {
   name: "video.v1.get_export_summary",
   input: GetExportSummaryInputSchema,
   output: GetExportSummaryResultSchema,
+};
+
+export const VerifyExportInputSchema = z
+  .object({ requestId, projectId: id, jobId: id })
+  .strict();
+export type VerifyExportInput = z.infer<typeof VerifyExportInputSchema>;
+export const VerifyExportResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    jobId: id,
+    state: JobStateSchema,
+    verified: z.boolean(),
+    outputSha256: sha256.nullable(),
+    manifestSha256: sha256,
+    renderRecipeHash: sha256.nullable(),
+    planHash: sha256.nullable(),
+    detail: z.string(),
+  })
+  .strict();
+export type VerifyExportResult = z.infer<typeof VerifyExportResultSchema>;
+export const verifyExportRpc = {
+  name: "video.v1.verify_export",
+  input: VerifyExportInputSchema,
+  output: VerifyExportResultSchema,
 };
 
 export const AssetMetadataSchema = z

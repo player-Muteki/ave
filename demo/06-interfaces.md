@@ -345,7 +345,7 @@ type ExportManifest = {
 | 操作 | 作用 | 权限/约束 |
 | --- | --- | --- |
 | `get_capabilities` | 协议、feature、Worker profile | 所有已认证角色 |
-| `create_project/get_project` | 创建/读取项目 | operator / viewer 只读 |
+| `create_project/get_project` | 创建/读取项目（快照内 plans≤128、approvals≤256、jobs≤256，专用 reader 不受限） | operator / viewer 只读 |
 | `import_asset` | 桌面原生授权导入 | operator；hash/配额 |
 | `create_upload/write_upload_chunk` | 初始化上传、写一块 | operator；uploadId/requestId/offset/chunkSha256 |
 | `get_upload_status/commit_upload/cancel_upload` | 查询 nextOffset、完成或取消 | operator；最终长度和 SHA-256，重复 commit 返回同 Asset |
@@ -360,17 +360,22 @@ type ExportManifest = {
 | `create_mask_revision/correct_mask_revision` | 创建或修正 mask | operator；产生新 subjectRevision/hash |
 | `create_keyframe_set` | 创建锚帧/参考图集合 | operator；产生新 subjectRevision/hash |
 | `start_agent_run/steer/follow_up/abort` | 控制规划会话 | operator；runId 幂等 |
-| `estimate_timeline` | 方案草稿的只读时间线预估：校验问题 + 各轨道段数/总时长/转场重叠/有效输出时长，不渲染不落库 | operator；requestId + draft |
+| `estimate_timeline` | 方案草稿或已采纳方案（planId）的只读时间线预估：校验问题 + 各轨道段数/总时长/转场重叠/有效输出时长，不渲染不落库 | operator；requestId + draft，或 requestId + projectId + planId |
 | `submit_plan_review` | 用户对 Plan 提修改，不是 Agent 提交 | operator |
 | `get_approval/decide_approval/revoke_approval` | 查看、approve/reject 或撤销 grant | operator；ApprovalDecision + requestId |
 | `create_preview_job/create_final_job/create_export_job` | 消费对应 purpose grant 创建任务 | operator；requestId + expectedRevision + grantId |
 | `get_mutation_result` | 按 projectId + requestId 对账丢失响应 | 原操作角色；返回可重放结果和实体 ID |
-| `list_jobs/get_job/watch_jobs` | 查询/订阅真实任务 | viewer；持久 seq + snapshot |
+| `list_jobs/get_job/watch_jobs` | 查询/订阅真实任务 | viewer；持久 seq + snapshot；事件流每页上限 500，按 afterSeq 继续拉 |
+| `get_run_events` | 按 runId 订阅单次规划运行的事件（内存过滤 runId，单页 ≤200，带 latestSeq 游标） | viewer；requestId + projectId + runId + afterSeq? |
+| `list_approvals` | 审批列表，可选 status 过滤（pending/approved/rejected/superseded/expired/revoked），最新 256 条 | viewer；requestId + projectId + status? |
+| `list_plans` | 方案摘要分页列表（planId 游标，单页 ≤128，仅摘要不含草稿全文） | viewer；requestId + projectId + afterPlanId? |
 | `cancel_job/pause_job/resume_job` | 控制任务 | operator；独立 Agent abort |
 | `get_qa_report` | 查询 QA | viewer |
 | `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |
 | `get_plan` | 按 planId 读取已采纳方案全文（操作列表、hash、状态） | viewer；requestId + projectId + planId |
+| `list_artifacts` | 按 jobId 列出产物元数据：kind/大小/SHA-256/mediaType（上限 256 条，不出 CAS 字节） | viewer；requestId + projectId + jobId |
 | `get_export_summary` | export 任务 manifest 的有界摘要：hash 链（plan/recipe/源 manifest）、各 op 计数、输出 blob 引用与响度 | viewer；requestId + projectId + jobId |
+| `verify_export` | 重新计算交付字节 SHA-256 并与 manifest 对账 | operator；requestId + projectId + jobId |
 | `get_artifact` | 读取产物元数据 | viewer 仅 proxy/QA；最终 export 需 operator |
 | `read_asset_chunk` | 分块读取 proxy、mask、QA 或 export | 按 asset 类型鉴权；最终 export 需 operator |
 | `revoke_device/configure_worker` | 设备/后端管理 | owner only |

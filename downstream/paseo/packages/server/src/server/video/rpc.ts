@@ -3,8 +3,12 @@ import {
   CreateJobRequestSchema,
   CreateProjectInputSchema,
   CreateUploadRequestSchema,
+  CancelUploadRequestSchema,
   WriteUploadChunkSchema,
   DecideApprovalResultSchema,
+  GetApprovalInputSchema,
+  RevokeApprovalRequestSchema,
+  GetMutationResultInputSchema,
   ApprovalDecisionSchema,
   ProjectRequestSchema,
   PlanReviewRequestSchema,
@@ -19,7 +23,12 @@ import {
   GetSceneCutsInputSchema,
   GetWaveformInputSchema,
   GetPlanInputSchema,
+  ListArtifactsInputSchema,
+  GetRunEventsInputSchema,
+  ListApprovalsInputSchema,
+  ListPlansInputSchema,
   GetExportSummaryInputSchema,
+  VerifyExportInputSchema,
   GetAssetMetadataInputSchema,
   ContactSheetRequestSchema,
   InspectFrameRequestSchema,
@@ -54,9 +63,14 @@ export class EditorRpcService {
             "analysis-summary",
             "qa-summary",
             "timeline-estimate",
+            "list-artifacts",
+            "plan-estimate",
+            "run-events",
+            "list-approvals",
+            "list-plans",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
-          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline"],
+          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export"],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
             {
@@ -80,6 +94,28 @@ export class EditorRpcService {
       case "video.v1.submit_plan": {
         const request = PlanReviewRequestSchema.parse(input);
         return this.editor.store.createPlan({ ...request, principal });
+      }
+      case "video.v1.get_mutation_result": {
+        const request = GetMutationResultInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          mutation: this.editor.store.mutationResult(request.projectId, request.requestId, principal),
+        };
+      }
+      case "video.v1.get_approval": {
+        const request = GetApprovalInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.approvalById(request.projectId, request.approvalId, principal),
+        };
+      }
+      case "video.v1.revoke_approval": {
+        const request = RevokeApprovalRequestSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.revokeApproval(request, principal),
+        };
       }
       case "video.v1.decide_approval": {
         const request = ApprovalDecisionSchema.parse(input);
@@ -121,6 +157,29 @@ export class EditorRpcService {
       case "video.v1.get_events": {
         const request = z.object({ projectId: z.string(), afterSeq: z.string() }).parse(input);
         return this.editor.store.events(request.projectId, request.afterSeq, principal);
+      }
+      case "video.v1.list_approvals": {
+        const request = ListApprovalsInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.listApprovals(request.projectId, principal, request.status),
+        };
+      }
+      case "video.v1.list_plans": {
+        const request = ListPlansInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.listPlans(request.projectId, principal, request.afterPlanId),
+        };
+      }
+      case "video.v1.get_run_events": {
+        const request = GetRunEventsInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          runId: request.runId,
+          ...this.editor.store.runEvents(request.projectId, request.runId, request.afterSeq ?? "0", principal),
+        };
       }
       case "video.v1.start_planning_run": {
         const request = StartPlanningRunInputSchema.parse(input);
@@ -190,11 +249,26 @@ export class EditorRpcService {
           ...this.editor.store.plan(request.projectId, request.planId, principal),
         };
       }
+      case "video.v1.list_artifacts": {
+        const request = ListArtifactsInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.listArtifacts(request.projectId, request.jobId, principal),
+        };
+      }
       case "video.v1.get_export_summary": {
         const request = GetExportSummaryInputSchema.parse(input);
         return {
           requestId: request.requestId,
           ...(await this.editor.store.exportSummary(request.projectId, request.jobId, principal)),
+        };
+      }
+      case "video.v1.verify_export": {
+        const request = VerifyExportInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          ...(await this.editor.store.verifyExport(request.projectId, request.jobId, principal)),
         };
       }
       case "video.v1.get_asset_metadata": {
@@ -259,6 +333,8 @@ export class EditorRpcService {
           editorFailure("INVALID_ARGUMENT", "A framed binary upload chunk is required");
         return this.writeUploadChunk(input, principal);
       }
+      case "video.v1.cancel_upload":
+        return this.editor.store.cancelUpload(CancelUploadRequestSchema.parse(input), principal);
       case "video.v1.get_upload_status": {
         const request = z.object({ projectId: z.string(), uploadId: z.string() }).parse(input);
         return this.editor.store.uploadStatus(request.projectId, request.uploadId, principal);
