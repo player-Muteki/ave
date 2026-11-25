@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
   EditorPrincipal,
+  PlanningRunStatus,
   StartPlanningRunInput,
   SteerPlanningRunInput,
 } from "#video-editor/contracts/v1";
@@ -18,14 +19,6 @@ import {
   type WorkerToDaemon,
 } from "./ipc.js";
 import { videoPlannerPromptSignature } from "./prompt.js";
-
-export interface PlanningRunStatus {
-  runId: string;
-  projectId: string;
-  sessionId: string;
-  state: "running" | "awaiting_input" | "settled" | "interrupted" | "failed";
-  workerPid?: number;
-}
 
 interface RunHandle {
   projectId: string;
@@ -57,7 +50,7 @@ export class AgentRunController {
     for (const projectId of projectIds) {
       const states = this.store.runLifecycle(projectId, principal);
       for (const entry of states) {
-        if (entry.state === "started" || entry.state === "running" || entry.state === "awaiting_input") {
+        if (entry.state === "running" || entry.state === "awaiting_input") {
           this.store.recordExternalEvent(
             projectId,
             "run.interrupted",
@@ -226,9 +219,9 @@ export class AgentRunController {
 
   status(projectId: string, runId: string, principal: EditorPrincipal): PlanningRunStatus {
     const handle = this.runs.get(runId);
-    this.store.authorizeProject(projectId, principal, "viewer");
     if (!handle || handle.projectId !== projectId)
-      editorFailure("NOT_FOUND", "No active planning run (it may have settled; see events)");
+      return this.store.planningRunStatus(projectId, runId, principal);
+    this.store.authorizeProject(projectId, principal, "viewer");
     return {
       runId,
       projectId,

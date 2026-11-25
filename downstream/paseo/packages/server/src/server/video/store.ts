@@ -12,6 +12,8 @@ import {
   ApprovalGrantSchema,
   ApprovalRequestSchema,
   EditorEventSchema,
+  PlanningRunStatusSchema,
+  type PlanningRunStatus,
   JobSnapshotSchema,
   ProjectSnapshotSchema,
   SourceAssetSchema,
@@ -1285,23 +1287,38 @@ export class EditorStore {
     return this.rows("SELECT DISTINCT project_id FROM events WHERE json_extract(document, '$.type') LIKE 'run.%'");
   }
 
-  /** Latest lifecycle state per planning run, derived from the persisted event log. */
-  runLifecycle(
-    projectId: string,
-    principal: EditorPrincipal,
-  ): Array<{ runId: string; state: string }> {
+  runLifecycle(projectId: string, principal: EditorPrincipal) {
+    return this.planningStatuses(projectId, principal).map(({ runId, state }) => ({ runId, state }));
+  }
+
+  planningRunStatus(projectId: string, runId: string, principal: EditorPrincipal): PlanningRunStatus {
+    const [status] = this.planningStatuses(projectId, principal, runId);
+    if (!status) editorFailure("NOT_FOUND", "No such planning run");
+    return status;
+  }
+
+  /** Reconstruct daemon states only; tool or progress events are not state transitions. */
+  private planningStatuses(projectId: string, principal: EditorPrincipal, runId?: string): PlanningRunStatus[] {
     this.authorize(projectId, principal, "viewer");
     const documents = this.rows(
-      "SELECT document FROM events WHERE project_id = ? AND json_extract(document, '$.type') LIKE 'run.%' ORDER BY CAST(seq AS INTEGER)",
-      projectId,
+      `SELECT document FROM events WHERE project_id = ?
+       AND json_extract(document, '$.type') IN ('run.started','run.running','run.awaiting_input','run.settled','run.interrupted','run.failed')
+       ${runId === undefined ? "" : "AND json_extract(document, '$.payload.runId') = ?"}
+       ORDER BY CAST(seq AS INTEGER)`,
+      projectId, ...(runId === undefined ? [] : [runId]),
     );
-    const states = new Map<string, string>();
+    const statuses = new Map<string, PlanningRunStatus>();
     for (const document of documents) {
       const event = EditorEventSchema.parse(JSON.parse(document));
-      const runId = (event.payload as { runId?: string } | undefined)?.runId;
-      if (runId) states.set(runId, event.type.slice("run.".length));
+      const payload = event.payload as { runId?: string; sessionId?: string } | undefined;
+      if (!payload?.runId) continue;
+      const sessionId = statuses.get(payload.runId)?.sessionId ?? payload.sessionId;
+      statuses.set(payload.runId, PlanningRunStatusSchema.parse({
+        projectId, runId: payload.runId, sessionId,
+        state: event.type === "run.started" ? "running" : event.type.slice(4),
+      }));
     }
-    return [...states.entries()].map(([runId, state]) => ({ runId, state }));
+    return [...statuses.values()];
   }
 
   private mutate<Input, Output>(input: {

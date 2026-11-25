@@ -51,13 +51,25 @@ it("replays one start receipt, stops before first prompt, and reconciles an aban
     const stop = controller.stopRun(projectId, run.runId, owner);
     await expect(stop).resolves.toMatchObject({ state: "interrupted" });
     expect(store.runLifecycle(projectId, owner)).toEqual([{ runId: run.runId, state: "interrupted" }]);
-    expect(() => controller.status(projectId, run.runId, owner)).toThrow("No active planning run");
+    expect(controller.status(projectId, run.runId, owner)).toEqual({ ...run, state: "interrupted" });
     const abandoned = store.reservePlanningRun(projectId, "other", "Unstarted", owner).receipt;
+    const completed = (["settled", "failed"] as const).map(state => {
+      const receipt = store.reservePlanningRun(projectId, state, "Recorded run", owner).receipt;
+      store.recordExternalEvent(projectId, `run.${state}`, { runId: receipt.runId }, owner);
+      store.recordExternalEvent(projectId, "run.progress", { runId: receipt.runId }, owner);
+      return { ...receipt, state };
+    });
     store.close();
     store = await EditorStore.create(root);
     controller = new AgentRunController(store);
     controller.reconcile(store.projectsWithPlanningEvents(), owner);
     expect(store.runLifecycle(projectId, owner)).toContainEqual({ runId: abandoned.runId, state: "interrupted" });
+    expect(controller.status(projectId, abandoned.runId, owner)).toEqual({ ...abandoned, state: "interrupted" });
+    for (const result of completed) expect(controller.status(projectId, result.runId, owner)).toEqual(result);
+    expect(controller.status(projectId, run.runId, owner)).toEqual({ ...run, state: "interrupted" });
+    const other = store.createProject({ requestId: "second", title: "Other", principal: owner });
+    expect(() => controller.status(other.projectId, run.runId, owner)).toThrow("No such planning run");
+    expect(() => controller.status(projectId, run.runId, { principalId: "outsider", role: "viewer", projectIds: [] })).toThrow();
     expect(store.project(projectId, owner).jobs).toEqual([]);
   } finally {
     await controller.disposeAll();
