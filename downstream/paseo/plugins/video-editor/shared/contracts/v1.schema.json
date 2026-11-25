@@ -73,6 +73,12 @@
               "overlayY": {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
               }
             },
             "required": [
@@ -125,6 +131,12 @@
               "overlayY": {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
               },
               "crop": {
                 "type": "object",
@@ -236,18 +248,18 @@
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]*)$"
               },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
               "gainMilli": {
                 "type": "string",
                 "pattern": "^-?(0|[1-9][0-9]*)$"
               },
               "mute": {
                 "type": "boolean"
-              },
-              "fadeIn": {
-                "$ref": "urn:video-editor:v1:Rational"
-              },
-              "fadeOut": {
-                "$ref": "urn:video-editor:v1:Rational"
               }
             },
             "required": [
@@ -1351,6 +1363,12 @@
               "overlayY": {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
               }
             },
             "required": [
@@ -1403,6 +1421,12 @@
               "overlayY": {
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
               },
               "crop": {
                 "type": "object",
@@ -1514,18 +1538,18 @@
                 "type": "string",
                 "pattern": "^(0|[1-9][0-9]*)$"
               },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
               "gainMilli": {
                 "type": "string",
                 "pattern": "^-?(0|[1-9][0-9]*)$"
               },
               "mute": {
                 "type": "boolean"
-              },
-              "fadeIn": {
-                "$ref": "urn:video-editor:v1:Rational"
-              },
-              "fadeOut": {
-                "$ref": "urn:video-editor:v1:Rational"
               }
             },
             "required": [

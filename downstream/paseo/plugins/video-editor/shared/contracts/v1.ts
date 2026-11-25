@@ -85,6 +85,9 @@ const TrimOperationSchema = z
     // Overlay placement, only meaningful on v2 overlay-track segments.
     overlayX: uint.optional(),
     overlayY: uint.optional(),
+    // Optional video fade in/out at this segment's edges (seconds).
+    fadeIn: RationalSchema.optional(),
+    fadeOut: RationalSchema.optional(),
   })
   .strict();
 const TransformOperationSchema = TrimOperationSchema.extend({

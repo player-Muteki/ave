@@ -748,6 +748,15 @@ export class MediaService {
       const range = `start=${rationalSeconds(op.sourceRange.start)}:duration=${rationalSeconds(op.sourceRange.duration)}`;
       let vchain = `[${i}:${video.streamIndex}]trim=${range},setpts=PTS-STARTPTS`;
       vchain += transformFilterChain(video, transformOps.get(op.clipId));
+      const vDurSec = Number(rationalSeconds(op.recordRange.duration));
+      if (op.fadeIn) {
+        const d = Number(rationalSeconds(op.fadeIn));
+        vchain += `,fade=t=in:st=0:d=${d.toFixed(6)}`;
+      }
+      if (op.fadeOut) {
+        const d = Number(rationalSeconds(op.fadeOut));
+        vchain += `,fade=t=out:st=${Math.max(0, vDurSec - d).toFixed(6)}:d=${d.toFixed(6)}`;
+      }
       const geo = segGeo[i]!;
       const tt = trackTarget.get(op.trackId)!;
       if (tt.width && tt.height && (geo.width !== tt.width || geo.height !== tt.height))

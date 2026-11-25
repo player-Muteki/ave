@@ -73,6 +73,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [ovY, setOvY] = useState("0");
   const [fadeIn, setFadeIn] = useState("");
   const [fadeOut, setFadeOut] = useState("");
+  const [vFadeIn, setVFadeIn] = useState("");
+  const [vFadeOut, setVFadeOut] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -339,6 +341,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {field("音量增益（毫分贝，可空）", gainMilli, setGainMilli)}
                 {field("音频淡入（秒，可空）", fadeIn, setFadeIn)}
                 {field("音频淡出（秒，可空）", fadeOut, setFadeOut)}
+                {field("视频淡入（秒，可空）", vFadeIn, setVFadeIn)}
+                {field("视频淡出（秒，可空）", vFadeOut, setVFadeOut)}
                 {field("缩放宽（可空）", scaleW, setScaleW)}
                 {field("缩放高（可空）", scaleH, setScaleH)}
                 {field("旋转（0/90/180/270）", rot, setRot)}
@@ -374,6 +378,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   subMode,
                   fadeIn.trim() || fadeOut.trim()
                     ? { inSec: fadeIn, outSec: fadeOut }
+                    : undefined,
+                  vFadeIn.trim() || vFadeOut.trim()
+                    ? { inSec: vFadeIn, outSec: vFadeOut }
                     : undefined,
                 );
                 const token = requestId(JSON.stringify(draft));

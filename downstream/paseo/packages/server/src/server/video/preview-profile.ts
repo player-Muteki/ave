@@ -96,6 +96,12 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
           "CAPABILITY_UNAVAILABLE",
           "Retiming is not supported by this preview profile",
         );
+      const fadeSum = rationalAdd(op.fadeIn ?? { num: "0", den: "1" }, op.fadeOut ?? { num: "0", den: "1" });
+      if (
+        BigInt(fadeSum.num) * BigInt(op.recordRange.duration.den) >
+        BigInt(op.recordRange.duration.num) * BigInt(fadeSum.den)
+      )
+        editorFailure("CAPABILITY_UNAVAILABLE", "Video fades must fit the segment duration");
       cursor = rationalAdd(cursor, op.recordRange.duration);
     }
     if (trackId === "v1") mainTotal = cursor;

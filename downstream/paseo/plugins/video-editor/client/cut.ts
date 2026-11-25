@@ -35,6 +35,7 @@ export function proposeCut(
   bgmAssetId?: string,
   subMode?: "burn-in" | "metadata",
   audioFade?: { inSec?: string; outSec?: string },
+  videoFade?: { inSec?: string; outSec?: string },
 ): EditPlanDraftV1 {
   const asset = project.assets.find((a) => a.assetId === assetId);
   const stream = asset?.streams.find((s) => s.kind === "video");
@@ -74,6 +75,8 @@ export function proposeCut(
         },
         sourceRange: { start: { num: first.toString(), den: "1000" }, duration },
         recordRange: { start: { num: "0", den: "1" }, duration },
+        fadeIn: fadeRational(videoFade?.inSec),
+        fadeOut: fadeRational(videoFade?.outSec),
       },
     ],
     transformOperations: transform
