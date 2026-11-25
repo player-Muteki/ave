@@ -986,6 +986,43 @@ export const getPlanRpc = {
   output: GetPlanResultSchema,
 };
 
+export const GetExportSummaryInputSchema = z
+  .object({ requestId, projectId: id, jobId: id })
+  .strict();
+export type GetExportSummaryInput = z.infer<typeof GetExportSummaryInputSchema>;
+export const ExportSummarySchema = z
+  .object({
+    jobId: id,
+    state: JobStateSchema,
+    revision: uint,
+    manifestArtifactId: id,
+    manifestSha256: sha256,
+    exportId: z.string().nullable(),
+    output: BlobRefSchema.nullable(),
+    sourceManifestHash: sha256.nullable(),
+    planHash: sha256.nullable(),
+    ffmpegBuildHash: z.string().nullable(),
+    renderRecipeHash: sha256.nullable(),
+    approvalId: z.string().nullable(),
+    segmentCount: z.number().int().min(0),
+    transitionCount: z.number().int().min(0),
+    transformCount: z.number().int().min(0),
+    subtitleCueCount: z.number().int().min(0),
+    audioOperationCount: z.number().int().min(0),
+    audioLoudness: z
+      .object({ meanVolumeDb: z.string(), maxVolumeDb: z.string() })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+export type ExportSummary = z.infer<typeof ExportSummarySchema>;
+export const GetExportSummaryResultSchema = ExportSummarySchema.extend({ requestId }).strict();
+export const getExportSummaryRpc = {
+  name: "video.v1.get_export_summary",
+  input: GetExportSummaryInputSchema,
+  output: GetExportSummaryResultSchema,
+};
+
 export const contactSheetRpc = {
   name: "video.v1.contact_sheet",
   input: ContactSheetRequestSchema,

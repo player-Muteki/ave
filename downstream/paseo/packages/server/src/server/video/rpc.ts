@@ -19,6 +19,7 @@ import {
   GetSceneCutsInputSchema,
   GetWaveformInputSchema,
   GetPlanInputSchema,
+  GetExportSummaryInputSchema,
   ContactSheetRequestSchema,
   InspectFrameRequestSchema,
   PreviewFramesRequestSchema,
@@ -186,6 +187,13 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...this.editor.store.plan(request.projectId, request.planId, principal),
+        };
+      }
+      case "video.v1.get_export_summary": {
+        const request = GetExportSummaryInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...(await this.editor.store.exportSummary(request.projectId, request.jobId, principal)),
         };
       }
       case "video.v1.request_tracked_mask_review":
