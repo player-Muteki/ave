@@ -22,7 +22,7 @@ const repo = fileURLToPath(new URL("../../../../../", import.meta.url));
 // Opt-in: requires agent-browser and a local Chrome binary. Never attaches to a user's browser.
 test
   .skipIf(process.env.VIDEO_EDITOR_BROWSER_TEST !== "1")
-  .each(["source import", "preview approval and reviewed delivery", "reject preview", "project creation and discovery", "remove verified silence",
+  .each(["source import", "preview approval and reviewed delivery", "reject preview", "project creation and discovery", "remove verified silence", "switch run event feeds",
     ...(process.env.VIDEO_EDITOR_LIVE_PLANNER === "1" ? ["last-second planning approval"] : []),
     ...(process.env.VIDEO_EDITOR_SAM2_TEST === "1" ? ["object mask"] : [])])(
   "edit desk: %s",
@@ -202,6 +202,27 @@ test
       }
       await web("fill", '[aria-label="项目 ID"]', project.projectId);
       await web("find", "role", "button", "click", "--name", "打开项目");
+      if (scenario === "switch run event feeds") {
+        const next = ProjectSnapshotSchema.parse(await invoke("create_project", { title: "第二个项目", requestId: "next" }));
+        for (const projectId of [project.projectId, next.projectId]) {
+          if (projectId === next.projectId) {
+            await web("fill", '[aria-label="项目 ID"]', projectId);
+            await clickDesk("打开项目");
+            await web("wait", "--text", "版本 0 · 0 份素材");
+          }
+          await web("fill", '[aria-label="规划意图（自然语言）"]', "测试运行事件");
+          await clickDesk("开始规划");
+          await web("wait", "--text", "run 事件");
+          const result = EventsResultSchema.parse(await invoke("get_events", { projectId, afterSeq: "0" }));
+          const started = result.events.find(event => event.type === "run.running")!;
+          await clickDesk("run 事件");
+          await web("wait", "--text", `${started.seq} · run.running`);
+          await clickDesk("run 事件");
+          const screen = await web("snapshot");
+          expect(screen.split(`${started.seq} · run.running`)).toHaveLength(2);
+        }
+        return;
+      }
       if (tailRequest) {
         await web("fill", '[aria-label="规划意图（自然语言）"]', "只保留唯一视频素材的最后一秒和原声，提交给我审批。");
         await clickDesk("开始规划");

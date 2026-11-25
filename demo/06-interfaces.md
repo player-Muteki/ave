@@ -366,7 +366,7 @@ type ExportManifest = {
 | `create_preview_job/create_final_job/create_export_job` | 消费对应 purpose grant 创建任务 | operator；requestId + expectedRevision + grantId |
 | `get_mutation_result` | 按 projectId + requestId 对账丢失响应 | 原操作角色；返回可重放结果和实体 ID |
 | `list_jobs/get_job/watch_jobs` | 查询/订阅真实任务 | viewer；持久 seq + snapshot；事件流每页上限 500，按 afterSeq 继续拉 |
-| `get_run_events` | 按 runId 订阅单次规划运行的事件（内存过滤 runId，单页 ≤200，带 latestSeq 游标） | viewer；requestId + projectId + runId + afterSeq? |
+| `get_run_events` | 按 runId 订阅单次规划运行的事件（按项目和 runId 筛选后分页，单页 ≤200；latestSeq 为本页最后已读序号，空页沿用请求游标） | viewer；requestId + projectId + runId + afterSeq? |
 | `list_approvals` | 审批列表，可选 status 过滤（pending/approved/rejected/superseded/expired/revoked），最新 256 条 | viewer；requestId + projectId + status? |
 | `list_plans` | 方案摘要按创建顺序分页，下一页传上一页末条 planId，单页 ≤128；get_plan 支持查询已移出项目快照的历史方案 | viewer；requestId + projectId + afterPlanId? |
 | `cancel_job/pause_job/resume_job` | 控制任务 | operator；独立 Agent abort |

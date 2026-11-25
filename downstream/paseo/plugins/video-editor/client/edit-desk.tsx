@@ -184,6 +184,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
       setRun(null);
       setRunEvents([]);
       afterSeq.current = "0";
+      runSeq.current = "0";
     }
     setProject(snapshot);
     setId(snapshot.projectId);
@@ -767,6 +768,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               setRun(started);
               setRunEvents([]);
               afterSeq.current = project.latestSeq;
+              runSeq.current = project.latestSeq;
             }, !planPrompt.trim() || runActive)}
             {button("继续/补充", async () => {
               if (!project || !run || !planPrompt.trim()) return;
@@ -811,7 +813,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
           })}
           {project && run && button("run 事件", async () => {
             const result = await readRunEvents({ requestId: requestId(`run-events:${run.runId}:${runSeq.current}`), projectId: project.projectId, runId: run.runId, afterSeq: runSeq.current });
-            runSeq.current = result.latestSeq;
+            runSeq.current = result.events.at(-1)?.seq ?? runSeq.current;
             setRunEvents((prev) => [...prev, ...result.events].slice(-12));
           })}
           <Text style={heading}>已提议的时间线</Text>

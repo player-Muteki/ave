@@ -171,6 +171,8 @@ CREATE TABLE IF NOT EXISTS events (
   project_id TEXT NOT NULL, seq TEXT NOT NULL, document TEXT NOT NULL,
   PRIMARY KEY(project_id, seq)
 );
+CREATE INDEX IF NOT EXISTS events_by_run_seq
+  ON events(project_id, json_extract(document, '$.runId'), CAST(seq AS INTEGER));
 -- Write-only event outbox: emit() mirrors every event here, but no drain/reader is
 -- wired yet (get_events serves the events table). Retention/drain policy is an open
 -- design decision; rows currently accumulate unbounded. Do not rely on it for delivery.
@@ -2033,23 +2035,18 @@ export class EditorStore {
     };
   }
 
-  /**
-   * Run-scoped bounded event page for live monitoring of one planning run.
-   * runId is filtered in memory after a wider read so interleaved project
-   * events do not starve the run's page; the page itself stays <= 200.
-   */
+  /** latestSeq is the continuation cursor of this run's page. */
   runEvents(projectId: string, runId: string, afterSeq: string, principal: EditorPrincipal) {
     this.authorize(projectId, principal, "viewer");
     const documents = this.rows(
-      "SELECT document FROM events WHERE project_id = ? AND CAST(seq AS INTEGER) > ? ORDER BY CAST(seq AS INTEGER) LIMIT 2000",
-      projectId,
-      afterSeq,
+      `SELECT document FROM events
+       WHERE project_id = ? AND json_extract(document, '$.runId') = ?
+         AND CAST(seq AS INTEGER) > CAST(? AS INTEGER)
+       ORDER BY CAST(seq AS INTEGER) LIMIT 200`,
+      projectId, runId, afterSeq,
     );
-    const events = documents
-      .map((document) => EditorEventSchema.parse(JSON.parse(document)))
-      .filter((event) => event.runId === runId)
-      .slice(0, 200);
-    return { events, snapshotRequired: false, latestSeq: this.latestSeq(projectId) };
+    const events = documents.map(document => EditorEventSchema.parse(JSON.parse(document)));
+    return { events, snapshotRequired: false, latestSeq: events.at(-1)?.seq ?? afterSeq };
   }
 
   registerPrincipal(projectId: string, principal: EditorPrincipal): void {

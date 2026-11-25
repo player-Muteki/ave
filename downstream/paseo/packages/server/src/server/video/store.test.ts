@@ -639,3 +639,40 @@ it("retrieves all project plans and resumes stable pages after reopening", async
     reopened.close();
   }
 });
+
+it("resumes per-run pages across unrelated traffic, reconnects and project switches", async () => {
+  const { root, store, project } = await fixture();
+  const { projectId } = project;
+  let cursor: string;
+  let expected: string[];
+  let alternate: string;
+  try {
+    alternate = store.createProject({ requestId: "another", title: "Another", principal: owner }).projectId;
+    store.recordExternalEvent(alternate, "run.running", { runId: "target" }, owner);
+    for (let i = 0; i < 2001; i++)
+      store.recordExternalEvent(projectId, "run.running", { runId: "noise" }, owner);
+    for (let i = 0; i < 205; i++) {
+      store.recordExternalEvent(projectId, "run.running", { runId: "target" }, owner);
+      store.recordExternalEvent(projectId, "run.running", { runId: "noise" }, owner);
+    }
+    const first = store.runEvents(projectId, "target", "0", owner);
+    expect(first.events).toHaveLength(200);
+    cursor = first.latestSeq;
+    expect(cursor).toBe(first.events.at(-1)?.seq);
+    expected = first.events.map(event => event.seq);
+  } finally {
+    store.close();
+  }
+  const reopened = await EditorStore.create(root);
+  try {
+    const second = reopened.runEvents(projectId, "target", cursor, owner);
+    expect(second.events).toHaveLength(5);
+    const sequences = [...expected, ...second.events.map(event => event.seq)].map(BigInt);
+    expect(sequences).toEqual(Array.from({ length: 205 }, (_, i) => sequences[0]! + BigInt(2*i)));
+    expect(reopened.runEvents(projectId, "target", second.latestSeq, owner).events).toEqual([]);
+    expect(reopened.runEvents(alternate, "target", "0", owner).events).toHaveLength(1);
+    expect(reopened.runEvents(projectId, "noise", "0", owner).events).toHaveLength(200);
+  } finally {
+    reopened.close();
+  }
+});
