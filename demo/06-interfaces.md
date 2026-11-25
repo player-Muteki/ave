@@ -368,6 +368,7 @@ type ExportManifest = {
 | `get_qa_report` | 查询 QA | viewer |
 | `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |
 | `get_plan` | 按 planId 读取已采纳方案全文（操作列表、hash、状态） | viewer；requestId + projectId + planId |
+| `get_export_summary` | export 任务 manifest 的有界摘要：hash 链（plan/recipe/源 manifest）、各 op 计数、输出 blob 引用与响度 | viewer；requestId + projectId + jobId |
 | `get_artifact` | 读取产物元数据 | viewer 仅 proxy/QA；最终 export 需 operator |
 | `read_asset_chunk` | 分块读取 proxy、mask、QA 或 export | 按 asset 类型鉴权；最终 export 需 operator |
 | `revoke_device/configure_worker` | 设备/后端管理 | owner only |

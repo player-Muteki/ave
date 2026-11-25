@@ -1401,6 +1401,55 @@ export class EditorStore {
     };
   }
 
+  /**
+   * Bounded, parsed view of an export job's manifest artifact: hashes,
+   * lineage and per-op counts. The full manifest (with QA report) stays in CAS.
+   */
+  async exportSummary(projectId: string, jobId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
+    const job = this.job(projectId, jobId, principal);
+    if (job.kind !== "export") editorFailure("INVALID_ARGUMENT", "The job is not an export");
+    const manifest = job.artifacts.find((a) => a.kind === "manifest");
+    if (!manifest) editorFailure("ASSET_NOT_FOUND", "The export job has no manifest artifact yet");
+    const doc = JSON.parse((await this.cas.readBytes(manifest.blob)).toString("utf8")) as {
+      exportId?: string;
+      output?: { sha256?: string; bytes?: string; mediaType?: string };
+      sourceManifestHash?: string;
+      revision?: string;
+      planHash?: string;
+      ffmpegBuildHash?: string;
+      renderRecipeHash?: string | null;
+      approvalId?: string;
+      segments?: unknown[];
+      transitions?: unknown[];
+      transforms?: unknown[];
+      subtitleCues?: unknown[];
+      audioOperations?: unknown[];
+      qaReport?: { audioLoudness?: { meanVolumeDb: string; maxVolumeDb: string } | null };
+    };
+    return {
+      jobId,
+      state: job.state,
+      revision: job.revision,
+      manifestArtifactId: manifest.artifactId,
+      manifestSha256: manifest.blob.sha256,
+      exportId: doc.exportId ?? null,
+      output: doc.output ?? null,
+      sourceManifestHash: doc.sourceManifestHash ?? null,
+      planHash: doc.planHash ?? null,
+      ffmpegBuildHash: doc.ffmpegBuildHash ?? null,
+      renderRecipeHash: doc.renderRecipeHash ?? null,
+      approvalId: doc.approvalId ?? null,
+      segmentCount: doc.segments?.length ?? 0,
+      transitionCount: doc.transitions?.length ?? 0,
+      transformCount: doc.transforms?.length ?? 0,
+      subtitleCueCount: doc.subtitleCues?.length ?? 0,
+      audioOperationCount: doc.audioOperations?.length ?? 0,
+      audioLoudness: doc.qaReport?.audioLoudness ?? null,
+    };
+  }
+
   job(projectId: string, jobId: string, principal: EditorPrincipal): JobSnapshot {
     this.authorize(projectId, principal, "viewer");
     const row = this.database

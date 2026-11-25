@@ -12,7 +12,7 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
+  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, getExportSummaryRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
@@ -70,6 +70,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readSceneCuts = useRpc(getSceneCutsRpc);
   const readWaveform = useRpc(getWaveformRpc);
   const readPlan = useRpc(getPlanRpc);
+  const readExportSummary = useRpc(getExportSummaryRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
   const controlJob = useRpc(controlJobRpc);
@@ -887,6 +888,14 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {job.state === "failed" && job.error && (
                 <Text style={styles.error}>{job.error.code} · {job.error.sanitizedDetail}</Text>
               )}
+              {job.kind === "export" && job.state === "completed" && button("导出摘要", async () => {
+                const ex = await readExportSummary({
+                  requestId: requestId(`export:${job.jobId}`),
+                  projectId: project.projectId,
+                  jobId: job.jobId,
+                });
+                setNotice(`导出 ${ex.exportId ?? job.jobId.slice(0, 12)} · 段 ${ex.segmentCount} · 转场 ${ex.transitionCount} · 音频 ${ex.audioOperationCount} · 字幕 ${ex.subtitleCueCount} · recipe ${ex.renderRecipeHash?.slice(0, 12) ?? "-"} · plan ${ex.planHash?.slice(0, 12) ?? "-"} · 输出 ${ex.output ? `${ex.output.bytes}B ${ex.output.sha256.slice(0, 12)}` : "-"}`);
+              })}
               {job.kind === "export" && job.state === "completed" && job.artifacts.map(a =>
                 a.projectId === project.projectId && a.jobId === job.jobId && (a.kind === "export" || a.kind === "manifest")
                   ? mediaControl(a.kind === "export" ? "准备下载成品视频" : "准备下载导出清单", a.artifactId, a.revision, a.blob, a.kind)
