@@ -808,6 +808,15 @@ export class MediaService {
         )!.averageRate;
         if (JSON.stringify(rate0 ?? null) !== JSON.stringify(vRate ?? null))
           editorFailure("CAPABILITY_UNAVAILABLE", "Crossfade requires equal segment frame rates");
+        // xfade rounds to whole frames; a transition that is not frame-aligned
+        // would lengthen the video track and fail the exact duration check.
+        if (
+          rate0 &&
+          (BigInt(tr.duration.num) * BigInt(rate0.num)) %
+            (BigInt(tr.duration.den) * BigInt(rate0.den)) !==
+            0n
+        )
+          editorFailure("CAPABILITY_UNAVAILABLE", "Transition duration must align to whole frames");
         const trDur = Number(rationalSeconds(tr.duration));
         const offset = Math.max(0, vAccDur - trDur);
         filters.push(
