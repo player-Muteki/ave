@@ -64,6 +64,8 @@
 - 已实现待验收（2026-11-25）：get_project_snapshot 新增 job 摘要（jobId/kind/state/revision/analysisAssetId，限 64 条），planner 可直接 get_job_status/get_analysis 跟踪；prompt 同步说明。未跑真模型/e2e。
 - 已实现待验收（2026-11-25，软字幕 sidecar 已用本机 FFmpeg 实跑验证）：subtitleOperations 支持 mode=metadata（mov_text 软字幕 sidecar 轨），burn-in 仍走录；render 写 SRT 作为额外 -i 映射，checkCandidate 增校 mov_text 流校验（字幕轨自带时钟，不参与时长校验）；prompt 同步。本机实测 2s 视频+aac+mov_text 三轨，软字幕可回转 srt，音视频全解码无错。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：客户端 proposeCut 支持 bgmAssetId（BGM 跘过素材音频，UI 点击循环选择音频素材）。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：转场时长增加整帧对齐验（xfade 按帧贴入，不对齐会导致整体时长 QA），render 在转场前拒绝；合并后全路径本机实测（变换+xfade+overlay+BGM(-6dB)+mov_text）。
+- 已实现待验收（2026-11-25）：客户端字幕模式切换（烧录/软字幕 mov_text），proposeCut 增加 subMode 参数。未跑真模型/e2e。
 
 ## 环境与错误
 

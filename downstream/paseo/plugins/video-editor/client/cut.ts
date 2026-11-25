@@ -28,6 +28,7 @@ export function proposeCut(
   audioGainMilli?: string,
   transform?: TransformSpec,
   bgmAssetId?: string,
+  subMode?: "burn-in" | "metadata",
 ): EditPlanDraftV1 {
   const asset = project.assets.find((a) => a.assetId === assetId);
   const stream = asset?.streams.find((s) => s.kind === "video");
@@ -154,7 +155,7 @@ export function proposeCut(
               duration: { num: (milliseconds(caption.end) - milliseconds(caption.start)).toString(), den: "1000" },
             },
             text: caption.text.slice(0, 16_384),
-            mode: "burn-in" as const,
+            mode: subMode ?? ("burn-in" as const),
           },
         ]
       : [],

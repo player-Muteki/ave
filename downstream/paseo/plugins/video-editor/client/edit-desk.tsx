@@ -68,6 +68,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [scaleH, setScaleH] = useState("");
   const [rot, setRot] = useState("0");
   const [bgm, setBgm] = useState("");
+  const [subMode, setSubMode] = useState<"burn-in" | "metadata">("burn-in");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -315,7 +316,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {field("出点（秒，不含）", end, setEnd)}
               </View>
               <View style={row}>
-                {field("字幕文本（烧录）", captionText, setCaptionText)}
+                {field("字幕文本", captionText, setCaptionText)}
+                {button(subMode === "burn-in" ? "字幕模式：烧录" : "字幕模式：软字幕", () =>
+                  setSubMode(subMode === "burn-in" ? "metadata" : "burn-in"))}
                 {field("字幕起点（秒）", captionStart, setCaptionStart)}
                 {field("字幕终点（秒）", captionEnd, setCaptionEnd)}
                 {field("音量增益（毫分贝，可空）", gainMilli, setGainMilli)}
@@ -351,6 +354,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                       }
                     : undefined,
                   bgm || undefined,
+                  subMode,
                 );
                 const token = requestId(JSON.stringify(draft));
                 await submit({
