@@ -1991,6 +1991,120 @@
         "owner"
       ]
     },
+    "EstimateTimelineRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:EstimateTimelineRequest",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "draft": {
+          "$ref": "urn:video-editor:v1:EditPlanDraftV1"
+        }
+      },
+      "required": [
+        "requestId",
+        "draft"
+      ],
+      "additionalProperties": false
+    },
+    "EstimateTimelineResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:EstimateTimelineResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "issue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mainTrackSegments": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "overlayTrackSegments": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "mainDurationSeconds": {
+          "type": "string"
+        },
+        "overlayDurationSeconds": {
+          "type": "string"
+        },
+        "transitionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "transitionOverlapSeconds": {
+          "type": "string"
+        },
+        "effectiveMainDurationSeconds": {
+          "type": "string"
+        },
+        "audioOperationCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "transformCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "subtitleCueCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "segments": {
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:TimelineSegmentSummary"
+          }
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "valid",
+        "issue",
+        "mainTrackSegments",
+        "overlayTrackSegments",
+        "mainDurationSeconds",
+        "overlayDurationSeconds",
+        "transitionCount",
+        "transitionOverlapSeconds",
+        "effectiveMainDurationSeconds",
+        "audioOperationCount",
+        "transformCount",
+        "subtitleCueCount",
+        "segments"
+      ],
+      "additionalProperties": false
+    },
     "EventsRequest": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:EventsRequest",
@@ -3214,6 +3328,39 @@
       "required": [
         "start",
         "duration"
+      ],
+      "additionalProperties": false
+    },
+    "TimelineSegmentSummary": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:TimelineSegmentSummary",
+      "type": "object",
+      "properties": {
+        "clipId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "trackId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "startSeconds": {
+          "type": "string"
+        },
+        "durationSeconds": {
+          "type": "string"
+        },
+        "sourceAssetId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "clipId",
+        "trackId",
+        "startSeconds",
+        "durationSeconds",
+        "sourceAssetId"
       ],
       "additionalProperties": false
     },

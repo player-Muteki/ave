@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { SqliteDatabase } from "./sqlite-types.js";
 import { DatabaseSync } from "./sqlite.js";
-import { assertRenderablePreview } from "./preview-profile.js";
+import { assertRenderablePreview, summarizeDraftTimeline } from "./preview-profile.js";
 import { sha256Json, type ContentAddressedStore } from "./cas.js";
 import {
   BlobRefSchema,
@@ -614,6 +614,29 @@ export class EditorStore {
   validateProposal(draft: EditPlanDraftV1, principal: EditorPrincipal): void {
     this.authorize(draft.projectId, principal, "operator");
     this.validatePlan(draft);
+  }
+
+  /**
+   * Read-only dry run of a plan draft: validation outcome plus a bounded
+   * timeline summary. Never persists anything and never touches media.
+   */
+  estimateTimeline(input: { requestId: string; draft: EditPlanDraftV1 }, principal: EditorPrincipal) {
+    this.authorize(input.draft.projectId, principal, "operator");
+    let valid = true;
+    let issue: string | null = null;
+    try {
+      this.validatePlan(input.draft);
+    } catch (error) {
+      valid = false;
+      issue = error instanceof Error ? error.message : String(error);
+    }
+    return {
+      requestId: input.requestId,
+      projectId: input.draft.projectId,
+      valid,
+      issue,
+      ...summarizeDraftTimeline(input.draft),
+    };
   }
 
   createPlan(input: CreatePlanInput): { plan: AcceptedEditPlan; approval: ApprovalRequest } {

@@ -6,6 +6,7 @@ import {
   getProjectRpc,
   listProjectsRpc,
   submitPlanRpc,
+  estimateTimelineRpc,
   decideApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
@@ -51,6 +52,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const read = useRpc(getProjectRpc);
   const list = useRpc(listProjectsRpc);
   const submit = useRpc(submitPlanRpc);
+  const estimate = useRpc(estimateTimelineRpc);
   const decide = useRpc(decideApprovalRpc);
   const runJob = useRpc(createJobRpc);
   const declare = useRpc(createUploadRpc);
@@ -99,6 +101,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [estimateInfo, setEstimateInfo] = useState("");
   const [sheetRef, setSheetRef] = useState<{ projectId: string; assetId: string; artifactId: string; revision: string; blob: BlobRef } | null>(null);
   const [sceneCuts, setSceneCuts] = useState<{ assetId: string; doc: SceneCutDoc } | null>(null);
   const [waveform, setWaveform] = useState<{ assetId: string; doc: WaveformDoc } | null>(null);
@@ -547,43 +550,65 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   return null;
                 }
               })()}
-              {button("提交裁剪方案", async () => {
-                const draft = proposeCut(
-                  project,
-                  selected,
-                  start,
-                  end,
-                  captionText.trim()
-                    ? { text: captionText.trim(), start: captionStart, end: captionEnd }
-                    : undefined,
-                  gainMilli,
-                  scaleW.trim() || scaleH.trim() || rot.trim() !== "0"
-                    ? {
-                        scaleW,
-                        scaleH,
-                        rotation: (["0", "90", "180", "270"].includes(rot.trim())
-                          ? rot.trim()
-                          : "0") as "0" | "90" | "180" | "270",
-                      }
-                    : undefined,
-                  bgm || undefined,
-                  subMode,
-                  fadeIn.trim() || fadeOut.trim()
-                    ? { inSec: fadeIn, outSec: fadeOut }
-                    : undefined,
-                  vFadeIn.trim() || vFadeOut.trim()
-                    ? { inSec: vFadeIn, outSec: vFadeOut }
-                    : undefined,
+              {(() => {
+                const buildCutDraft = () =>
+                  proposeCut(
+                    project,
+                    selected,
+                    start,
+                    end,
+                    captionText.trim()
+                      ? { text: captionText.trim(), start: captionStart, end: captionEnd }
+                      : undefined,
+                    gainMilli,
+                    scaleW.trim() || scaleH.trim() || rot.trim() !== "0"
+                      ? {
+                          scaleW,
+                          scaleH,
+                          rotation: (["0", "90", "180", "270"].includes(rot.trim())
+                            ? rot.trim()
+                            : "0") as "0" | "90" | "180" | "270",
+                        }
+                      : undefined,
+                    bgm || undefined,
+                    subMode,
+                    fadeIn.trim() || fadeOut.trim()
+                      ? { inSec: fadeIn, outSec: fadeOut }
+                      : undefined,
+                    vFadeIn.trim() || vFadeOut.trim()
+                      ? { inSec: vFadeIn, outSec: vFadeOut }
+                      : undefined,
+                  );
+                return (
+                  <>
+                    {button("预估输出时长", async () => {
+                      const draft = buildCutDraft();
+                      const est = await estimate({
+                        requestId: requestId(`est:${JSON.stringify(draft)}`),
+                        draft,
+                      });
+                      setEstimateInfo(
+                        est.valid
+                          ? `预估输出 ${est.effectiveMainDurationSeconds}s（主轨 ${est.mainDurationSeconds}s · ${est.mainTrackSegments} 段 · 转场重叠 ${est.transitionOverlapSeconds}s · 音频 ${est.audioOperationCount} · 字幕 ${est.subtitleCueCount}）`
+                          : `方案有问题：${est.issue ?? "未知错误"}`,
+                      );
+                    })}
+                    {button("提交裁剪方案", async () => {
+                      const draft = buildCutDraft();
+                      const token = requestId(JSON.stringify(draft));
+                      await submit({
+                        requestId: token,
+                        runId: `manual-${token}`,
+                        toolCallId: token,
+                        draft,
+                      });
+                      setEstimateInfo("");
+                      show(await read({ projectId: project.projectId }));
+                    })}
+                  </>
                 );
-                const token = requestId(JSON.stringify(draft));
-                await submit({
-                  requestId: token,
-                  runId: `manual-${token}`,
-                  toolCallId: token,
-                  draft,
-                });
-                show(await read({ projectId: project.projectId }));
-              })}
+              })()}
+              {estimateInfo ? <Text style={styles.ink}>{estimateInfo}</Text> : null}
               <View style={row}>
                 {field("删除起点（秒）", cutStart, setCutStart)}
                 {field("删除终点（秒）", cutEnd, setCutEnd)}
