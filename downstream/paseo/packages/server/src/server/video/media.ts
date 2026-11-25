@@ -211,6 +211,16 @@ export class MediaService {
     }
     const probe = await this.probe(this.cas.pathFor(outputBlob));
     await this.verifyCandidateDecode(outputBlob, signal);
+    let audioLoudness: { meanVolumeDb: string; maxVolumeDb: string } | null = null;
+    if (probe.document.streams.some((s) => s.codec_type === "audio")) {
+      const det = await this.run(
+        this.tools.ffmpeg,
+        ["-nostdin", "-v", "info", "-i", this.cas.pathFor(outputBlob), "-map", "0:a:0", "-af", "volumedetect", "-f", "null", "-"],
+      );
+      const mean = /mean_volume:\s*(-?[0-9.]+) dB/.exec(det.stderr)?.[1];
+      const max = /max_volume:\s*(-?[0-9.]+) dB/.exec(det.stderr)?.[1];
+      if (mean && max) audioLoudness = { meanVolumeDb: mean, maxVolumeDb: max };
+    }
     const audioProfile = [...assets.values()].flatMap(a => a.streams).find(s => s.kind === "audio");
     checkCandidate(probe.document, firstAsset, plan, job.kind, audioProfile);
     const reviewProxy = job.kind === "final" ? await this.createFinalReviewProxy(outputBlob, signal) : undefined;
@@ -228,6 +238,7 @@ export class MediaService {
       reviewProxyHash: reviewProxy?.sha256,
       revision: job.candidateRevision,
       thresholdsVersion: "deterministic-v1",
+      audioLoudness,
       gates: [
         {
           gate: "G4",
