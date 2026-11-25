@@ -69,6 +69,7 @@
 - 已实现待验收（2026-11-25）：agent tool_execution_start 事件的 payload 携带 tool 名，客户端事件流展示工具名。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：store.validatePlan 增加 CFR 整帧对齐校验（trim 时长与转场时长均必须整帧对齐），提前拒绝 PLAN_SEMANTIC_INVALID；prompt 同步。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：素材卡片显示该素材最新 analysis job 状态及 qa 是否已生成。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：preview profile 增加字幕 cue 非负且不超过 v1 输出时长的校验。未跑真模型/e2e。
 
 ## 环境与错误
 

@@ -67,7 +67,8 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
       "CAPABILITY_UNAVAILABLE",
       "Only tracks v1 (main) and v2 (overlay) are supported",
     );
-  for (const list of tracks.values()) {
+  let mainTotal: Rational = { num: "0", den: "1" };
+  for (const [trackId, list] of tracks) {
     let cursor: Rational = { num: "0", den: "1" };
     for (const op of list) {
       if (!rationalEquals(op.recordRange.start, cursor))
@@ -82,6 +83,15 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
         );
       cursor = rationalAdd(cursor, op.recordRange.duration);
     }
+    if (trackId === "v1") mainTotal = cursor;
+  }
+  // Subtitle cues are expressed in output time and must fit the main track.
+  for (const cue of draft.subtitleOperations) {
+    if (cue.range.start.num.startsWith("-") || cue.range.duration.num.startsWith("-"))
+      editorFailure("CAPABILITY_UNAVAILABLE", "Subtitle ranges must be non-negative");
+    const end = rationalAdd(cue.range.start, cue.range.duration);
+    if (BigInt(end.num) * BigInt(mainTotal.den) > BigInt(mainTotal.num) * BigInt(end.den))
+      editorFailure("CAPABILITY_UNAVAILABLE", "Subtitle cue extends past the output duration");
   }
   // Transitions only between consecutive segments of one track, never longer
   // than either side.
