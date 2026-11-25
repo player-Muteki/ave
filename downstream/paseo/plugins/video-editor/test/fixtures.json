@@ -108,5 +108,143 @@
     "schema": "BlobRef",
     "valid": false,
     "value": { "sha256": "0123", "bytes": "3", "mediaType": "video/mp4" }
+  },
+  {
+    "name": "capability set declares device channel",
+    "schema": "CapabilitySet",
+    "valid": true,
+    "value": {
+      "protocolVersion": "1",
+      "features": ["device-channel", "list-projects"],
+      "operations": ["video.v1.list_projects"],
+      "deterministicBackends": [{ "id": "ffmpeg", "available": true }],
+      "workerProfiles": []
+    }
+  },
+  {
+    "name": "capability backend id is enumerated",
+    "schema": "CapabilitySet",
+    "valid": false,
+    "value": {
+      "protocolVersion": "1",
+      "features": [],
+      "operations": [],
+      "deterministicBackends": [{ "id": "other", "available": true }],
+      "workerProfiles": []
+    }
+  },
+  {
+    "name": "job control accepts a known action",
+    "schema": "JobControlRequest",
+    "valid": true,
+    "value": { "projectId": "p", "jobId": "j", "requestId": "r", "action": "cancel" }
+  },
+  {
+    "name": "job control rejects an unknown action",
+    "schema": "JobControlRequest",
+    "valid": false,
+    "value": { "projectId": "p", "jobId": "j", "requestId": "r", "action": "delete" }
+  },
+  {
+    "name": "job creation binds approval grant and revision",
+    "schema": "CreateJobRequest",
+    "valid": true,
+    "value": { "requestId": "r", "projectId": "p", "approvalId": "a", "grantId": "g", "expectedRevision": "1" }
+  },
+  {
+    "name": "job revision is not a JSON number",
+    "schema": "CreateJobRequest",
+    "valid": false,
+    "value": { "requestId": "r", "projectId": "p", "approvalId": "a", "grantId": "g", "expectedRevision": 1 }
+  },
+  {
+    "name": "upload status reports resumable offset",
+    "schema": "UploadStatus",
+    "valid": true,
+    "value": { "uploadId": "u", "chunkSize": "262144", "nextOffset": "0" }
+  },
+  {
+    "name": "upload offset cannot be negative",
+    "schema": "UploadStatus",
+    "valid": false,
+    "value": { "uploadId": "u", "chunkSize": "262144", "nextOffset": "-1" }
+  },
+  {
+    "name": "terminal job event reconciles devices",
+    "schema": "EditorEvent",
+    "valid": true,
+    "value": { "protocolVersion": "1", "projectId": "p", "eventId": "e", "seq": "8", "occurredAt": "2026-11-25T10:00:00Z", "type": "job.state.changed", "payload": { "jobId": "j", "state": "cancelled" } }
+  },
+  {
+    "name": "event seq is not a JSON number",
+    "schema": "EditorEvent",
+    "valid": false,
+    "value": { "protocolVersion": "1", "projectId": "p", "eventId": "e", "seq": 8, "occurredAt": "2026-11-25T10:00:00Z", "type": "job.state.changed", "payload": {} }
+  },
+  {
+    "name": "event type cannot be empty",
+    "schema": "EditorEvent",
+    "valid": false,
+    "value": { "protocolVersion": "1", "projectId": "p", "eventId": "e", "seq": "8", "occurredAt": "2026-11-25T10:00:00Z", "type": "", "payload": {} }
+  },
+  {
+    "name": "artifact references a reviewed candidate",
+    "schema": "ArtifactRef",
+    "valid": true,
+    "value": { "artifactId": "a", "projectId": "p", "jobId": "j", "revision": "1", "kind": "candidate", "blob": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": "100", "mediaType": "video/mp4" } }
+  },
+  {
+    "name": "artifact kind is enumerated",
+    "schema": "ArtifactRef",
+    "valid": false,
+    "value": { "artifactId": "a", "projectId": "p", "jobId": "j", "revision": "1", "kind": "unknown", "blob": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": "100", "mediaType": "video/mp4" } }
+  },
+  {
+    "name": "source asset is never writable",
+    "schema": "SourceAsset",
+    "valid": true,
+    "value": { "assetId": "asset", "original": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": "100", "mediaType": "video/mp4" }, "displayName": "clip.mp4", "streams": [{ "streamUid": "stream:0", "streamIndex": 0, "kind": "video", "codec": "h264", "timeBase": { "num": "1", "den": "30" }, "disposition": {} }], "presentationIndex": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": "100", "mediaType": "application/json" }, "probe": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": "100", "mediaType": "application/json" }, "sourceNeverWritable": true }
+  },
+  {
+    "name": "source asset cannot be marked writable",
+    "schema": "SourceAsset",
+    "valid": false,
+    "value": { "assetId": "asset", "original": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": "100", "mediaType": "video/mp4" }, "displayName": "clip.mp4", "streams": [], "presentationIndex": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": "100", "mediaType": "application/json" }, "probe": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": "100", "mediaType": "application/json" }, "sourceNeverWritable": false }
+  },
+  {
+    "name": "worker profile declares color spaces",
+    "schema": "WorkerProfile",
+    "valid": true,
+    "value": { "profileId": "w", "engine": "ffmpeg", "colorSpaces": ["bt709"] }
+  },
+  {
+    "name": "worker profile width must be positive",
+    "schema": "WorkerProfile",
+    "valid": false,
+    "value": { "profileId": "w", "engine": "ffmpeg", "colorSpaces": [], "maxWidth": 0 }
+  },
+  {
+    "name": "edit plan draft single trim is accepted",
+    "schema": "EditPlanDraftV1",
+    "valid": true,
+    "value": { "schemaVersion": "video.edit-plan/v1", "projectId": "proj", "baseTimelineRevision": "1", "baseAssetManifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "intent": "trim the middle", "trimOperations": [{ "opId": "op", "order": "1", "trackId": "track", "clipId": "clip", "source": { "assetId": "asset", "assetContentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "streamUid": "stream:0", "probeRevision": "1" }, "sourceRange": { "start": { "num": "0", "den": "1" }, "duration": { "num": "10", "den": "1" } }, "recordRange": { "start": { "num": "0", "den": "1" }, "duration": { "num": "10", "den": "1" } } }], "transformOperations": [], "audioOperations": [], "transitionOperations": [], "subtitleOperations": [], "generationRequests": [], "qaRequirements": [], "externalDestinations": [], "maxCostMicros": "100" }
+  },
+  {
+    "name": "edit plan draft intent cannot be empty",
+    "schema": "EditPlanDraftV1",
+    "valid": false,
+    "value": { "schemaVersion": "video.edit-plan/v1", "projectId": "proj", "baseTimelineRevision": "1", "baseAssetManifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "intent": "", "trimOperations": [], "transformOperations": [], "audioOperations": [], "transitionOperations": [], "subtitleOperations": [], "generationRequests": [], "qaRequirements": [], "externalDestinations": [], "maxCostMicros": "100" }
+  },
+  {
+    "name": "approval request pending edit plan",
+    "schema": "ApprovalRequest",
+    "valid": true,
+    "value": { "approvalId": "approval", "projectId": "proj", "subjectType": "edit_plan", "subjectId": "plan", "subjectRevision": "1", "subjectHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "baseTimelineRevision": "1", "purpose": "preview", "requiredInputs": [{ "type": "asset", "id": "asset", "revision": "1", "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }], "diffSummary": { "intent": "trim", "operationCount": 1, "summary": "single trim" }, "generationCostCapMicros": "100", "externalDestinations": [], "status": "pending", "expiresAt": "2026-11-25T00:00:00Z" }
+  },
+  {
+    "name": "approval request subject type must be known",
+    "schema": "ApprovalRequest",
+    "valid": false,
+    "value": { "approvalId": "approval", "projectId": "proj", "subjectType": "bogus", "subjectId": "plan", "subjectRevision": "1", "subjectHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "baseTimelineRevision": "1", "purpose": "preview", "requiredInputs": [], "diffSummary": { "intent": "trim", "operationCount": 1, "summary": "single trim" }, "generationCostCapMicros": "100", "externalDestinations": [], "status": "pending", "expiresAt": "2026-11-25T00:00:00Z" }
   }
 ]

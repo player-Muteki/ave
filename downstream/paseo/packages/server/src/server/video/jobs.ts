@@ -122,16 +122,20 @@ export class EditorJobSupervisor {
         }));
     } catch (error) {
       const detail = describeEditorError(error);
-      this.store.updateJob(projectId, jobId, (current) =>
-        detail.code === "CANCELLED" && current.state === "pausing"
-          ? { ...current, state: "paused", phaseDetail: "paused at checkpoint", error: undefined }
-          : {
-              ...current,
-              state: detail.code === "CANCELLED" ? "cancelled" : "failed",
-              phaseDetail: detail.sanitizedDetail,
-              error: detail,
-            },
-      );
+      this.store.updateJob(projectId, jobId, (current) => {
+        // Honor a requested cancel even if the worker surfaced a non-CANCELLED error during abort,
+        // matching the clean-execution path that settles cancel_requested to cancelled.
+        if (current.state === "cancel_requested")
+          return { ...current, state: "cancelled", phaseDetail: "cancelled after execution", error: undefined };
+        if (detail.code === "CANCELLED" && current.state === "pausing")
+          return { ...current, state: "paused", phaseDetail: "paused at checkpoint", error: undefined };
+        return {
+          ...current,
+          state: detail.code === "CANCELLED" ? "cancelled" : "failed",
+          phaseDetail: detail.sanitizedDetail,
+          error: detail,
+        };
+      });
     } finally {
       this.running.delete(jobId);
     }

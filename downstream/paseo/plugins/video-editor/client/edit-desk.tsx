@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import {
   createProjectRpc,
   getProjectRpc,
+  listProjectsRpc,
   submitPlanRpc,
   decideApprovalRpc,
   createJobRpc,
@@ -39,6 +40,7 @@ interface SceneCutDoc {
 export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const create = useRpc(createProjectRpc);
   const read = useRpc(getProjectRpc);
+  const list = useRpc(listProjectsRpc);
   const submit = useRpc(submitPlanRpc);
   const decide = useRpc(decideApprovalRpc);
   const runJob = useRpc(createJobRpc);
@@ -57,6 +59,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [sourceImport, setSourceImport] = useState<SourceImport | null>(null);
   const [confirmed, setConfirmed] = useState(0);
   const [project, setProject] = useState<ProjectSnapshot | null>(null);
+  const [projects, setProjects] = useState<Array<{ projectId: string; title: string; revision: string }>>([]);
   const [title, setTitle] = useState("");
   const [id, setId] = useState("");
   const [selected, select] = useState("");
@@ -262,6 +265,28 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
           !title.trim(),
         )}
       </View>
+      <View style={{ gap: 8 }}>
+        <View style={row}>
+          <Text style={heading}>我的项目</Text>
+          {button("列出可访问项目", async () => setProjects((await list({})).projects))}
+        </View>
+        {projects.map((entry) => (
+          <DeskControl
+            key={entry.projectId}
+            accessibilityRole="button"
+            disabled={busy}
+            action={(value: string) => {
+              void perform(async () => show(await read({ projectId: value })));
+            }}
+            value={entry.projectId}
+            style={styles.source}
+          >
+            <Text style={ink}>{entry.title}</Text>
+            <Text selectable style={muted}>{entry.projectId} · 版本 {entry.revision}</Text>
+          </DeskControl>
+        ))}
+        {projects.length === 0 && <Text style={muted}>点「列出可访问项目」查看本机或已配对设备可打开的项目。</Text>}
+      </View>
       {project && (
         <>
           <View style={row}>
@@ -286,6 +311,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               })}
             </> : <Text style={muted}>单个视频不超过 64 MiB。</Text>}
           </View>}
+          {layout.platform !== "web" && (
+            <Text style={muted}>源素材导入请在桌面网页端进行（浏览器文件选择）；手机端可浏览素材、设置入出点、提交裁剪方案与审批交付。</Text>
+          )}
           {project.assets.length === 0 && (
             <Text style={muted}>项目中还没有素材。导入视频后可设置入点和出点。</Text>
           )}
@@ -655,10 +683,11 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {job.artifacts
                 .filter((a) => a.kind === "qa")
                 .map((a) => mediaControl("查看 QA 报告", a.artifactId, a.revision, a.blob, "qa"))}
-              {proxy && delivery && layout.platform === "web" && <View>
+              {proxy && delivery && <View>
                 <Text style={heading}>成品交付审批</Text>
                 <Text selectable style={muted}>成品版本 {delivery.subjectRevision} · SHA-256 {delivery.subjectHash}</Text>
                 {mediaControl("观看成品审片代理", proxy.artifactId, proxy.revision, proxy.blob)}
+                {layout.platform !== "web" && <Text style={muted}>审片代理的播放请在桌面网页端进行；此处可核对版本与哈希并批准交付。</Text>}
                 <Text style={muted}>审片使用从此成品生成的 640×360 副本。批准后交付原尺寸成品，不重新渲染。</Text>
                 {button(delivery.status === "approved" ? "继续已批准的交付" : "确认审片并批准导出", () => approveJob(delivery, "export"), delivery.baseTimelineRevision !== project.revision)}
               </View>}

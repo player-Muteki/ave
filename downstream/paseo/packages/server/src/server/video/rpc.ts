@@ -29,8 +29,8 @@ export class EditorRpcService {
       case "video.v1.get_capabilities":
         return {
           protocolVersion: "1",
-          features: ["deterministic-editing", "persistent-jobs", "chunked-media"],
-          operations: ["trim"],
+          features: ["deterministic-editing", "persistent-jobs", "chunked-media", "device-channel"],
+          operations: ["trim", "list-projects"],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
             {
@@ -48,6 +48,8 @@ export class EditorRpcService {
         });
       case "video.v1.get_project":
         return this.editor.store.project(ProjectRequestSchema.parse(input).projectId, principal);
+      case "video.v1.list_projects":
+        return { projects: this.editor.store.listProjects(principal) };
       case "video.v1.submit_plan": {
         const request = PlanReviewRequestSchema.parse(input);
         return this.editor.store.createPlan({ ...request, principal });

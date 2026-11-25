@@ -516,6 +516,16 @@ export const getProjectRpc = {
   input: ProjectRequestSchema,
   output: ProjectSnapshotSchema,
 };
+export const listProjectsRpc = {
+  name: "video.v1.list_projects",
+  input: z.object({}).strict(),
+  // Inline output keeps the generated schema bundle unchanged; summaries are not a fixture target.
+  output: z
+    .object({
+      projects: z.array(z.object({ projectId: id, title: z.string(), revision: z.string() }).strict()),
+    })
+    .strict(),
+};
 export const submitPlanRpc = {
   name: "video.v1.submit_plan",
   input: PlanReviewRequestSchema,

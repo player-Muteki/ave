@@ -563,6 +563,16 @@ test("a paired viewer can read only its project and loses access when revoked", 
       revision: a.revision,
     });
     await expect(viewer.getVideoProjectSummary(b.projectId)).rejects.toThrow(/access denied/i);
+    // Project discovery over the device channel returns only the scoped grant.
+    expect(await viewer.invokePluginRpc("video-editor", "video.v1.list_projects", {})).toEqual({
+      projects: [{ projectId: a.projectId, title: "A", revision: a.revision }],
+    });
+    const ownerProjects = (await invoke("list_projects", {})) as {
+      projects: Array<{ projectId: string }>;
+    };
+    expect(ownerProjects.projects.map((p) => p.projectId).sort()).toEqual(
+      [a.projectId, b.projectId].sort(),
+    );
     await expect(
       viewer.invokePluginRpc("video-editor", "video.v1.create_project", {
         requestId: "denied",
@@ -654,6 +664,14 @@ test("a paired operator reaches approval and job controls but never device manag
       projectId: project.projectId,
       title: "Ops",
     });
+    // An operator discovers its own project and reads the event log over the device channel.
+    expect(await call("list_projects", {})).toEqual({
+      projects: [{ projectId: project.projectId, title: "Ops", revision: project.revision }],
+    });
+    const log = (await call("get_events", { projectId: project.projectId, afterSeq: "0" })) as {
+      events: Array<{ type: string }>;
+    };
+    expect(log.events.length).toBeGreaterThan(0);
   } finally {
     try {
       await Promise.all(clients.map((client) => client.close()));

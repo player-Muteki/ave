@@ -196,3 +196,34 @@ it("imports a desk file once when a chunk ack and the commit reply are individua
     await rm(home,{recursive:true,force:true});
   }
 });
+
+it("enforces the per-chunk size ceiling", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "editor-upload-chunksize-"));
+  const editor = await EditorService.create({ paseoHome: home });
+  try {
+    await editor.start();
+    const principal = editor.principalForOwner();
+    const project = editor.store.createProject({ title: "chunksize", requestId: "create", principal });
+    const created = editor.store.createUpload({
+      projectId: project.projectId,
+      expectedSize: "1000000",
+      expectedSha256: "f".repeat(64),
+      displayName: "media",
+      mediaType: "video/mp4",
+      principal,
+      requestId: "upload",
+    });
+    const id = created.uploadId;
+    // One byte over the 262144-byte chunk ceiling is rejected.
+    await expect(
+      editor.media.writeUploadChunk(id, "0", Buffer.alloc(262145), principal),
+    ).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+    // Exactly the ceiling is accepted and advances the offset.
+    expect(
+      await editor.media.writeUploadChunk(id, "0", Buffer.alloc(262144), principal),
+    ).toBe("262144");
+  } finally {
+    await editor.stop();
+    await rm(home, { recursive: true, force: true });
+  }
+});

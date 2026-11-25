@@ -153,6 +153,21 @@ it("pause aborts the running media and settles a pausing job as paused", async (
   expect(h.state()).toBe("paused");
 });
 
+it("a genuine worker failure during pausing settles failed, not silently paused", async () => {
+  const h = harness("rendering_preview", async (signal) => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    // Abort surfaces a real render error rather than a clean CANCELLED.
+    if (signal.aborted) throw new EditorError("FFMPEG_FAILED", "render failed", true);
+  });
+  h.setTransition((job) => ({ ...job, state: "pausing" }));
+  h.supervisor.enqueue("project", "job");
+  h.supervisor.control("project", "job", "pause", "pause-fail", principal);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(h.signals[0]?.aborted).toBe(true);
+  expect(h.state()).toBe("failed");
+  expect(h.error()?.code).toBe("FFMPEG_FAILED");
+});
+
 it("preserves pause and cancel during full candidate decode, distinct from a bad file", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "decode-control-"));
   const editor = await EditorService.create({ paseoHome: home });
@@ -187,4 +202,19 @@ it("a replayed retry receipt never launches a second worker", async () => {
   expect(retry()).toEqual(receipt);
   await tick();
   expect(h.executions()).toBe(1);
+});
+
+it("honors a requested cancel even when the worker errors during abort", async () => {
+  const h = harness("rendering_preview", async (signal) => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    // Abort can surface as a render error rather than a clean CANCELLED; the cancel still wins.
+    if (signal.aborted) throw new EditorError("FFMPEG_FAILED", "render failed", true);
+  });
+  h.setTransition((job) => ({ ...job, state: "cancel_requested" }));
+  h.supervisor.enqueue("project", "job");
+  h.supervisor.control("project", "job", "cancel", "cancel-err", principal);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(h.signals[0]?.aborted).toBe(true);
+  expect(h.state()).toBe("cancelled");
+  expect(h.error()).toBeUndefined();
 });

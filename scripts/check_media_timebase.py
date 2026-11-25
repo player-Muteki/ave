@@ -27,8 +27,12 @@ def measure(path):
         streams.append((s["codec_type"], s["codec_name"], packets))
     # Decode every video and audio stream, not just the default track. Subtitle
     # content and cue duration are covered by packet payload hashes and timings.
-    decoded = ffmpeg("-i", path, "-map", "0:v", "-map", "0:a", "-fps_mode", "passthrough",
-                     "-f", "streamhash", "-hash", "sha256", "-")
+    raw = ffmpeg("-i", path, "-map", "0:v", "-map", "0:a", "-fps_mode", "passthrough",
+                 "-f", "streamhash", "-hash", "sha256", "-")
+    # Newer FFmpeg streamhash (v2) emits '#' header lines before the per-stream
+    # checksum rows; keep only the checksum rows so the count and the copy/shift
+    # comparisons stay stable across FFmpeg versions.
+    decoded = b"".join(line for line in raw.splitlines(keepends=True) if not line.startswith(b"#"))
     return streams, decoded
 
 

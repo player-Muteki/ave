@@ -56,3 +56,28 @@ it("survives a reload and keeps a revoked device revoked", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("rejects malformed invitations and bad credentials at the boundary", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "video-access-boundary-"));
+  try {
+    const access = new EditorAccessStore(root);
+    await access.initialize();
+    await expect(
+      access.createInvitation({ role: "viewer", projectIds: [] }),
+    ).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+    const invitation = await access.createInvitation({ role: "viewer", projectIds: ["p"] });
+    await expect(
+      access.redeemInvitation(invitation.invitationId, "wrong-token"),
+    ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    const expired = await access.createInvitation({ role: "viewer", projectIds: ["p"], ttlSeconds: -1 });
+    await expect(
+      access.redeemInvitation(expired.invitationId, expired.token),
+    ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    const issued = await access.redeemInvitation(invitation.invitationId, invitation.token);
+    expect(() => access.authenticate(issued.deviceId, "wrong-credential")).toThrow(/invalid or revoked/);
+    expect(() => access.authenticate("no-such-device", issued.credential)).toThrow(/invalid or revoked/);
+    await expect(access.revoke("no-such-device")).rejects.toMatchObject({ code: "PROJECT_NOT_FOUND" });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

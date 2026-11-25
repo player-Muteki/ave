@@ -325,3 +325,241 @@ describe("EditorStore durable workflow", () => {
     reopened.close();
   });
 });
+
+describe("listProjects", () => {
+  it("owner sees every project; a paired device sees only its scoped grants", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "editor-list-"));
+    roots.push(root);
+    const store = await EditorStore.create(root);
+    const a = store.createProject({ requestId: "a", title: "A", principal: owner });
+    const b = store.createProject({ requestId: "b", title: "B", principal: owner });
+    expect(store.listProjects(owner).map((p) => p.projectId).sort()).toEqual(
+      [a.projectId, b.projectId].sort(),
+    );
+    store.registerDevice({ projectId: a.projectId, principalId: "device-1", role: "viewer", actor: owner });
+    const device: EditorPrincipal = { principalId: "device-1", role: "viewer", projectIds: [a.projectId] };
+    expect(store.listProjects(device)).toEqual([
+      { projectId: a.projectId, title: "A", revision: a.revision },
+    ]);
+    // A grant outside the credential's scope is still filtered out.
+    store.registerDevice({ projectId: b.projectId, principalId: "device-1", role: "viewer", actor: owner });
+    expect(store.listProjects(device).map((p) => p.projectId)).toEqual([a.projectId]);
+    // An unpaired principal sees nothing.
+    const stranger: EditorPrincipal = { principalId: "nobody", role: "viewer", projectIds: null };
+    expect(store.listProjects(stranger)).toEqual([]);
+    store.close();
+  });
+});
+
+describe("controlJob terminal matrix", () => {
+  it("pause/resume/cancel reach the right states with and without a worker and emit events", async () => {
+    const { store, cas, project } = await fixture();
+    const blob = await cas.writeBytes(Buffer.from("fixture"), "video/mp4");
+    await store.addAsset(
+      project.projectId,
+      {
+        assetId: blob.sha256,
+        original: blob,
+        displayName: "fixture",
+        streams: [
+          { streamUid: "stream:0", streamIndex: 0, kind: "video", codec: "h264", timeBase: { num: "1", den: "30" }, disposition: {} },
+        ],
+        presentationIndex: blob,
+        probe: blob,
+        sourceNeverWritable: true,
+      },
+      "asset",
+      owner,
+    );
+    const current = store.project(project.projectId, owner);
+    const { approval } = store.createPlan(draft(current));
+    const { grant } = store.decideApproval(
+      { requestId: "approve", approvalId: approval.approvalId, expectedRevision: current.revision, decision: "approve" },
+      owner,
+    );
+    const { job } = store.createJob({
+      requestId: "job",
+      projectId: current.projectId,
+      approvalId: approval.approvalId,
+      grantId: grant!.grantId,
+      expectedRevision: current.revision,
+      principal: owner,
+    });
+    expect(job.state).toBe("rendering_preview");
+    const control = (action: "pause" | "resume" | "cancel", requestId: string, hasWorker: boolean) =>
+      store.controlJob({ projectId: current.projectId, jobId: job.jobId, action, requestId, principal: owner }, hasWorker);
+    // No worker: pause finalizes straight to paused, resume re-queues the start state.
+    expect(control("pause", "pause", false).job.state).toBe("paused");
+    expect(control("resume", "resume", false).job.state).toBe("rendering_preview");
+    // With a worker: pause only requests a safe checkpoint.
+    expect(control("pause", "pause-worker", true).job.state).toBe("pausing");
+    // No worker: cancel finalizes straight to cancelled even from a requested state.
+    expect(control("cancel", "cancel", false).job.state).toBe("cancelled");
+    expect(() => control("cancel", "cancel-again", false)).toThrow("already finished");
+    const states = store
+      .events(current.projectId, "0", owner)
+      .events.filter((e) => e.type === "job.state.changed")
+      .map((e) => (e.payload as { state: string }).state);
+    expect(states).toEqual(
+      expect.arrayContaining(["rendering_preview", "paused", "pausing", "cancelled"]),
+    );
+    store.close();
+  });
+});
+
+describe("events cursor and isolation", () => {
+  it("filters by afterSeq, keeps per-project seq monotonic, and isolates projects", async () => {
+    const { store, project } = await fixture();
+    const second = store.createProject({ requestId: "second", title: "Second", principal: owner });
+
+    const all = store.events(project.projectId, "0", owner).events;
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.every((e) => e.projectId === project.projectId)).toBe(true);
+    const seqs = all.map((e) => Number(e.seq));
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(new Set(seqs).size).toBe(seqs.length);
+
+    // Cursor at the latest seq yields nothing further.
+    const lastSeq = all[all.length - 1]!.seq;
+    expect(store.events(project.projectId, lastSeq, owner).events).toHaveLength(0);
+    // Cursor before the first event yields everything.
+    expect(store.events(project.projectId, "0", owner).events.length).toBe(all.length);
+
+    // The second project's events never leak into the first project's stream.
+    const secondEvents = store.events(second.projectId, "0", owner).events;
+    expect(secondEvents.every((e) => e.projectId === second.projectId)).toBe(true);
+    expect(secondEvents.some((e) => e.projectId === project.projectId)).toBe(false);
+    store.close();
+  });
+});
+
+describe("createProject scope and transactional rollback", () => {
+  it("rejects a scoped device creating an out-of-scope project and rolls back fully", async () => {
+    const { store, project } = await fixture();
+    const before = store.listProjects(owner).length;
+    const scopedDevice: EditorPrincipal = {
+      principalId: "device-x",
+      role: "operator",
+      projectIds: [project.projectId],
+    };
+    // The new project id is outside the credential's scope, so the snapshot read
+    // inside the mutation fails authorization and the whole transaction rolls back.
+    expect(() =>
+      store.createProject({ requestId: "dev-create", title: "Out of scope", principal: scopedDevice }),
+    ).toThrow("no access to this project");
+    expect(store.listProjects(owner).length).toBe(before);
+    // The rolled-back grant left the device with no project grants at all.
+    expect(store.listProjects(scopedDevice)).toEqual([]);
+    store.close();
+  });
+});
+
+describe("plan validation edges", () => {
+  async function withAsset() {
+    const { store, cas, project } = await fixture();
+    const blob = await cas.writeBytes(Buffer.from("not-a-video"), "video/mp4");
+    await store.addAsset(
+      project.projectId,
+      {
+        assetId: blob.sha256,
+        original: blob,
+        displayName: "source.mp4",
+        streams: [
+          { streamUid: "stream:0", streamIndex: 0, kind: "video" as const, codec: "h264", timeBase: { num: "1", den: "30" }, disposition: {} },
+        ],
+        presentationIndex: blob,
+        probe: blob,
+        sourceNeverWritable: true as const,
+      },
+      "asset",
+      owner,
+    );
+    return { store, current: store.project(project.projectId, owner) };
+  }
+
+  it("rejects stale revision/manifest, bad asset identity, missing stream and invalid ranges", async () => {
+    const { store, current } = await withAsset();
+    const base = draft(current).draft;
+    expect(() => store.validateProposal(base, owner)).not.toThrow();
+
+    expect(() => store.validateProposal({ ...base, baseTimelineRevision: "999" }, owner)).toThrow("older project snapshot");
+    expect(() => store.validateProposal({ ...base, baseAssetManifestHash: "c".repeat(64) }, owner)).toThrow("older project snapshot");
+
+    const op = base.trimOperations[0]!;
+    const badAsset = { ...base, trimOperations: [{ ...op, source: { ...op.source, assetId: "missing" } }] };
+    expect(() => store.validateProposal(badAsset as typeof base, owner)).toThrow("missing or changed asset");
+    const badHash = { ...base, trimOperations: [{ ...op, source: { ...op.source, assetContentHash: "d".repeat(64) } }] };
+    expect(() => store.validateProposal(badHash as typeof base, owner)).toThrow("missing or changed asset");
+    const badStream = { ...base, trimOperations: [{ ...op, source: { ...op.source, streamUid: "stream:99" } }] };
+    expect(() => store.validateProposal(badStream as typeof base, owner)).toThrow("existing video stream");
+
+    const negStart = { ...base, trimOperations: [{ ...op, sourceRange: { start: { num: "-1", den: "1" }, duration: { num: "1", den: "1" } } }] };
+    expect(() => store.validateProposal(negStart as typeof base, owner)).toThrow("non-empty, non-negative");
+    const zeroDur = { ...base, trimOperations: [{ ...op, sourceRange: { start: { num: "0", den: "1" }, duration: { num: "0", den: "1" } }, recordRange: { start: { num: "0", den: "1" }, duration: { num: "0", den: "1" } } }] };
+    expect(() => store.validateProposal(zeroDur as typeof base, owner)).toThrow("non-empty, non-negative");
+    const zeroDen = { ...base, trimOperations: [{ ...op, recordRange: { start: { num: "0", den: "0" }, duration: { num: "1", den: "1" } } }] };
+    expect(() => store.validateProposal(zeroDen as typeof base, owner)).toThrow("non-empty, non-negative");
+    store.close();
+  });
+});
+
+describe("grant lifecycle edges", () => {
+  async function setup() {
+    const { store, cas, project } = await fixture();
+    const blob = await cas.writeBytes(Buffer.from("not-a-video"), "video/mp4");
+    const asset = {
+      assetId: blob.sha256,
+      original: blob,
+      displayName: "source.mp4",
+      streams: [{ streamUid: "stream:0", streamIndex: 0, kind: "video" as const, codec: "h264", timeBase: { num: "1", den: "30" }, disposition: {} }],
+      presentationIndex: blob,
+      probe: blob,
+      sourceNeverWritable: true as const,
+    };
+    await store.addAsset(project.projectId, asset, "asset", owner);
+    const current = store.project(project.projectId, owner);
+    const { approval } = store.createPlan(draft(current));
+    const { grant } = store.decideApproval(
+      { requestId: "approve", approvalId: approval.approvalId, expectedRevision: current.revision, decision: "approve" },
+      owner,
+    );
+    return { store, cas, current, approval, grant: grant!, asset };
+  }
+
+  it("rejects reusing a consumed grant for a new job request", async () => {
+    const { store, current, approval, grant } = await setup();
+    const jobInput = {
+      projectId: current.projectId,
+      approvalId: approval.approvalId,
+      grantId: grant.grantId,
+      expectedRevision: current.revision,
+      principal: owner,
+    };
+    expect(store.createJob({ ...jobInput, requestId: "job-1" }).deduplicated).toBe(false);
+    // A different requestId bypasses the idempotency cache and hits the consumed check.
+    expect(() => store.createJob({ ...jobInput, requestId: "job-2" })).toThrow("already been consumed");
+    store.close();
+  });
+
+  it("rejects a job when the project changed after approval", async () => {
+    const { store, cas, current, approval, grant } = await setup();
+    const blob2 = await cas.writeBytes(Buffer.from("another-video"), "video/mp4");
+    await store.addAsset(
+      current.projectId,
+      { assetId: blob2.sha256, original: blob2, displayName: "second.mp4", streams: [{ streamUid: "stream:0", streamIndex: 0, kind: "video" as const, codec: "h264", timeBase: { num: "1", den: "30" }, disposition: {} }], presentationIndex: blob2, probe: blob2, sourceNeverWritable: true as const },
+      "asset-2",
+      owner,
+    );
+    expect(() =>
+      store.createJob({
+        requestId: "job-stale",
+        projectId: current.projectId,
+        approvalId: approval.approvalId,
+        grantId: grant.grantId,
+        expectedRevision: current.revision,
+        principal: owner,
+      }),
+    ).toThrow("project changed after approval");
+    store.close();
+  });
+});

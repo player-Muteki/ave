@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS upload_chunks (
   upload_id TEXT NOT NULL, offset TEXT NOT NULL, chunk_sha256 TEXT NOT NULL,
   PRIMARY KEY(upload_id, offset)
 );
+-- Device project discovery joins grants by principal; the composite PK leads with project_id.
+CREATE INDEX IF NOT EXISTS idx_project_grants_principal ON project_grants(principal_id);
 `;
 
 export class EditorStore {
@@ -221,6 +223,30 @@ export class EditorStore {
     this.authorize(projectId, principal, "viewer");
     const { title, revision } = this.projectRow(projectId);
     return { projectId, title, revision };
+  }
+
+  /** Projects the principal may open: all for the owner, only scoped grants for a paired device. */
+  listProjects(principal: EditorPrincipal): Array<{ projectId: string; title: string; revision: string }> {
+    type Row = { project_id: string; title: string; revision: string };
+    const summarize = (row: Row) => ({
+      projectId: row.project_id,
+      title: row.title,
+      revision: row.revision,
+    });
+    if (principal.role === "owner" && principal.projectIds === null) {
+      const rows = this.database
+        .prepare("SELECT project_id, title, revision FROM projects ORDER BY created_at, project_id")
+        .all() as Row[];
+      return rows.map(summarize);
+    }
+    const rows = this.database
+      .prepare(
+        "SELECT p.project_id, p.title, p.revision FROM projects p JOIN project_grants g ON g.project_id = p.project_id WHERE g.principal_id = ? ORDER BY p.created_at, p.project_id",
+      )
+      .all(principal.principalId) as Row[];
+    return rows
+      .filter((row) => principal.projectIds === null || principal.projectIds.includes(row.project_id))
+      .map(summarize);
   }
 
   project(projectId: string, principal: EditorPrincipal): ProjectSnapshot {
@@ -1422,6 +1448,14 @@ export class EditorStore {
       this.database
         .prepare("UPDATE jobs SET document = ?, active = 0 WHERE job_id = ?")
         .run(JSON.stringify(recovered), job.jobId);
+      // Recovery bypasses updateJob's worker path, so emit the terminal event explicitly:
+      // remote viewers/operators reconciling via get_events must see the restart failure,
+      // not a job stuck forever in its last rendering state.
+      this.emit(job.projectId, "job.state.changed", {
+        jobId: job.jobId,
+        state: recovered.state,
+        phaseDetail: recovered.phaseDetail,
+      });
     }
   }
 

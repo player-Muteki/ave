@@ -127,3 +127,15 @@ it("rejects an analysis job with no target asset", async () => {
     await rm(f.root, { recursive: true, force: true });
   }
 });
+
+it("cancels a render job whose signal is already aborted before spawning ffmpeg", async () => {
+  const f = await jobFixture();
+  try {
+    await expect(
+      f.media.executeJob(f.projectId, f.jobId, AbortSignal.abort()),
+    ).rejects.toMatchObject({ code: "CANCELLED" });
+  } finally {
+    f.store.close();
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
