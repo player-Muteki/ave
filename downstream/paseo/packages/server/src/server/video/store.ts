@@ -729,10 +729,11 @@ export class EditorStore {
    */
   plan(projectId: string, planId: string, principal: EditorPrincipal): AcceptedEditPlan {
     this.authorize(projectId, principal, "viewer");
-    const plan = this.project(projectId, principal)
-      .plans.find((p) => p.planId === planId);
-    if (!plan) editorFailure("ASSET_NOT_FOUND", "No such plan in the bound project");
-    return plan;
+    const [document] = this.rows(
+      "SELECT document FROM plans WHERE project_id = ? AND plan_id = ?", projectId, planId,
+    );
+    if (!document) editorFailure("ASSET_NOT_FOUND", "No such plan in the bound project");
+    return AcceptedEditPlanSchema.parse(JSON.parse(document));
   }
 
   /**
@@ -757,14 +758,16 @@ export class EditorStore {
    */
   listPlans(projectId: string, principal: EditorPrincipal, afterPlanId?: string) {
     this.authorize(projectId, principal, "viewer");
-    const plans = this.rows(
-      "SELECT document FROM plans WHERE project_id = ? ORDER BY revision",
-      projectId,
-    )
-      .map((document) => AcceptedEditPlanSchema.parse(JSON.parse(document)))
-      .filter((p) => !afterPlanId || p.planId > afterPlanId)
-      .slice(0, 129);
-    const page = plans.slice(0, 128);
+    // Resolve the external plan ID in the same project. IDs are hashes and do not
+    // preserve insertion order, especially for plans based on the same revision.
+    const plans = afterPlanId === undefined
+      ? this.rows("SELECT document FROM plans WHERE project_id = ? ORDER BY rowid LIMIT 129", projectId)
+      : this.rows(
+          `SELECT document FROM plans WHERE project_id = ?
+           AND rowid > (SELECT rowid FROM plans WHERE project_id = ? AND plan_id = ?)
+           ORDER BY rowid LIMIT 129`, projectId, projectId, afterPlanId,
+        );
+    const page = plans.slice(0, 128).map(document => AcceptedEditPlanSchema.parse(JSON.parse(document)));
     return {
       projectId,
       planCount: page.length,

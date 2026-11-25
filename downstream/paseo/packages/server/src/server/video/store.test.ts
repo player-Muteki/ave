@@ -601,3 +601,41 @@ describe("grant lifecycle edges", () => {
     store.close();
   });
 });
+
+it("retrieves all project plans and resumes stable pages after reopening", async () => {
+  const { root, store, project, cas } = await fixture();
+  const { projectId } = project;
+  const blob = await cas.writeBytes(Buffer.from("history"), "video/mp4");
+  const ids: string[] = [];
+  let otherProjectId: string;
+  try {
+    store.addAsset(projectId, {
+      assetId: "clip", displayName: "history", original: blob, presentationIndex: blob, probe: blob,
+      streams: [{ streamUid: "stream:0", streamIndex: 0, kind: "video", codec: "h264",
+        timeBase: { num: "1", den: "25" }, disposition: {} }], sourceNeverWritable: true,
+    }, "history-asset", owner);
+    const current = store.project(projectId, owner);
+    for (let i = 0; i < 130; i++) {
+      const request = draft(current, `history-${i}`);
+      ids.push(store.createPlan({ ...request, toolCallId: request.requestId }).plan.planId);
+    }
+    otherProjectId = store.createProject({ requestId: "other", title: "Other", principal: owner }).projectId;
+    expect(store.plan(projectId, ids[0]!, owner).planId).toBe(ids[0]);
+    const first = store.listPlans(projectId, owner);
+    expect(first.plans.map(plan => plan.planId)).toEqual(ids.slice(0, 128));
+    expect(first.hasMore).toBe(true);
+  } finally {
+    store.close();
+  }
+  const reopened = await EditorStore.create(root);
+  try {
+    const second = reopened.listPlans(projectId, owner, ids[127]);
+    expect(second.plans.map(plan => plan.planId)).toEqual(ids.slice(128));
+    expect(second.hasMore).toBe(false);
+    expect(reopened.listPlans(projectId, owner, ids[129]).plans).toEqual([]);
+    expect(reopened.plan(projectId, ids[0]!, owner).planId).toBe(ids[0]);
+    expect(() => reopened.plan(otherProjectId, ids[0]!, owner)).toThrow(/No such plan/);
+  } finally {
+    reopened.close();
+  }
+});
