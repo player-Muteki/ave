@@ -1214,6 +1214,53 @@ export class EditorStore {
   }
 
   /**
+   * Bounded asset metadata for the planner: stream refs plus output duration
+   * and frame count read from the stored probe/presentation index in CAS.
+   * Viewer-level.
+   */
+  async assetMetadata(projectId: string, assetId: string, principal: EditorPrincipal, expectedHash?: string) {
+    this.authorize(projectId, principal, "viewer");
+    if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
+    const project = this.project(projectId, principal);
+    const asset = project.assets.find((a) => a.assetId === assetId);
+    if (!asset || (expectedHash !== undefined && asset.original.sha256 !== expectedHash))
+      editorFailure("ASSET_NOT_FOUND", "Asset identity is not in the bound project");
+    let durationSeconds: string | null = null;
+    let frameCount: number | null = null;
+    try {
+      const probe = JSON.parse((await this.cas.readBytes(asset.probe)).toString("utf8")) as {
+        format?: { duration?: string };
+      };
+      durationSeconds = probe.format?.duration ?? null;
+      const index = JSON.parse((await this.cas.readBytes(asset.presentationIndex)).toString("utf8")) as {
+        frames?: unknown[];
+      };
+      frameCount = Array.isArray(index.frames) ? index.frames.length : null;
+    } catch {
+      durationSeconds = null;
+      frameCount = null;
+    }
+    return {
+      assetId,
+      contentHash: asset.original.sha256,
+      durationSeconds,
+      frameCount,
+      streams: asset.streams.map(
+        ({ streamUid, kind, codec, timeBase, width, height, sampleRate, averageRate }) => ({
+          streamUid,
+          kind,
+          codec,
+          timeBase,
+          width,
+          height,
+          sampleRate,
+          averageRate,
+        }),
+      ),
+    };
+  }
+
+  /**
    * Read the deterministic scene-cut artifact of the latest analysis job for an
    * asset. Bounded: at most 64 cuts, frame-aligned, hashes included. Viewer-level.
    */

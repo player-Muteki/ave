@@ -59,28 +59,8 @@ export class VideoToolBroker {
           hasMoreJobs: p.jobs.length > 64,
         };
       }
-      case "get_asset_metadata": {
-        const asset = this.store
-          .project(projectId, principal)
-          .assets.find((a) => a.assetId === call.args.assetId);
-        if (!asset || asset.original.sha256 !== call.args.contentHash)
-          editorFailure("ASSET_NOT_FOUND", "Asset identity is not in the bound project");
-        return {
-          assetId: asset.assetId,
-          contentHash: asset.original.sha256,
-          streams: asset.streams.map(
-            ({ streamUid, kind, codec, timeBase, width, height, sampleRate }) => ({
-              streamUid,
-              kind,
-              codec,
-              timeBase,
-              width,
-              height,
-              sampleRate,
-            }),
-          ),
-        };
-      }
+      case "get_asset_metadata":
+        return this.store.assetMetadata(projectId, call.args.assetId, principal, call.args.contentHash);
       case "get_job_status": {
         const job = this.store.job(projectId, call.args.jobId, principal);
         return {
