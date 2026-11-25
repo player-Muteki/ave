@@ -21,8 +21,9 @@ async function until(read, check, name, timeout = 45000) {
 }
 
 async function runVideoReleaseDemo({ page, listen, source, evidence, media }) {
-  const model = process.env.VIDEO_EDITOR_PLANNER_MODEL;
-  assert.ok(model && !model.startsWith("fixture/") && !model.startsWith("probe/"), "Select the live acceptance model");
+  const manual = process.env.AVE_DEMO_MODE === "manual";
+  const model = manual ? null : process.env.VIDEO_EDITOR_PLANNER_MODEL;
+  if (!manual) assert.ok(model && !model.startsWith("fixture/") && !model.startsWith("probe/"), "Select the live acceptance model");
   assert.ok(evidence, "Set PASEO_DESKTOP_SMOKE_ARTIFACT_DIR to save the demo evidence");
   fs.mkdirSync(evidence, { recursive: true });
   const { DaemonClient } = await import("@getpaseo/client/internal/daemon-client");
@@ -52,14 +53,20 @@ async function runVideoReleaseDemo({ page, listen, source, evidence, media }) {
     const imported = await until(snap, p => p.assets.length === 1, "imported source");
     assert.equal(imported.assets[0].original.sha256, sourceHash);
     const prompt = "保留最后一秒和原声";
-    await page.getByRole("textbox", { name: "规划意图（自然语言）" }).fill(prompt);
+    if (manual) {
+      await page.getByRole("button").filter({ has: page.getByText(path.basename(source), { exact: true }) }).click();
+      await page.getByRole("textbox", { name: "入点（秒，含）" }).fill("1.400");
+      await page.getByRole("textbox", { name: "出点（秒，不含）" }).fill("2.400");
+    } else {
+      await page.getByRole("textbox", { name: "规划意图（自然语言）" }).fill(prompt);
+    }
     const proposals = [];
     for (const number of [1, 2]) {
       const before = await snap();
-      await click("开始规划");
+      await click(manual ? "提交裁剪方案" : "开始规划");
       const readProposal = async () => {
         const current = await snap();
-        if (current.plans.length === number) return current;
+        if (current.plans.length === number || manual) return current;
         const batch = await invoke("get_events", { projectId, afterSeq: before.latestSeq });
         const ended = batch.events.find(e => ["run.failed", "run.interrupted", "run.settled"].includes(e.type));
         if (ended) {
@@ -83,7 +90,7 @@ async function runVideoReleaseDemo({ page, listen, source, evidence, media }) {
       assert.ok(rationalIs(op.sourceRange.start, 7, 5) && rationalIs(op.sourceRange.duration, 1));
       assert.ok(rationalIs(op.recordRange.start, 0) && rationalIs(op.recordRange.duration, 1));
       assert.equal(renderJobs(project).length, 0);
-      await until(() => invoke("get_planning_run", { projectId, runId: plan.runId }), r => r.state === "settled", "settled planner");
+      if (!manual) await until(() => invoke("get_planning_run", { projectId, runId: plan.runId }), r => r.state === "settled", "settled planner");
       await click("刷新事件");
       await page.getByText("预览审批", { exact: true }).waitFor();
       proposals.push({ runId: plan.runId, planId: plan.planId, planHash: plan.planHash, range: op.sourceRange });
@@ -152,7 +159,8 @@ async function runVideoReleaseDemo({ page, listen, source, evidence, media }) {
     assert.ok(Math.abs(crossings - 440) <= 1, "Expected 880 Hz from the last second of the supplied fixture");
     const { approvals, jobs } = await snap();
     fs.writeFileSync(path.join(evidence, "demo.json"), JSON.stringify({
-      platform: process.platform, arch: process.arch, model, projectId, prompt, proposals, approvals,
+      platform: process.platform, arch: process.arch, method: manual ? "manual" : "model", model, projectId,
+      prompt: manual ? null : prompt, proposals, approvals,
       jobs: jobs.map(({ jobId, kind, state }) => ({ jobId, kind, state })), sourceHash, outputHash,
       input, outputProbe, decoded: true, audioZeroCrossingsInHalfSecond: crossings,
     }, null, 2));

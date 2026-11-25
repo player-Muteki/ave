@@ -23,3 +23,7 @@ sudo apparmor_parser -r /etc/apparmor.d/ave-appimage
 ```
 
 使用普通桌面账户运行 `/opt/ave/AVE.AppImage --appimage-extract-and-run`。该入口适用于缺少 FUSE 的环境。对应 CI 会读取 Chromium 渲染器的实际沙箱状态。
+
+### 对已产出的安装包复验
+
+「AVE installed desktop demo」接收团队 candidate 工作流的 run ID。它核对每个附件内的 SOURCE_SHA 与 SHA256SUMS，从 Linux 安装包的 FFmpeg 生成同一份带原声和时间偏移的 MKV，向全部平台分发相同字节，再以普通用户在已安装的应用中手动设置区间、拒绝、重新提交、审批、播放和导出。每个系统保存截图、MP4、清单和检查报告。demo.json 的 method 字段区分 manual 与 model。真实模型验收可用同一脚本及样片，设置 AVE_DEMO_SOURCE、PASEO_DESKTOP_SMOKE_ARTIFACT_DIR 和模型配置，使用默认的模型模式。
