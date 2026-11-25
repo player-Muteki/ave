@@ -35,6 +35,17 @@ export class VideoToolBroker {
             .slice(0, 64)
             .map((a) => ({ assetId: a.assetId, contentHash: a.original.sha256 })),
           hasMoreAssets: p.assets.length > 64,
+          jobCount: p.jobs.length,
+          jobs: p.jobs
+            .slice(0, 64)
+            .map((j) => ({
+              jobId: j.jobId,
+              kind: j.kind,
+              state: j.state,
+              revision: j.revision,
+              analysisAssetId: j.analysisAssetId ?? null,
+            })),
+          hasMoreJobs: p.jobs.length > 64,
         };
       }
       case "get_asset_metadata": {

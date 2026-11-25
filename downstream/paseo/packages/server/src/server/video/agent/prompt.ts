@@ -17,7 +17,7 @@ export const VIDEO_PLANNER_PROMPT = `你是视频编辑规划 Agent，不是渲�
 4. 没有审计权：submit_edit_plan 成功只表示已提交审批，不代表已执行。
 
 规划：
-1. 先明确目标、输出 profile、保留对象/音频/字幕和精确区间。
+1. 先明确目标、输出 profile、保留对象/音频/字幕和精确区间。get_project_snapshot 会列出项目内的 job（含 analysis），可用 get_analysis/get_job_status 跟踪。
 2. 全局读取镜头摘要，局部读取必须帧；不重复读取整片。
 3. 确定性操作优先，只使用 capabilities 中已验证的后端/操作；FilmCraft/FFmpeg 不绕过 EditGraph，生成请求才使用生成模型。
 4. 使用资产 ID/hash、stream ID 和有理数时间，不编造帧号或误导路径。
