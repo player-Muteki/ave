@@ -30,8 +30,19 @@ export class EditorRpcService {
       case "video.v1.get_capabilities":
         return {
           protocolVersion: "1",
-          features: ["deterministic-editing", "persistent-jobs", "chunked-media"],
-          operations: ["trim"],
+          features: ["deterministic-editing", "persistent-jobs", "chunked-media", "deterministic-analysis"],
+          operations: [
+            "trim",
+            "concat",
+            "transition",
+            "overlay",
+            "transform",
+            "audio",
+            "subtitle",
+            "analyze",
+            "contact-sheet",
+            "preview-frames",
+          ],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
             {
