@@ -766,6 +766,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   变换 {tr.clipId} scale={tr.scale.width}x{tr.scale.height} rot={tr.rotationDegrees}
                 </Text>
               ))}
+              {plan.generationRequests.map(g=><Text key={g.requestId} selectable style={muted}>
+                VACE 1.3B · 9 帧 · 832×480 · 20 步 · 种子 {g.seed} · {g.prompt}{g.negativePrompt ? " · 负面提示："+g.negativePrompt : ""}
+              </Text>)}
               {plan.audioOperations.map((a) => (
                 <Text key={a.opId} style={muted}>
                   音频 {a.clipId} gain={a.gainMilli}mB{a.mute ? " 静音" : ""}

@@ -614,6 +614,50 @@ export class EditorStore {
   validateProposal(draft: EditPlanDraftV1, principal: EditorPrincipal): void {
     this.authorize(draft.projectId, principal, "operator");
     this.validatePlan(draft);
+    for (const g of draft.generationRequests) {
+      const input = this.approvedSequence(
+        draft.projectId,
+        g.maskApprovalId!,
+        g.referenceManifestHash,
+        draft.baseTimelineRevision,
+        principal,
+      );
+      const op = draft.trimOperations[0]!;
+      if (
+        g.shotId !== input.manifest.jobId ||
+        g.maskRevisionId !== input.manifest.artifactId ||
+        g.samplingMapHash !==
+          sha256Json([
+            "source-ordinal",
+            input.manifest.blob.sha256,
+            input.tracking.firstFrame,
+            9,
+          ]) ||
+        op.source.assetId !== input.anchor.anchor.assetId ||
+        op.source.streamUid !== input.anchor.anchor.streamUid
+      )
+        editorFailure(
+          "PLAN_SEMANTIC_INVALID",
+          "Generation references differ from the approved mask sequence",
+        );
+      // The approved anchor is an exact point on both the source and model clocks.
+      const anchor = input.anchor.anchor;
+      const rate = BigInt(g.sampleFps.num),
+        period = BigInt(g.sampleFps.den);
+      const { start, duration } = op.sourceRange;
+      const offset = BigInt(anchor.frame - input.tracking.firstFrame);
+      const atAnchor = BigInt(start.num) * rate + offset * period * BigInt(start.den);
+      if (
+        rate <= 0n ||
+        BigInt(duration.num) * rate !== 9n * period * BigInt(duration.den) ||
+        atAnchor * BigInt(anchor.timeBase.den) !==
+          BigInt(anchor.pts) * BigInt(anchor.timeBase.num) * BigInt(start.den) * rate
+      )
+        editorFailure(
+          "PLAN_SEMANTIC_INVALID",
+          "Generation trim does not align with the approved source anchor",
+        );
+    }
   }
 
   /**
@@ -851,6 +895,36 @@ export class EditorStore {
     if (sha256Json(revision) !== approval.subjectHash)
       editorFailure("ARTIFACT_HASH_MISMATCH", "Mask revision changed");
     return { kind: "anchor" as const, revision };
+  }
+
+  approvedSequence(
+    projectId: string,
+    approvalId: string,
+    hash: string,
+    revision: string,
+    principal: EditorPrincipal,
+  ) {
+    this.authorize(projectId, principal, "operator");
+    const approval = this.approval(approvalId);
+    if (
+      approval.projectId !== projectId ||
+      approval.status !== "approved" ||
+      approval.purpose !== "input" ||
+      approval.subjectType !== "mask_revision" ||
+      approval.subjectHash !== hash ||
+      approval.baseTimelineRevision !== revision
+    )
+      editorFailure(
+        "PERMISSION_DENIED",
+        "An approved mask sequence in the current project is required",
+      );
+    const input = this.maskInput(approval, principal);
+    if (input.kind !== "sequence" || input.tracking.frameCount !== 9)
+      editorFailure(
+        "CAPABILITY_UNAVAILABLE",
+        "The local VACE profile requires nine approved source frames",
+      );
+    return input;
   }
 
   pendingMaskForDecision(id: string, principal: EditorPrincipal) {
@@ -1317,6 +1391,14 @@ export class EditorStore {
     return { candidate, qa };
   }
 
+  reviewedGeneration(job: JobSnapshot) {
+    if (job.kind !== "final" || !job.approvalId) editorFailure("PERMISSION_DENIED","A final render grant is required");
+    const approval = this.approval(job.approvalId);
+    if (approval.projectId !== job.projectId || approval.purpose !== "final" || approval.planHash !== job.planHash)
+      editorFailure("PERMISSION_DENIED","The generation preview is outside this grant");
+    return this.reviewedCandidate(approval);
+  }
+
   deliveryInputs(job: JobSnapshot) {
     if (job.kind !== "export" || !job.approvalId)
       editorFailure("PERMISSION_DENIED", "Delivery requires an export grant");
@@ -1761,7 +1843,7 @@ export class EditorStore {
       planHash: plan.planHash,
       baseTimelineRevision: plan.baseTimelineRevision,
       purpose,
-      requiredInputs: [],
+      requiredInputs: plan.generationRequests.map(g => ({type:"mask_approval", id:g.maskApprovalId!, hash:g.referenceManifestHash, revision:plan.baseTimelineRevision})),
       diffSummary: {
         intent: plan.intent,
         operationCount:

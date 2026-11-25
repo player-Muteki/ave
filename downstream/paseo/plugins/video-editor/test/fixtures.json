@@ -1,4 +1,6 @@
 [
+  {"name": "propose local VACE preview", "schema": "ProposeVacePreview", "valid": true, "value": {"projectId": "p", "requestId": "r", "expectedRevision": "1", "maskApprovalId": "m", "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "prompt": "blue ceramic", "negativePrompt": "", "seed": 17}},
+  {"name": "invalid generation seed", "schema": "ProposeVacePreview", "valid": false, "value": {"projectId": "p", "requestId": "r", "expectedRevision": "1", "maskApprovalId": "m", "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "prompt": "blue ceramic", "negativePrompt": "", "seed": -1}},
   {"name": "request review of the exact tracked labels and proxy", "schema": "RequestTrackedMaskReview", "valid": true, "value": {"projectId": "p", "requestId": "request-1", "jobId": "job-1", "expectedRevision": "2", "manifestHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "reviewHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
   {"name": "tracked review requires a proxy digest", "schema": "RequestTrackedMaskReview", "valid": false, "value": {"projectId": "p", "requestId": "request-1", "jobId": "job-1", "expectedRevision": "2", "manifestHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}},
   {

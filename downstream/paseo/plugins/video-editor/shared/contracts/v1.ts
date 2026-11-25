@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const VIDEO_PROTOCOL_VERSION = "1" as const;
 export const VIDEO_PLUGIN_ID = "video-editor" as const;
+export const VACE_PROFILE = "vace-local-9f-480p-v1";
+export const VACE_MODEL = "ec4d2cb062b548996b179d493fdd05340de702a1";
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const requestId = id;
@@ -134,6 +136,7 @@ const GenerationRequestSchema = z
     prompt: z.string().min(1).max(16_384),
     negativePrompt: z.string().max(16_384),
     maskRevisionId: id,
+    maskApprovalId: id.optional(),
     referenceAssetIds: z.array(id).max(16),
     referenceManifestHash: sha256,
     samplingMapHash: sha256,
@@ -748,6 +751,13 @@ export const TrackedMaskManifestSchema = z.object({
     foregroundPixels: z.number().int().nonnegative(), label: BlobRefSchema }).strict()).min(2).max(81),
   reviewImageRate: z.literal(9), reviewVideo: BlobRefSchema,
 }).strict();
+export const ProposeVacePreviewSchema = z.object({
+  projectId: id, requestId, expectedRevision: uint, maskApprovalId: id, manifestHash: sha256,
+  prompt:z.string().trim().min(1).max(2048), negativePrompt:z.string().max(2048), seed:z.number().int().min(0).max(4294967295),
+}).strict();
+export type ProposeVacePreview = z.infer<typeof ProposeVacePreviewSchema>;
+export const proposeVacePreviewRpc = {name:"video.v1.propose_vace_preview",input:ProposeVacePreviewSchema,output:PlanReviewResultSchema};
+
 export const RequestTrackedMaskReviewSchema = z.object({
   projectId: id, requestId, jobId: id, expectedRevision: uint, manifestHash: sha256, reviewHash: sha256,
 }).strict();

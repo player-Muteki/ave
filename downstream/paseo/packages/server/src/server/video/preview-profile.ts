@@ -1,4 +1,4 @@
-import type { EditPlanDraftV1, Rational } from "#video-editor/contracts/v1";
+import { VACE_MODEL, VACE_PROFILE, type EditPlanDraftV1, type Rational } from "#video-editor/contracts/v1";
 import { editorFailure } from "./errors.js";
 
 function rationalEquals(a: Rational, b: Rational): boolean {
@@ -20,7 +20,7 @@ function rationalAdd(a: Rational, b: Rational): Rational {
  */
 export function assertRenderablePreview(draft: EditPlanDraftV1): void {
   const unsupported = [
-    draft.generationRequests,
+    draft.generationRequests.filter(g => g.providerProfileId !== VACE_PROFILE),
     draft.qaRequirements,
     draft.externalDestinations,
   ];
@@ -29,6 +29,16 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
     unsupported.some((ops) => ops.length > 0)
   )
     editorFailure("CAPABILITY_UNAVAILABLE", "This preview profile supports FFmpeg trims only");
+  if (draft.generationRequests.length) {
+    const [g] = draft.generationRequests;
+    if (draft.generationRequests.length !== 1 || draft.trimOperations.length !== 1 || draft.audioOperations.length ||
+        draft.transformOperations.length || draft.transitionOperations.length || draft.subtitleOperations.length ||
+        draft.trimOperations[0]?.fadeIn || draft.trimOperations[0]?.fadeOut || draft.trimOperations[0]?.trackId !== "v1" ||
+        !g?.maskApprovalId || g.frameCount !== "9" || g.referenceAssetIds.length || g.seedPolicy !== "fixed" ||
+        BigInt(g.seed) > 4294967295n || draft.maxCostMicros !== "0" || g.maxCostMicros !== "0" ||
+        g.modelId !== VACE_MODEL || !g.prompt.trim() || g.prompt.length>2048 || g.negativePrompt.length>2048)
+      editorFailure("CAPABILITY_UNAVAILABLE","Local VACE requires one approved nine-frame shot, a fixed seed and the pinned model");
+  }
   if (draft.audioOperations.length > 64)
     editorFailure("CAPABILITY_UNAVAILABLE", "At most 64 audio operations per plan");
   const audioByClip = new Map<string, number>();
