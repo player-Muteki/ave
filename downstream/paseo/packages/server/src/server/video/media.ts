@@ -847,7 +847,12 @@ export class MediaService {
       trackOut.push(`[vcat_${tag}]`);
     }
     if (trackOut.length === 1) filters.push(`${trackOut[0]}null[vcat]`);
-    else filters.push(`${trackOut[0]}${trackOut[1]}overlay=0:0:eof_action=pass[vcat]`);
+    else {
+      const v2op = ops.find((op) => op.trackId === "v2")!;
+      filters.push(
+        `${trackOut[0]}${trackOut[1]}overlay=${v2op.overlayX ?? "0"}:${v2op.overlayY ?? "0"}:eof_action=pass[vcat]`,
+      );
+    }
     if (audioSegments.length) {
       const v1Count = ops.filter((op) => op.trackId === "v1").length;
       if (plan.transitionOperations.length && audioSegments.length !== v1Count)

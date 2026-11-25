@@ -73,6 +73,13 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
   for (const [trackId, list] of tracks) {
     let cursor: Rational = { num: "0", den: "1" };
     for (const op of list) {
+      if (op.overlayX !== undefined || op.overlayY !== undefined) {
+        if (trackId !== "v2" || op.overlayX === undefined || op.overlayY === undefined)
+          editorFailure(
+            "CAPABILITY_UNAVAILABLE",
+            "Overlay offsets are only supported on v2 segments (both x and y)",
+          );
+      }
       if (!rationalEquals(op.recordRange.start, cursor))
         editorFailure(
           "CAPABILITY_UNAVAILABLE",

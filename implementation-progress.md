@@ -76,6 +76,7 @@
 - 已实现待验收（2026-11-25）：审批 diffSummary.summary 带各类操作数摘要（段/转场/变换/音频/字幕），客户端计划卡展示转场与变换明细。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：proposeCut 字幕参数支持多条 cue（向后兼容单条）。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：get_project_snapshot 新增 plan 摘要（planId/planHash/intent，限 32 条），prompt 同步。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：v2 叠加轨支持 overlayX/overlayY 偏移（契约定义，只允许 v2，必需同时给出）；客户端 UI 增加叠加X/Y；profile 实测 14 项全 PASS，带偏移 overlay 本机实跑验证。未跑真模型/e2e。
 
 ## 环境与错误
 

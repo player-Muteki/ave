@@ -65,6 +65,14 @@
               },
               "recordRange": {
                 "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "overlayX": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "overlayY": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
               }
             },
             "required": [
@@ -109,6 +117,14 @@
               },
               "recordRange": {
                 "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "overlayX": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "overlayY": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
               },
               "crop": {
                 "type": "object",
@@ -211,6 +227,14 @@
               },
               "recordRange": {
                 "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "overlayX": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "overlayY": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
               },
               "gainMilli": {
                 "type": "string",
@@ -1313,6 +1337,14 @@
               },
               "recordRange": {
                 "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "overlayX": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "overlayY": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
               }
             },
             "required": [
@@ -1357,6 +1389,14 @@
               },
               "recordRange": {
                 "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "overlayX": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "overlayY": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
               },
               "crop": {
                 "type": "object",
@@ -1459,6 +1499,14 @@
               },
               "recordRange": {
                 "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "overlayX": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "overlayY": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
               },
               "gainMilli": {
                 "type": "string",

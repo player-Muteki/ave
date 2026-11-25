@@ -82,6 +82,9 @@ const TrimOperationSchema = z
     source: AssetStreamRefSchema,
     sourceRange: TimeRangeSchema,
     recordRange: TimeRangeSchema,
+    // Overlay placement, only meaningful on v2 overlay-track segments.
+    overlayX: uint.optional(),
+    overlayY: uint.optional(),
   })
   .strict();
 const TransformOperationSchema = TrimOperationSchema.extend({

@@ -69,6 +69,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [rot, setRot] = useState("0");
   const [bgm, setBgm] = useState("");
   const [subMode, setSubMode] = useState<"burn-in" | "metadata">("burn-in");
+  const [ovX, setOvX] = useState("0");
+  const [ovY, setOvY] = useState("0");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -381,6 +383,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {field("删除终点（秒）", cutEnd, setCutEnd)}
                 {field("素材总长（秒）", totalSec, setTotalSec)}
                 {field("转场时长（秒，空则无转场）", fadeSec, setFadeSec)}
+                {field("叠加X", ovX, setOvX)}
+                {field("叠加Y", ovY, setOvY)}
                 {button(fadeKind === "crossfade" ? "转场类型：叠化" : "转场类型：黑场", () =>
                   setFadeKind(fadeKind === "crossfade" ? "fade" : "crossfade"))}
               </View>
@@ -419,7 +423,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {project.assets.filter((a) => a.streams.some((s) => s.kind === "video")).length > 1 &&
                 button("画中画：选中片段叠加到首素材全程", async () => {
                   const first = project.assets.find((a) => a.streams.some((s) => s.kind === "video"))!;
-                  const draft = proposeOverlay(project, first.assetId, "0", totalSec, selected, start, end);
+                  const draft = proposeOverlay(project, first.assetId, "0", totalSec, selected, start, end, ovX.trim() || "0", ovY.trim() || "0");
                   const token = requestId(JSON.stringify(draft));
                   await submit({
                     requestId: token,

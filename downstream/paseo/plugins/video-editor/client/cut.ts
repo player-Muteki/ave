@@ -220,6 +220,8 @@ export function proposeOverlay(
   overlayAssetId: string,
   overlayStart: string,
   overlayEnd: string,
+  overlayX = "0",
+  overlayY = "0",
 ): EditPlanDraftV1 {
   const base = proposeCut(project, mainAssetId, mainStart, mainEnd);
   const asset = project.assets.find((a) => a.assetId === overlayAssetId);
@@ -247,6 +249,8 @@ export function proposeOverlay(
         },
         sourceRange: { start: { num: from.toString(), den: "1000" }, duration },
         recordRange: { start: { num: "0", den: "1" }, duration },
+        overlayX,
+        overlayY,
       },
     ],
   };
