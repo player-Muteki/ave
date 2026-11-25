@@ -258,3 +258,14 @@
 +    } : input.baseEnv,
    });
  }
+--- a/packages/desktop/scripts/linux-sandbox/launcher.sh
++++ b/packages/desktop/scripts/linux-sandbox/launcher.sh
+@@ -50,6 +50,5 @@
+   esac
+ fi
+
+-export PASEO_DESKTOP_SANDBOX_REASON="user namespaces unavailable${namespace_error:+ ($namespace_error)}; no usable SUID helper"
+-printf '[linux-sandbox] disabled: %s\n' "$PASEO_DESKTOP_SANDBOX_REASON" >&2 || true
+-exec "$executable" --no-sandbox "$@"
++printf '%s\n' 'AVE requires a Chromium sandbox. Install the AVE AppArmor profile for Ubuntu 24.04 and launch /opt/ave/AVE.AppImage.' >&2
++exit 1
