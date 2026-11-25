@@ -19,6 +19,7 @@ const expected = [
   "get_qa_report",
   "get_qa_summary",
   "get_scene_cuts",
+  "get_waveform",
   "submit_edit_plan",
   "validate_edit_plan",
 ];

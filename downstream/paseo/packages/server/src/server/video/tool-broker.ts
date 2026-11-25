@@ -148,11 +148,13 @@ export class VideoToolBroker {
           scenecutsSha256: scene?.blob.sha256 ?? null,
           waveformArtifactId: wave?.artifactId ?? null,
           waveformSha256: wave?.blob.sha256 ?? null,
-          note: "Metadata only; the sampling map stays in CAS and is never sent to the model. Use get_scene_cuts for the cut list.",
+          note: "Metadata only; the sampling map stays in CAS and is never sent to the model. Use get_scene_cuts for the cut list and get_waveform for loudness buckets.",
         };
       }
       case "get_scene_cuts":
         return this.store.sceneCuts(projectId, call.args.assetId, principal);
+      case "get_waveform":
+        return this.store.waveform(projectId, call.args.assetId, principal);
       case "diff_plans": {
         if (call.args.draft.projectId !== projectId)
           editorFailure("PERMISSION_DENIED", "The draft belongs to another project");
