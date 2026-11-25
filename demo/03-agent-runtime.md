@@ -133,6 +133,15 @@ Prompt 是行为引导，不承担权限控制；安全由工具表面和 daemon
 - 每次 planning run 注入 canonical project snapshot，避免压缩摘要成为唯一事实源。
 - 自有预算器计算文本、图片数量、图像字节和输出预留；准确配置 `contextWindow/maxTokens/inputLimits`，不能假定已有历史会被硬限制自动裁剪。
 
+服务端可通过 `VIDEO_EDITOR_PLANNER_MODEL=<provider>/<model>` 固定规划模型。兼容接口可通过 `VIDEO_EDITOR_PLANNER_MODELS` 指定服务端管理的 Pi `models.json` 绝对路径，凭据由服务端环境变量提供。选定的模型必须支持严格 JSON Schema 工具调用。规划 Worker 启动后先向模型提供服务端绑定的 `projectId`，再通过 `get_project_snapshot` 读取事实。严格模式返回的可选字段 `null` 在 Worker 内按共享契约转换为省略字段。
+
+配置模型后，在可运行的 Paseo 工作树内执行自然语言规划验收。用例生成并导入合成视频，检查模型生成的半开裁剪区间、待审批单以及审批前创建渲染任务被拒绝。
+
+```bash
+VIDEO_EDITOR_LIVE_PLANNER=1 npm exec --workspace=@getpaseo/server -- \
+  vitest run src/server/video/agent/planner-approval.real.e2e.test.ts
+```
+
 ## 9. 控制、事件与恢复
 
 | 用户动作 | 正确控制 | 不等价行为 |

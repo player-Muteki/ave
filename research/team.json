@@ -25,8 +25,8 @@
       "name": "J",
       "role": "Android、远程控制与移动端验收",
       "identities": {
-        "names": ["J"],
-        "emails": []
+        "names": ["J", "Jiaoyuming-Xenon"],
+        "emails": ["231909113+Jiaoyuming-Xenon@users.noreply.github.com"]
       }
     },
     {
@@ -65,7 +65,7 @@
       "id": "integration-probes",
       "title": "Pi/Paseo 集成探针与跨域 ADR 评审",
       "owners": ["lead", "l", "j", "c"],
-      "status": "planned",
+      "status": "in_progress",
       "evidence": "demo/08-delivery.md"
     },
     {
