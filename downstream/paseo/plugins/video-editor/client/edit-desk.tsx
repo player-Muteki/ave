@@ -63,6 +63,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [captionEnd, setCaptionEnd] = useState("1");
   const [gainMilli, setGainMilli] = useState("");
   const [fadeSec, setFadeSec] = useState("");
+  const [fadeKind, setFadeKind] = useState<"crossfade" | "fade">("crossfade");
   const [scaleW, setScaleW] = useState("");
   const [scaleH, setScaleH] = useState("");
   const [rot, setRot] = useState("0");
@@ -355,6 +356,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {field("删除终点（秒）", cutEnd, setCutEnd)}
                 {field("素材总长（秒）", totalSec, setTotalSec)}
                 {field("转场时长（秒，空则无转场）", fadeSec, setFadeSec)}
+                {button(fadeKind === "crossfade" ? "转场类型：叠化" : "转场类型：黑场", () =>
+                  setFadeKind(fadeKind === "crossfade" ? "fade" : "crossfade"))}
               </View>
               {button("删除中段并拼接", async () => {
                 const draft = proposeCutOut(project, selected, cutStart, cutEnd, totalSec);
@@ -377,6 +380,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                       { assetId: first.assetId, start: "0", end: totalSec },
                     ],
                     fadeSec.trim() || undefined,
+                    fadeKind,
                   );
                   const token = requestId(JSON.stringify(draft));
                   await submit({
@@ -448,6 +452,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
           {project.plans.map((plan) => (
             <View key={plan.planId} style={styles.clip}>
               <Text style={ink}>{plan.intent}</Text>
+              <Text style={muted}>
+                {plan.trimOperations.length} 段 · {plan.transitionOperations.length} 转场 · {plan.transformOperations.length} 变换 · {plan.audioOperations.length} 音频 · {plan.subtitleOperations.length} 字幕
+              </Text>
               {plan.trimOperations.map((op) => (
                 <Text key={op.opId} style={muted}>
                   {op.trackId} · 源入点 {op.sourceRange.start.num}/{op.sourceRange.start.den} 秒 ·
