@@ -59,6 +59,7 @@ FilmCraft 是候选确定性执行后端，**不是新的 Agent 控制面**。�
 | `get_waveform` | `assetId + contentHash` | 首音轨 RMS 波形桶（100ms/桶、0..1、≤1200 桶），静音桶附近适合下刀，无音频数据 |
 | `get_planning_run` | `projectId` | 本次 run 的持久化事件与状态（有界只读），便于续跑时了解上下文 |
 | `diff_plans` | `planId + draft` | 已采纳 plan vs 候选稿的字段级 diff（新增/删除/字段级变更） |
+| `estimate_timeline` | `EditPlanDraftV1` | 只读时间线自检：各轨道段数/总时长/转场重叠/有效输出时长 + 校验问题，不渲染 |
 | `get_qa_summary` | `jobId` | 渲染 QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS |
 
 `VideoToolBroker` 没有 `approvePlan`、`applyPlan`、`rawRender`。所有工具输入在 Pi 和 daemon 各校验一次；Pi `tool_call` hook 不做安全关键参数改写，因为改写后不能依赖自动再次 schema validation。

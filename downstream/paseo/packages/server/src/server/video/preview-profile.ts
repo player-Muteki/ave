@@ -200,3 +200,76 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
   }
 }
 
+
+function rationalSub(a: Rational, b: Rational): Rational {
+  return {
+    num: (BigInt(a.num) * BigInt(b.den) - BigInt(b.num) * BigInt(a.den)).toString(),
+    den: (BigInt(a.den) * BigInt(b.den)).toString(),
+  };
+}
+
+function rationalSeconds(r: Rational): string {
+  const value = Number(r.num) / Number(r.den);
+  return Number.isFinite(value) ? value.toFixed(3) : "0";
+}
+
+export interface DraftTimelineSummary {
+  mainTrackSegments: number;
+  overlayTrackSegments: number;
+  mainDurationSeconds: string;
+  overlayDurationSeconds: string;
+  transitionCount: number;
+  transitionOverlapSeconds: string;
+  effectiveMainDurationSeconds: string;
+  audioOperationCount: number;
+  transformCount: number;
+  subtitleCueCount: number;
+  segments: Array<{
+    clipId: string;
+    trackId: string;
+    startSeconds: string;
+    durationSeconds: string;
+    sourceAssetId: string;
+  }>;
+}
+
+/**
+ * Bounded, read-only timeline summary of a draft for the planner: per-track
+ * segment totals, transition overlap and op counts. Pure arithmetic on the
+ * draft; never touches media or CAS.
+ */
+export function summarizeDraftTimeline(draft: EditPlanDraftV1): DraftTimelineSummary {
+  const tracks = new Map<string, typeof draft.trimOperations>();
+  for (const op of draft.trimOperations) {
+    const list = tracks.get(op.trackId) ?? [];
+    list.push(op);
+    tracks.set(op.trackId, list);
+  }
+  const total = (list: typeof draft.trimOperations): Rational =>
+    list.reduce((acc, op) => rationalAdd(acc, op.recordRange.duration), { num: "0", den: "1" });
+  const main = total(tracks.get("v1") ?? []);
+  const overlay = total(tracks.get("v2") ?? []);
+  const overlap = draft.transitionOperations.reduce(
+    (acc, tr) => rationalAdd(acc, tr.duration),
+    { num: "0", den: "1" } as Rational,
+  );
+  return {
+    mainTrackSegments: (tracks.get("v1") ?? []).length,
+    overlayTrackSegments: (tracks.get("v2") ?? []).length,
+    mainDurationSeconds: rationalSeconds(main),
+    overlayDurationSeconds: rationalSeconds(overlay),
+    transitionCount: draft.transitionOperations.length,
+    transitionOverlapSeconds: rationalSeconds(overlap),
+    effectiveMainDurationSeconds: rationalSeconds(rationalSub(main, overlap)),
+    audioOperationCount: draft.audioOperations.length,
+    transformCount: draft.transformOperations.length,
+    subtitleCueCount: draft.subtitleOperations.length,
+    segments: draft.trimOperations.slice(0, 64).map((op) => ({
+      clipId: op.clipId,
+      trackId: op.trackId,
+      startSeconds: rationalSeconds(op.recordRange.start),
+      durationSeconds: rationalSeconds(op.recordRange.duration),
+      sourceAssetId: op.source.assetId,
+    })),
+  };
+}

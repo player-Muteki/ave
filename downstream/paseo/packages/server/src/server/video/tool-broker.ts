@@ -1,6 +1,7 @@
 import { VideoToolCallSchema, type EditorPrincipal } from "#video-editor/contracts/v1";
 import { sha256Json } from "./cas.js";
 import { editorFailure } from "./errors.js";
+import { summarizeDraftTimeline } from "./preview-profile.js";
 import type { EditorStore } from "./store.js";
 
 export interface PlannerScope {
@@ -234,6 +235,23 @@ export class VideoToolBroker {
       case "validate_edit_plan":
         this.store.validateProposal(call.args, principal);
         return { valid: true };
+      case "estimate_timeline": {
+        let valid = true;
+        let issue: string | null = null;
+        try {
+          this.store.validateProposal(call.args, principal);
+        } catch (error) {
+          valid = false;
+          issue = error instanceof Error ? error.message : String(error);
+        }
+        return {
+          projectId,
+          valid,
+          issue,
+          ...summarizeDraftTimeline(call.args),
+          note: "Read-only timeline arithmetic on the draft; no render, no media access.",
+        };
+      }
       case "submit_edit_plan": {
         const { plan } = this.store.createPlan({
           runId,
