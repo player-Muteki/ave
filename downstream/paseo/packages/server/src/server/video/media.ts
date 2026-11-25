@@ -778,6 +778,15 @@ export class MediaService {
         if (audioOp) {
           const gainDb = audioOp.mute ? "-inf" : (Number(audioOp.gainMilli) / 1000).toFixed(3);
           chain += `,volume=${gainDb}dB`;
+          const durSec = Number(rationalSeconds(op.recordRange.duration));
+          if (audioOp.fadeIn) {
+            const d = Number(rationalSeconds(audioOp.fadeIn));
+            chain += `,afade=t=in:st=0:d=${d.toFixed(6)}`;
+          }
+          if (audioOp.fadeOut) {
+            const d = Number(rationalSeconds(audioOp.fadeOut));
+            chain += `,afade=t=out:st=${Math.max(0, durSec - d).toFixed(6)}:d=${d.toFixed(6)}`;
+          }
         }
         filters.push(`${chain},aresample=48000[as${i}]`);
       } else if (audioProfile) {

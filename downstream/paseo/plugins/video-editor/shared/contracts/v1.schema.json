@@ -242,6 +242,12 @@
               },
               "mute": {
                 "type": "boolean"
+              },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
               }
             },
             "required": [
@@ -1514,6 +1520,12 @@
               },
               "mute": {
                 "type": "boolean"
+              },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
               }
             },
             "required": [

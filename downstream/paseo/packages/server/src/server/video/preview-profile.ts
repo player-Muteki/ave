@@ -44,6 +44,12 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
       editorFailure("CAPABILITY_UNAVAILABLE", "Audio record range must match its trim clip");
     if (!rationalEquals(op.sourceRange.duration, op.recordRange.duration))
       editorFailure("CAPABILITY_UNAVAILABLE", "Audio retiming is not supported");
+    const fadeSum = rationalAdd(op.fadeIn ?? { num: "0", den: "1" }, op.fadeOut ?? { num: "0", den: "1" });
+    if (
+      BigInt(fadeSum.num) * BigInt(op.recordRange.duration.den) >
+      BigInt(op.recordRange.duration.num) * BigInt(fadeSum.den)
+    )
+      editorFailure("CAPABILITY_UNAVAILABLE", "Audio fades must fit the clip duration");
   }
   if (draft.subtitleOperations.length > 64)
     editorFailure("CAPABILITY_UNAVAILABLE", "At most 64 subtitle cues per plan");

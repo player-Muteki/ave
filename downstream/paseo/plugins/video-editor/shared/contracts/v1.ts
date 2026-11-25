@@ -95,6 +95,8 @@ const TransformOperationSchema = TrimOperationSchema.extend({
 const AudioOperationSchema = TrimOperationSchema.extend({
   gainMilli: z.string().regex(/^-?(0|[1-9][0-9]*)$/),
   mute: z.boolean(),
+  fadeIn: RationalSchema.optional(),
+  fadeOut: RationalSchema.optional(),
 }).strict();
 const TransitionOperationSchema = z
   .object({

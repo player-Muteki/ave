@@ -19,6 +19,11 @@ export interface TransformSpec {
   rotation?: "0" | "90" | "180" | "270";
 }
 
+function fadeRational(sec: string | undefined): { num: string; den: string } | undefined {
+  if (sec === undefined || sec.trim() === "") return undefined;
+  return { num: milliseconds(sec).toString(), den: "1000" };
+}
+
 export function proposeCut(
   project: ProjectSnapshot,
   assetId: string,
@@ -29,6 +34,7 @@ export function proposeCut(
   transform?: TransformSpec,
   bgmAssetId?: string,
   subMode?: "burn-in" | "metadata",
+  audioFade?: { inSec?: string; outSec?: string },
 ): EditPlanDraftV1 {
   const asset = project.assets.find((a) => a.assetId === assetId);
   const stream = asset?.streams.find((s) => s.kind === "video");
@@ -118,6 +124,8 @@ export function proposeCut(
                   ? audioGainMilli.trim()
                   : "0",
               mute: false,
+              fadeIn: fadeRational(audioFade?.inSec),
+              fadeOut: fadeRational(audioFade?.outSec),
             },
           ];
         })()
@@ -138,6 +146,8 @@ export function proposeCut(
               recordRange: { start: { num: "0", den: "1" }, duration },
               gainMilli: audioGainMilli.trim(),
               mute: false,
+              fadeIn: fadeRational(audioFade?.inSec),
+              fadeOut: fadeRational(audioFade?.outSec),
             },
           ]
         : [],

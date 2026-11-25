@@ -84,6 +84,7 @@
 - 已修复：update_division.py 统计改为锚定到 tree 并排除 merge commit（PR merge ref 下文林相同但快照头不同），使 pull_request 事件下 DIVISION.svg 不再因合并头误报 stale。本地已验证。
 - 已实现待验收（2026-11-25）：planner 新增 get_plan 工具（按 planId 读取已接受计划的完整操作，便于续编），schema 重生同步。未跑真模型/e2e。
 - 已实现：update_division.py 统计锚定到源码树哈希 + 排除 merge commit，PR merge ref 下 DIVISION.svg 不再报 stale（CI pull_request 事件已 pass）；planner prompt 说 get_plan。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：audioOperations 支持 fadeIn/fadeOut（afade），契约校验两者之和不超片段时长；render 在 volume 后加 afade，客户端 UI 增深入/淡出秒；profile 实测 16 项全 PASS，afade 本机实跑验证。未跑真模型/e2e。
 
 ## 环境与错误
 

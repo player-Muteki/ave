@@ -71,6 +71,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [subMode, setSubMode] = useState<"burn-in" | "metadata">("burn-in");
   const [ovX, setOvX] = useState("0");
   const [ovY, setOvY] = useState("0");
+  const [fadeIn, setFadeIn] = useState("");
+  const [fadeOut, setFadeOut] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -335,6 +337,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {field("字幕起点（秒）", captionStart, setCaptionStart)}
                 {field("字幕终点（秒）", captionEnd, setCaptionEnd)}
                 {field("音量增益（毫分贝，可空）", gainMilli, setGainMilli)}
+                {field("音频淡入（秒，可空）", fadeIn, setFadeIn)}
+                {field("音频淡出（秒，可空）", fadeOut, setFadeOut)}
                 {field("缩放宽（可空）", scaleW, setScaleW)}
                 {field("缩放高（可空）", scaleH, setScaleH)}
                 {field("旋转（0/90/180/270）", rot, setRot)}
@@ -368,6 +372,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                     : undefined,
                   bgm || undefined,
                   subMode,
+                  fadeIn.trim() || fadeOut.trim()
+                    ? { inSec: fadeIn, outSec: fadeOut }
+                    : undefined,
                 );
                 const token = requestId(JSON.stringify(draft));
                 await submit({

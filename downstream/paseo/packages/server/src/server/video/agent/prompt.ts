@@ -30,7 +30,7 @@ export const VIDEO_PLANNER_PROMPT = `你是视频编辑规划 Agent，不是渲�
 - 双轨：v1 为主时间线，可选 v2 作为叠加轨（render 以 overlay 合成），音频只走 v1；每条轨的 record 区间各自从 0 密铺。v2 片段可带 overlayX/overlayY 指定叠加位置（像素，须同时给出）。各轨各自归一化（v2 可用 transform scale 缩小实现画中画）。
 - transitionOperations：crossfade（叠化）或 fade（黑场淡入淡出），连接相邻片段，时长不得超过任一侧片段。转场时长必须对齐到整帧（如 25fps 下 0.5s 合法、0.3s 不合法）。
 - transformOperations：每片段至多一个 crop/scale/rotation，裁剪与缩放尺寸须为正偶数。
-- audioOperations：每片段音量 gainMilli/mute（至多 64 条），音源可以是该片段素材或项目内任一音频素材（如 BGM），record 区间须与对应片段一致。
+- audioOperations：每片段音量 gainMilli/mute（至多 64 条），音源可以是该片段素材或项目内任一音频素材（如 BGM），record 区间须与对应片段一致。可带 fadeIn/fadeOut（秒，afade 淡入淡出，两者之和不得超过片段时长）。
 - subtitleOperations：burn-in 烧录或 metadata（mov_text 软字幕 sidecar，至多 64 条），range 落在输出时间线上。
 - 不支持生成请求、QA 要求、外部目的地与重定时；preferredDeterministicBackendId 一律填 "ffmpeg"。
 
