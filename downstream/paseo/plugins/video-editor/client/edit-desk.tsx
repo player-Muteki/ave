@@ -11,7 +11,7 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, contactSheetRpc, previewFramesRpc, readAssetChunkRpc, controlJobRpc,
+  analyzeAssetRpc, getAnalysisRpc, contactSheetRpc, previewFramesRpc, readAssetChunkRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
@@ -64,6 +64,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const stopRun = useRpc(stopPlanningRunRpc);
   const readEvents = useRpc(getEventsRpc);
   const analyze = useRpc(analyzeAssetRpc);
+  const readAnalysis = useRpc(getAnalysisRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
   const controlJob = useRpc(controlJobRpc);
@@ -436,33 +437,40 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                     assetId: asset.assetId,
                   });
                   let doc: SceneCutDoc | null = null;
-                  let doneJob: (typeof project.jobs)[number] | undefined;
+                  let done: Awaited<ReturnType<typeof readAnalysis>> | undefined;
                   for (let attempt = 0; attempt < 20 && !doc; attempt++) {
                     const snap = await read({ projectId: project.projectId });
                     show(snap);
-                    const job = snap.jobs
-                      .filter((j) => j.analysisAssetId === asset.assetId)
-                      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
-                    if (job?.state === "completed") doneJob = job;
-                    const artifact = job?.artifacts.find((a) => a.kind === "scenecuts");
-                    if (job && artifact && job.state === "completed") {
+                    let info: Awaited<ReturnType<typeof readAnalysis>> | null = null;
+                    try {
+                      info = await readAnalysis({
+                        requestId: requestId(`analysis:${asset.assetId}`),
+                        projectId: project.projectId,
+                        assetId: asset.assetId,
+                      });
+                    } catch {
+                      info = null;
+                    }
+                    if (info?.state === "completed") done = info;
+                    const artifact = info?.artifacts.find((a) => a.kind === "scenecuts");
+                    if (info && artifact && info.state === "completed") {
                       const data = await readReviewBytes(
-                        { projectId: snap.projectId, assetId: artifact.artifactId, revision: artifact.revision, blob: artifact.blob },
+                        { projectId: project.projectId, assetId: artifact.artifactId, revision: artifact.revision, blob: artifact.blob },
                         readChunk,
                         digestSource,
                         new AbortController().signal,
                         "scenecuts",
                       );
                       doc = JSON.parse(new TextDecoder().decode(data)) as SceneCutDoc;
-                    } else if (job && (job.state === "failed" || job.state === "cancelled")) {
-                      throw new Error(`分析失败：${job.error?.sanitizedDetail ?? job.state}`);
+                    } else if (info && (info.state === "failed" || info.state === "cancelled")) {
+                      throw new Error(`分析失败：${info.error?.sanitizedDetail ?? info.state}`);
                     } else if (attempt < 19) {
                       await new Promise((resolve) => setTimeout(resolve, 500));
                     }
                   }
                   if (!doc) throw new Error("分析尚未生成切点报告，请稍后再试。");
                   setSceneCuts({ assetId: asset.assetId, doc });
-                  const waveArtifact = doneJob?.artifacts.find((a) => a.kind === "waveform");
+                  const waveArtifact = done?.artifacts.find((a) => a.kind === "waveform");
                   if (waveArtifact) {
                     const waveData = await readReviewBytes(
                       { projectId: project.projectId, assetId: waveArtifact.artifactId, revision: waveArtifact.revision, blob: waveArtifact.blob },
