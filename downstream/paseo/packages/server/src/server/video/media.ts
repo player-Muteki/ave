@@ -700,6 +700,12 @@ export class MediaService {
       if (!video) editorFailure("CAPABILITY_UNAVAILABLE", "A trim has no video stream");
       return segmentGeometry(video, transformOps.get(op.clipId));
     });
+    // Each track normalizes to its own first segment's post-transform geometry:
+    // v1 defines the output frame, v2 may stay smaller for picture-in-picture.
+    const trackTarget = new Map<string, { width: number; height: number }>();
+    for (const op of ops) {
+      if (!trackTarget.has(op.trackId)) trackTarget.set(op.trackId, segGeo[ops.indexOf(op)]!);
+    }
     const v1FirstIdx = Math.max(0, ops.findIndex((op) => op.trackId === "v1"));
     const targetW = segGeo[v1FirstIdx]!.width;
     const targetH = segGeo[v1FirstIdx]!.height;
@@ -738,8 +744,9 @@ export class MediaService {
       let vchain = `[${i}:${video.streamIndex}]trim=${range},setpts=PTS-STARTPTS`;
       vchain += transformFilterChain(video, transformOps.get(op.clipId));
       const geo = segGeo[i]!;
-      if (targetW && targetH && (geo.width !== targetW || geo.height !== targetH))
-        vchain += `,scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2`;
+      const tt = trackTarget.get(op.trackId)!;
+      if (tt.width && tt.height && (geo.width !== tt.width || geo.height !== tt.height))
+        vchain += `,scale=${tt.width}:${tt.height}:force_original_aspect_ratio=decrease,pad=${tt.width}:${tt.height}:(ow-iw)/2:(oh-ih)/2`;
       vchain += `,setsar=1[vs${i}]`;
       filters.push(vchain);
       // Audio rides the main track only, so the mixed audio timeline matches v1.
