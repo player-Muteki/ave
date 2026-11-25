@@ -22,6 +22,8 @@ import {
   SourceAssetSchema,
   type ArtifactRef,
   type AcceptedEditPlan,
+  type CancelUploadRequest,
+  type CancelUploadResult,
   type ApprovalDecision,
   type CreateMaskRevisionRequest, type RequestTrackedMaskReview,
   TrackMaskRequestSchema, type TrackMaskRequest,
@@ -642,6 +644,37 @@ export class EditorStore {
     if (receipt.request_id !== requestId || receipt.sha256 !== sha256)
       editorFailure("IDEMPOTENCY_CONFLICT", "The upload was committed with a different request");
     return { projectId: receipt.project_id, asset: SourceAssetSchema.parse(JSON.parse(receipt.response)) };
+  }
+
+  /**
+   * Cancel a pending chunked upload: drop its chunks and row. Idempotent per
+   * requestId; committing first makes cancellation impossible.
+   */
+  cancelUpload(input: CancelUploadRequest, principal: EditorPrincipal): CancelUploadResult {
+    this.authorize(input.projectId, principal, "operator");
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: { uploadId: input.uploadId },
+      execute: () => {
+        const row = this.database
+          .prepare("SELECT project_id FROM uploads WHERE upload_id = ?")
+          .get(input.uploadId) as { project_id: string } | undefined;
+        if (!row) {
+          const receipt = this.database
+            .prepare("SELECT project_id FROM upload_receipts WHERE upload_id = ?")
+            .get(input.uploadId) as { project_id: string } | undefined;
+          if (receipt) editorFailure("INVALID_ARGUMENT", "The upload was already committed");
+          editorFailure("ASSET_NOT_FOUND", "No such pending upload in this project");
+        }
+        if (row.project_id !== input.projectId)
+          editorFailure("PERMISSION_DENIED", "The upload belongs to another project");
+        this.database.prepare("DELETE FROM upload_chunks WHERE upload_id = ?").run(input.uploadId);
+        this.database.prepare("DELETE FROM uploads WHERE upload_id = ?").run(input.uploadId);
+        this.emit(input.projectId, "upload.cancelled", { uploadId: input.uploadId });
+        return { requestId: input.requestId, projectId: input.projectId, uploadId: input.uploadId, cancelled: true };
+      },
+    });
   }
 
   finishUpload(

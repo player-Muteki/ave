@@ -529,6 +529,20 @@ export const CommitUploadRequestSchema = z
   .strict();
 export const UploadRequestSchema = z.object({ projectId: id, uploadId: id }).strict();
 
+export const CancelUploadRequestSchema = z
+  .object({ requestId, projectId: id, uploadId: id })
+  .strict();
+export type CancelUploadRequest = z.infer<typeof CancelUploadRequestSchema>;
+export const CancelUploadResultSchema = z
+  .object({ requestId, projectId: id, uploadId: id, cancelled: z.boolean() })
+  .strict();
+export type CancelUploadResult = z.infer<typeof CancelUploadResultSchema>;
+export const cancelUploadRpc = {
+  name: "video.v1.cancel_upload",
+  input: CancelUploadRequestSchema,
+  output: CancelUploadResultSchema,
+};
+
 export const getCapabilitiesRpc = {
   name: "video.v1.get_capabilities",
   input: z.object({}).strict(),

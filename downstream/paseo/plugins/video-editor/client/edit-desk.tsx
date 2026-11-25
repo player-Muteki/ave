@@ -10,7 +10,7 @@ import {
   estimateTimelineRpc,
   decideApprovalRpc,
   createJobRpc,
-  createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
+  createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, getExportSummaryRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
@@ -60,6 +60,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const status = useRpc(getUploadStatusRpc);
   const write = useRpc(writeUploadChunkRpc);
   const commit = useRpc(commitUploadRpc);
+  const cancelUp = useRpc(cancelUploadRpc);
   const startRun = useRpc(startPlanningRunRpc);
   const followUpRun = useRpc(followUpPlanningRunRpc);
   const stopRun = useRpc(stopPlanningRunRpc);
@@ -386,10 +387,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             {sourceImport?.projectId === project.projectId ? <>
               <Text style={muted}>{sourceImport.file.name} · 已确认 {confirmed} / {sourceImport.file.size} 字节</Text>
               {button("导入所选视频", async () => {
-                const asset = await sourceImport.transfer({declare, status, write, commit}, digestSource, setConfirmed);
+                const asset = await sourceImport.transfer({declare, status, write, commit, cancel: cancelUp}, digestSource, setConfirmed);
                 show(await read({projectId: project.projectId}));
                 if (asset.streams.some(stream => stream.kind === "video")) select(asset.assetId);
                 setSourceImport(null);
+              })}
+              {button("取消上传", async () => {
+                await sourceImport.cancel({ cancel: cancelUp });
+                setSourceImport(null);
+                setConfirmed(0);
+                setNotice("已取消未完成的上传。");
               })}
             </> : <Text style={muted}>单个视频不超过 64 MiB。</Text>}
           </View>}
