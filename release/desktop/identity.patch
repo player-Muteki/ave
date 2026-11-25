@@ -1,0 +1,260 @@
+--- a/packages/desktop/package.json
++++ b/packages/desktop/package.json
+@@ -1,9 +1,10 @@
+ {
+   "name": "@getpaseo/desktop",
+-  "version": "0.17.4",
++  "version": "0.1.0",
++  "productName": "AVE",
+   "private": true,
+-  "description": "Paseo desktop app (Electron wrapper)",
+-  "homepage": "https://paseo.sh",
++  "description": "AVE desktop video editor",
++  "homepage": "https://github.com/player-Muteki/ave",
+   "license": "Apache-2.0",
+   "author": {
+     "name": "Mohamed Boudra",
+@@ -11,7 +12,7 @@
+   },
+   "repository": {
+     "type": "git",
+-    "url": "https://github.com/getpaseo/paseo.git"
++    "url": "https://github.com/player-Muteki/ave.git"
+   },
+   "main": "dist/main.js",
+   "scripts": {
+@@ -46,5 +47,5 @@
+     "vitest": "^4.1.6",
+     "wait-on": "8.0.5"
+   },
+-  "desktopName": "Paseo.desktop"
++  "desktopName": "AVE.desktop"
+ }
+--- a/packages/desktop/electron-builder.yml
++++ b/packages/desktop/electron-builder.yml
+@@ -1,11 +1,11 @@
+ npmRebuild: false
+-appId: sh.paseo.desktop
+-productName: Paseo
+-executableName: Paseo
++appId: io.github.player-muteki.ave
++productName: AVE
++executableName: AVE
+ protocols:
+-  - name: Paseo agent link
++  - name: AVE link
+     schemes:
+-      - paseo
++      - ave
+ afterPack: ./scripts/after-pack.js
+ afterSign: ./scripts/after-sign.js
+ directories:
+@@ -28,6 +28,8 @@
+   - dist/daemon/node-entrypoint-runner.js
+   - node_modules/@getpaseo/server/dist/server/terminal/shell-integration/**/*
+ extraResources:
++  - from: native-media
++    to: native-media
+   # Preserve physical compiler inputs, including .d.ts files omitted from packaged node_modules.
+   - from: ../server/dist/server/builtin-plugins
+     to: builtin-plugins
+@@ -37,12 +39,12 @@
+     to: editor-target-icons
+ publish:
+   provider: github
+-  owner: getpaseo
+-  repo: paseo
++  owner: player-Muteki
++  repo: ave
+ mac:
+-  artifactName: "Paseo-${version}-${arch}.${ext}"
++  artifactName: "AVE-${version}-${arch}.${ext}"
+   minimumSystemVersion: "13.0.0"
+-  category: public.app-category.developer-tools
++  category: public.app-category.video
+   icon: assets/icon.icns
+   hardenedRuntime: true
+   notarize: true
+@@ -55,13 +57,12 @@
+       to: icon.png
+   target:
+     - dmg
+-    - zip
+ linux:
+-  category: Development
++  category: AudioVideo
+   icon: assets
+-  artifactName: "Paseo-${version}-${arch}.${ext}"
+-  maintainer: "Mohamed Boudra <hello@moboudra.com>"
+-  vendor: "Paseo"
++  artifactName: "AVE-${version}-${arch}.${ext}"
++  maintainer: "AVE contributors"
++  vendor: "AVE"
+   extraResources:
+     - from: bin/paseo
+       to: bin/paseo
+@@ -69,24 +70,21 @@
+       to: icon.png
+   target:
+     - AppImage
+-    - deb
+-    - rpm
+-    - tar.gz
+ deb:
+   afterInstall: scripts/linux-sandbox/after-install.tpl
+ rpm:
+   afterInstall: scripts/linux-sandbox/after-install.tpl
+ appImage:
+   # A nonempty argument list replaces builder's hardcoded --no-sandbox default.
+-  executableArgs: ["--class=Paseo"]
++  executableArgs: ["--class=AVE"]
+   # Keep the AppImage filename stable across versions (no ${version}) so
+   # electron-updater overwrites the file in place instead of renaming it to a new
+   # versioned path. A rename orphans the old binary, breaks desktop shortcuts, and
+   # dangles the ~/.local/bin/paseo CLI symlink, which points at $APPIMAGE. The
+   # version stays discoverable via the release tag and the in-app version.
+-  artifactName: "Paseo-${arch}.${ext}"
++  artifactName: "AVE-${version}-${arch}.${ext}"
+ win:
+-  artifactName: "Paseo-Setup-${version}-${arch}.${ext}"
++  artifactName: "AVE-Setup-${version}-${arch}.${ext}"
+   icon: assets/icon.ico
+   extraResources:
+     - from: bin/paseo.cmd
+@@ -95,11 +93,6 @@
+     - target: nsis
+       arch:
+         - x64
+-        - arm64
+-    - target: zip
+-      arch:
+-        - x64
+-        - arm64
+ nsis:
+   oneClick: false
+   perMachine: false
+--- a/packages/desktop/src/main.ts
++++ b/packages/desktop/src/main.ts
+@@ -118,7 +118,7 @@
+ const APP_SCHEME = "paseo";
+ const PASEO_DEBUG = process.env.PASEO_DEBUG === "1";
+ const DISABLE_SINGLE_INSTANCE_LOCK = process.env.PASEO_DISABLE_SINGLE_INSTANCE_LOCK === "1";
+-const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "Paseo";
++const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "AVE";
+ const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
+   platform: process.platform,
+   override: process.env.PASEO_DESKTOP_WINDOW_CONTROLS,
+--- a/packages/desktop/src/diagnostics/updater.ts
++++ b/packages/desktop/src/diagnostics/updater.ts
+@@ -5,7 +5,7 @@
+ import { app } from "electron";
+ import { tailFile } from "./tail-file.js";
+ 
+-const SHIPIT_DIRECTORY_NAME = "sh.paseo.desktop.ShipIt";
++const SHIPIT_DIRECTORY_NAME = "io.github.player-muteki.ave.ShipIt";
+ const SHIPIT_LOG_TAIL_LINES = 100;
+ 
+ export interface DesktopUpdaterDiagnosticFile {
+--- a/packages/desktop/scripts/after-pack.js
++++ b/packages/desktop/scripts/after-pack.js
+@@ -5,7 +5,7 @@
+ 
+ const { installLinuxLauncher } = require("./linux-sandbox");
+ 
+-const EXECUTABLE_NAME = "Paseo";
++const EXECUTABLE_NAME = "AVE";
+ 
+ // electron-builder arch enum → Node.js arch string
+ const ARCH_MAP = { 0: "ia32", 1: "x64", 2: "armv7l", 3: "arm64", 4: "universal" };
+@@ -38,7 +38,7 @@
+   }
+ 
+   // SDK ≥0.2.113 ships per-platform Claude Code binaries via optionalDependencies
+-  // (~210 MB each). Paseo requires user-installed `claude` on PATH, matching how
++  // (~210 MB each). AVE requires user-installed `claude` on PATH, matching how
+   // Codex/OpenCode are integrated, so drop every bundled copy.
+   const anthropicDir = path.join(nodeModules, "@anthropic-ai");
+   if (fs.existsSync(anthropicDir)) {
+--- a/packages/desktop/scripts/after-sign.js
++++ b/packages/desktop/scripts/after-sign.js
+@@ -2,7 +2,7 @@
+ 
+ const { smokePackagedDesktopApp } = require("../e2e/packaged-app-smoke.js");
+ 
+-const EXECUTABLE_NAME = "Paseo";
++const EXECUTABLE_NAME = "AVE";
+ 
+ exports.default = async function afterSign(context) {
+   if (process.env.PASEO_DESKTOP_SMOKE !== "1") {
+--- a/packages/desktop/scripts/linux-sandbox/index.js
++++ b/packages/desktop/scripts/linux-sandbox/index.js
+@@ -3,7 +3,7 @@
+ 
+ // Keep one pre-Chromium entrypoint for AppRun, desktop entries, updates, and tarballs.
+ exports.installLinuxLauncher = function installLinuxLauncher(appOutDir) {
+-  const launcher = path.join(appOutDir, "Paseo");
++  const launcher = path.join(appOutDir, "AVE");
+   if (!fs.existsSync(`${launcher}.bin`)) {
+     fs.renameSync(launcher, `${launcher}.bin`);
+   }
+--- a/packages/desktop/bin/paseo.cmd
++++ b/packages/desktop/bin/paseo.cmd
+@@ -3,9 +3,9 @@
+ 
+ set "SCRIPT_DIR=%~dp0"
+ set "RESOURCES_DIR=%SCRIPT_DIR%.."
+-set "APP_EXECUTABLE=%RESOURCES_DIR%\..\Paseo.exe"
++set "APP_EXECUTABLE=%RESOURCES_DIR%\..\AVE.exe"
+ if not exist "%APP_EXECUTABLE%" (
+-  echo Bundled Paseo executable not found at %APP_EXECUTABLE% 1>&2
++  echo Bundled AVE executable not found at %APP_EXECUTABLE% 1>&2
+   exit /b 1
+ )
+ 
+--- a/packages/desktop/bin/paseo
++++ b/packages/desktop/bin/paseo
+@@ -21,23 +21,23 @@
+ RESOURCES_DIR=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
+ 
+ MACOS_DIR="${RESOURCES_DIR}/../MacOS"
+-MACOS_HELPER_EXECUTABLE="${RESOURCES_DIR}/../Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper"
++MACOS_HELPER_EXECUTABLE="${RESOURCES_DIR}/../Frameworks/AVE Helper.app/Contents/MacOS/AVE Helper"
+ 
+ # macOS CLI invocations must enter Electron through the agent Helper. Launching
+ # the main APPL executable here makes later daemon supervision inherit app UI
+ # lifecycle behavior.
+ if [ -d "${MACOS_DIR}" ]; then
+   if [ ! -x "${MACOS_HELPER_EXECUTABLE}" ]; then
+-    echo "Bundled Paseo Helper executable not found at ${MACOS_HELPER_EXECUTABLE}" >&2
++    echo "Bundled AVE Helper executable not found at ${MACOS_HELPER_EXECUTABLE}" >&2
+     exit 1
+   fi
+   APP_EXECUTABLE="${MACOS_HELPER_EXECUTABLE}"
+-elif [ -x "${RESOURCES_DIR}/../Paseo.bin" ]; then
+-  APP_EXECUTABLE="${RESOURCES_DIR}/../Paseo.bin"
+-elif [ -x "${RESOURCES_DIR}/../Paseo" ]; then
+-  APP_EXECUTABLE="${RESOURCES_DIR}/../Paseo"
++elif [ -x "${RESOURCES_DIR}/../AVE.bin" ]; then
++  APP_EXECUTABLE="${RESOURCES_DIR}/../AVE.bin"
++elif [ -x "${RESOURCES_DIR}/../AVE" ]; then
++  APP_EXECUTABLE="${RESOURCES_DIR}/../AVE"
+ else
+-  echo "Bundled Paseo executable not found relative to ${RESOURCES_DIR}" >&2
++  echo "Bundled AVE executable not found relative to ${RESOURCES_DIR}" >&2
+   exit 1
+ fi
+ 
+--- a/packages/desktop/src/daemon/runtime-paths.ts
++++ b/packages/desktop/src/daemon/runtime-paths.ts
+@@ -116,6 +116,10 @@
+     entrypoint: input.entrypoint,
+     argvMode: input.argvMode,
+     args: input.args,
+-    baseEnv: input.baseEnv,
++    baseEnv: app.isPackaged ? {
++      ...input.baseEnv,
++      VIDEO_EDITOR_MEDIA_DIR: path.join(process.resourcesPath, "native-media"),
++      VIDEO_EDITOR_WORKER_DIR: path.join(process.resourcesPath, "builtin-plugins", "video-editor", "worker"),
++    } : input.baseEnv,
+   });
+ }

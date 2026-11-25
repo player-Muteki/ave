@@ -34,9 +34,13 @@ export class EditorService {
     this.cas = new ContentAddressedStore(path.join(root, "cas"));
     this.store.bindCas(this.cas);
     this.access = new EditorAccessStore(root);
+    const mediaDir = process.env.VIDEO_EDITOR_MEDIA_DIR;
+    const executable = (name: string) => mediaDir
+      ? path.join(mediaDir, "bin", name + (process.platform === "win32" ? ".exe" : ""))
+      : name;
     this.media = new MediaService(this.store, this.cas, {
-      ffmpeg: options.ffmpeg ?? "ffmpeg",
-      ffprobe: options.ffprobe ?? "ffprobe",
+      ffmpeg: options.ffmpeg ?? executable("ffmpeg"),
+      ffprobe: options.ffprobe ?? executable("ffprobe"),
     });
     this.jobs = new EditorJobSupervisor(this.store, this.media);
     this.rpc = new EditorRpcService(this);

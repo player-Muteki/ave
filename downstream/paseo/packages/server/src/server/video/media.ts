@@ -1115,10 +1115,11 @@ export class MediaService {
           "-nostdin", "-v", "error", "-xerror",
           "-i", this.cas.pathFor(asset.original),
           "-map", "0:v:0",
-          "-vf", `settb=${video.timeBase.num}/${video.timeBase.den},select='gte(scene,0)',metadata=print:file=${metadataPath}`,
+          "-vf", `settb=${video.timeBase.num}/${video.timeBase.den},select='gte(scene,0)',metadata=print:file=scene.txt`,
           "-f", "null", "-",
         ],
         signal,
+        directory,
       );
       const text = await readFile(metadataPath, "utf8");
       this.throwIfCancelled(signal);
@@ -1619,10 +1620,11 @@ export class MediaService {
     }
   }
 
-  private spawnChecked(command: string, args: string[], signal: AbortSignal): Promise<void> {
+  private spawnChecked(command: string, args: string[], signal: AbortSignal, cwd?: string): Promise<void> {
     this.throwIfCancelled(signal);
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, {
+        cwd,
         shell: false,
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],

@@ -56,7 +56,11 @@ export class PyWorker {
       if (signal.aborted) throw new EditorError("CANCELLED", "Analysis interrupted");
       let child;
       try {
-        child = spawn("python3", ["-I", path.join(this.workerDir(), "daemon_cli.py"), ...args], {
+        const mediaDir = process.env.VIDEO_EDITOR_MEDIA_DIR;
+        const python = mediaDir
+          ? path.join(mediaDir, "python", process.platform === "win32" ? "python.exe" : "bin/python3")
+          : "python3";
+        child = spawn(python, ["-I", "-B", path.join(this.workerDir(), "daemon_cli.py"), ...args], {
           stdio: ["pipe", "pipe", "pipe"],
         });
       } catch (error) {

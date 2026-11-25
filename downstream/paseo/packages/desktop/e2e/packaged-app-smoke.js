@@ -1,5 +1,6 @@
 const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
+const http = require("node:http");
 const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
@@ -9,7 +10,7 @@ const { extractFile } = require("@electron/asar");
 const { WebSocket } = require("ws");
 const assert = require("node:assert/strict");
 
-const EXECUTABLE_NAME = "Paseo";
+const EXECUTABLE_NAME = require("../package.json").productName ?? "Paseo";
 const SMOKE_TIMEOUT_MS = 60_000;
 const EXIT_TIMEOUT_MS = 10_000;
 const TERMINAL_CAPTURE_ATTEMPTS = 20;
@@ -33,7 +34,46 @@ function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-async function assertBuiltinPluginsStarted(listen) {
+async function startPlannerProbe(home, env) {
+  const server = http.createServer((request, response) => {
+    request.resume();
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    const result = { id: "probe", model: "probe", choices: [
+      { index: 0, delta: { role: "assistant", content: "ready" }, finish_reason: "stop" },
+    ] };
+    response.end(`data: ${JSON.stringify(result)}\n\ndata: [DONE]\n\n`);
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const config = path.join(home, "packaged-planner-probe.json");
+  fs.writeFileSync(config, JSON.stringify({ providers: { probe: {
+    api: "openai-completions", apiKey: "fixture", models: [{ id: "probe" }],
+    baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+  } } }));
+  env.VIDEO_EDITOR_PLANNER_MODELS = config;
+  env.VIDEO_EDITOR_PLANNER_MODEL = "probe/probe";
+  return server;
+}
+
+function assertPackagedMediaTools(appPath) {
+  const resources = process.platform === "darwin" ? path.join(appPath, "Contents", "Resources") : path.join(appPath, "resources");
+  const media = path.join(resources, "native-media");
+  const win = process.platform === "win32";
+  for (const name of ["ffmpeg", "ffprobe"]) {
+    const result = spawnSync(path.join(media, "bin", name + (win ? ".exe" : "")), ["-version"], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.error?.message || result.stderr);
+    console.log(result.stdout.split("\n")[0]);
+  }
+  const python = path.join(media, "python", win ? "python.exe" : "bin/python3");
+  const cli = path.join(resources, "builtin-plugins", "video-editor", "worker", "daemon_cli.py");
+  const run = spawnSync(python, ["-I", "-B", cli, "support"], { encoding: "utf8" });
+  assert.equal(run.status, 0, run.error?.message || run.stderr);
+  assert.match(JSON.parse(run.stdout).python, /^3\.12\./);
+}
+
+async function assertBuiltinPluginsStarted(listen, probePlanner) {
   const { DaemonClient } = await import("@getpaseo/client/internal/daemon-client");
   const { builtinPlugins } =
     await import("../../server/dist/server/server/plugins/builtin/index.js");
@@ -51,6 +91,19 @@ async function assertBuiltinPluginsStarted(listen) {
       [...builtinPlugins].sort(),
       "Every built-in plugin must start in the packaged desktop daemon",
     );
+    if (probePlanner) {
+      const invoke = (method, input) => client.invokePluginRpc("video-editor", "video.v1." + method, input);
+      const { projectId } = await invoke("create_project", { requestId: "packaged", title: "Worker startup" });
+      const { runId } = await invoke("start_planning_run", { projectId, requestId: "start", prompt: "Reply ready." });
+      const until = Date.now() + 30000;
+      let state;
+      do {
+        ({ state } = await invoke("get_planning_run", { projectId, runId }));
+        if (["settled", "failed", "interrupted"].includes(state)) break;
+        await delay(150);
+      } while (Date.now() < until);
+      assert.equal(state, "settled", "Packaged planning worker should complete the loopback provider probe");
+    }
   } finally {
     await client.close();
   }
@@ -877,6 +930,8 @@ async function smokePackagedDesktopApp({
 }) {
   assertExecutable(executablePath, "Packaged app executable");
   assertLinuxDesktopIdentity(appPath);
+  const aveCandidate = EXECUTABLE_NAME === "AVE";
+  if (aveCandidate) assertPackagedMediaTools(appPath);
   await smokeColdCliDaemonStart({ appPath });
 
   const userData = createTempDir("paseo-smoke-user-data-");
@@ -898,6 +953,7 @@ async function smokePackagedDesktopApp({
     cdpPort,
   });
 
+  const plannerProbe = aveCandidate ? await startPlannerProbe(daemonHome, env) : null;
   const stdout = [];
   const stderr = [];
   const launch = getLaunchCommand(executablePath, launchArgs);
@@ -950,7 +1006,7 @@ async function smokePackagedDesktopApp({
       deadline,
     });
     console.log("Packaged desktop smoke: renderer-started desktop daemon reported running");
-    await assertBuiltinPluginsStarted(listen);
+    await assertBuiltinPluginsStarted(listen, aveCandidate);
     console.log("Packaged desktop smoke: every built-in plugin started");
     // A server contribution can start even when the host rejects its client bundle.
     const desk = page.getByRole("button", { name: "剪辑工作台", exact: true });
@@ -993,6 +1049,10 @@ async function smokePackagedDesktopApp({
       }
     }
     releaseChildHandles(child);
+    if (plannerProbe) {
+      plannerProbe.closeAllConnections();
+      await new Promise(resolve => plannerProbe.close(resolve));
+    }
     await removeTempDir(userData);
     await removeTempDir(daemonHome);
   }
