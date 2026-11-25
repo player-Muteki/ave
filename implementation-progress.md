@@ -81,6 +81,7 @@
 - 已实现待验收（2026-11-25）：很换操作的 record/source 区间必须与对应 trim 一致且无重定时。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：export manifest 字幕改为完整 cue 列表（opId/cueId/range/mode）。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：计划卡片片段行显示 v2 叠加偏移。未跑真模型/e2e。
+- 已修复：update_division.py 统计改为锚定到 tree 并排除 merge commit（PR merge ref 下文林相同但快照头不同），使 pull_request 事件下 DIVISION.svg 不再因合并头误报 stale。本地已验证。
 
 ## 环境与错误
 

@@ -99,7 +99,7 @@ def is_code_line(path: str, line: str) -> bool:
 def repo_snapshot(repo: Path, revision: str, members: list[dict]) -> tuple[dict, dict]:
     commits = {member["id"]: 0 for member in members}
     lines = {member["id"]: 0 for member in members}
-    for record in run_git(repo, "log", "--format=%an%x00%ae%x00%s", revision).splitlines():
+    for record in run_git(repo, "log", "--no-merges", "--format=%an%x00%ae%x00%s", revision).splitlines():
         fields = record.split("\x00")
         if len(fields) < 3 or fields[2].startswith("chore(stats):"):
             continue
@@ -152,12 +152,18 @@ def collect_git_metrics(repo: Path, members: list[dict]) -> tuple[dict, dict, st
     if not has_head(repo):
         return commits, lines, "unborn", "尚无提交"
 
-    history = run_git(repo, "log", "--format=%H%x00%s").splitlines()
-    non_stats = [line for line in history if not line.split("\x00", 1)[1].startswith("chore(stats):")]
-    head = non_stats[0].split("\x00", 1)[0] if non_stats else run_git(repo, "rev-parse", "HEAD").strip()
-    epochs = [int(run_git(repo, "show", "-s", "--format=%ct", head).strip())]
-    revision_parts = [head[:12]]
-    for snapshot_repo, name, snapshot_head in [(repo, None, head), *[
+    # Anchor stats to the checked-out tree, not to a log-order-dependent head
+    # commit: on a PR merge ref the tree is identical but the tip commit (and
+    # its timestamp) is a merge commit, which would otherwise skew the snapshot.
+    revision = run_git(repo, "rev-parse", "HEAD").strip()
+    tree = run_git(repo, "rev-parse", f"{revision}^{{tree}}").strip()
+    history = run_git(repo, "log", "--no-merges", "--format=%H%x00%ct%x00%s", revision).splitlines()
+    non_stats = [line for line in history if not line.split("\x00", 2)[2].startswith("chore(stats):")]
+    epochs = [int(line.split("\x00", 2)[1]) for line in non_stats]
+    if not epochs:
+        epochs = [int(run_git(repo, "show", "-s", "--format=%ct", revision).strip())]
+    revision_parts = [tree[:12]]
+    for snapshot_repo, name, snapshot_head in [(repo, None, revision), *[
         (path, name, sha) for path, name, sha in gitlink_repos(repo)
     ]]:
         snapshot_commits, snapshot_lines = repo_snapshot(snapshot_repo, snapshot_head, members)
