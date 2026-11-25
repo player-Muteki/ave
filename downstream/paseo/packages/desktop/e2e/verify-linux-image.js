@@ -11,7 +11,7 @@ async function main() {
   const image = path.resolve(process.argv[2]);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ave-appimage-"));
   try {
-    fs.chmodSync(image, 0o755);
+    fs.accessSync(image, fs.constants.X_OK);
     execFileSync(image, ["--appimage-extract"], { cwd: tmp, stdio: "ignore" });
     const appPath = path.join(tmp, "squashfs-root");
     const desktop = fs.readdirSync(appPath).filter(f => f.endsWith(".desktop"));

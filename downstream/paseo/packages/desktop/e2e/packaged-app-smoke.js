@@ -49,7 +49,7 @@ async function startPlannerProbe(home, env) {
   });
   const config = path.join(home, "packaged-planner-probe.json");
   fs.writeFileSync(config, JSON.stringify({ providers: { probe: {
-    api: "openai-completions", apiKey: "fixture", models: [{ id: "probe" }],
+    api: "openai-completions", apiKey: "fixture", compat: { supportsStrictMode: true }, models: [{ id: "probe" }],
     baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
   } } }));
   env.VIDEO_EDITOR_PLANNER_MODELS = config;
@@ -1010,8 +1010,8 @@ async function smokePackagedDesktopApp({
     console.log("Packaged desktop smoke: every built-in plugin started");
     // A server contribution can start even when the host rejects its client bundle.
     const desk = page.getByRole("button", { name: "剪辑工作台", exact: true });
-    await desk.waitFor({ timeout: remainingTime(deadline) });
-    const skip = page.getByRole("button", { name: "Skip setup", exact: true });
+    const skip = page.getByRole("button", { name: /^(?:Skip setup|跳过设置)$/i });
+    await desk.or(skip).first().waitFor({ timeout: remainingTime(deadline) });
     if (await skip.isVisible()) await skip.click();
     await desk.click({ timeout: remainingTime(deadline) });
     await page.getByRole("textbox", { name: "新项目名称" }).waitFor({ timeout: remainingTime(deadline) });

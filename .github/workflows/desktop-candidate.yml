@@ -101,6 +101,9 @@ jobs:
         run: |
           if [[ "$REQUIRE_SIGNING" == true ]]; then
             : "${CSC_LINK:?Signing certificate unavailable}"
+          else
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
           npm run build:desktop -- --publish never "--$TARGET_PLATFORM" "--$TARGET_ARCH"
       - name: Verify notarized DMG
@@ -157,7 +160,12 @@ jobs:
         if: runner.os == 'Linux'
         env:
           PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
-        run: node runtime/packages/desktop/e2e/verify-linux-image.js runtime/packages/desktop/release/*.AppImage
+        run: |
+          sudo install -d -m 0755 /opt/ave
+          sudo install -m 0755 runtime/packages/desktop/release/*.AppImage /opt/ave/AVE.AppImage
+          sudo install -m 0644 release/desktop/ave-appimage.apparmor /etc/apparmor.d/ave-appimage
+          sudo apparmor_parser -r /etc/apparmor.d/ave-appimage
+          node runtime/packages/desktop/e2e/verify-linux-image.js /opt/ave/AVE.AppImage
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
