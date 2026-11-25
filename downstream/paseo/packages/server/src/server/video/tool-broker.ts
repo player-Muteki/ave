@@ -124,34 +124,8 @@ export class VideoToolBroker {
           note: "Bounded metadata only; pixels are never sent to the model. Generate the sheet via video.v1.contact_sheet.",
         };
       }
-      case "get_analysis": {
-        const project = this.store.project(projectId, principal);
-        const asset = project.assets.find((a) => a.assetId === call.args.assetId);
-        if (!asset || asset.original.sha256 !== call.args.contentHash)
-          editorFailure("ASSET_NOT_FOUND", "Asset identity is not in the bound project");
-        const latest = project.jobs
-          .filter((j) => j.analysisAssetId === call.args.assetId)
-          .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
-        if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
-        const qa = latest.artifacts.find((a) => a.kind === "qa");
-        const scene = latest.artifacts.find((a) => a.kind === "scenecuts");
-        const wave = latest.artifacts.find((a) => a.kind === "waveform");
-        return {
-          assetId: asset.assetId,
-          contentHash: asset.original.sha256,
-          jobId: latest.jobId,
-          state: latest.state,
-          revision: latest.revision,
-          analysisRate: latest.analysisRate ?? null,
-          qaArtifactId: qa?.artifactId ?? null,
-          qaSha256: qa?.blob.sha256 ?? null,
-          scenecutsArtifactId: scene?.artifactId ?? null,
-          scenecutsSha256: scene?.blob.sha256 ?? null,
-          waveformArtifactId: wave?.artifactId ?? null,
-          waveformSha256: wave?.blob.sha256 ?? null,
-          note: "Metadata only; the sampling map stays in CAS and is never sent to the model. Use get_scene_cuts for the cut list and get_waveform for loudness buckets.",
-        };
-      }
+      case "get_analysis":
+        return this.store.analysisSummary(projectId, call.args.assetId, principal, call.args.contentHash);
       case "get_scene_cuts":
         return this.store.sceneCuts(projectId, call.args.assetId, principal);
       case "get_waveform":

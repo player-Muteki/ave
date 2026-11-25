@@ -31,7 +31,7 @@ import {
   type ProjectSnapshot,
   type SourceAsset,
 } from "#video-editor/contracts/v1";
-import { EditorError, editorFailure } from "./errors.js";
+import { describeEditorError, EditorError, editorFailure } from "./errors.js";
 
 interface ProjectRow {
   project_id: string;
@@ -1216,6 +1216,42 @@ export class EditorStore {
       bucketCount: buckets.length,
       buckets: buckets.slice(0, 1200),
       note: "RMS level per bucket normalized to 0..1; use silent buckets (near 0) as dialogue-free cut candidates.",
+    };
+  }
+
+  /**
+   * Bounded metadata view of the latest analysis job for an asset: state,
+   * rate, artifact refs (with hashes) and error. Viewer-level; artifact bytes
+   * stay in CAS and are read via read_asset_chunk.
+   */
+  analysisSummary(projectId: string, assetId: string, principal: EditorPrincipal, expectedHash?: string) {
+    this.authorize(projectId, principal, "viewer");
+    const project = this.project(projectId, principal);
+    const asset = project.assets.find((a) => a.assetId === assetId);
+    if (!asset || (expectedHash !== undefined && asset.original.sha256 !== expectedHash))
+      editorFailure("ASSET_NOT_FOUND", "Asset identity is not in the bound project");
+    const latest = project.jobs
+      .filter((j) => j.analysisAssetId === assetId)
+      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+    if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
+    return {
+      projectId,
+      assetId,
+      contentHash: asset.original.sha256,
+      jobId: latest.jobId,
+      state: latest.state,
+      revision: latest.revision,
+      analysisRate: latest.analysisRate ?? null,
+      artifacts: latest.artifacts.map((a) => ({
+        artifactId: a.artifactId,
+        projectId: a.projectId,
+        jobId: a.jobId,
+        revision: a.revision,
+        kind: a.kind,
+        blob: a.blob,
+      })),
+      error: latest.error ? describeEditorError(latest.error) : null,
+      note: "Metadata only; artifact bytes stay in CAS. Planner uses get_scene_cuts/get_waveform; clients use read_asset_chunk.",
     };
   }
 

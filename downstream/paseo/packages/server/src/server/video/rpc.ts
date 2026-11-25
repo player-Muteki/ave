@@ -14,6 +14,7 @@ import {
   StartPlanningRunInputSchema,
   SteerPlanningRunInputSchema,
   AnalyzeAssetInputSchema,
+  GetAnalysisInputSchema,
   ContactSheetRequestSchema,
   InspectFrameRequestSchema,
   PreviewFramesRequestSchema,
@@ -45,7 +46,7 @@ export class EditorRpcService {
             "deterministic-analysis",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
-          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames"],
+          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline"],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
             {
@@ -146,6 +147,13 @@ export class EditorRpcService {
         const result = this.editor.store.createAnalysisJob({ ...request, principal });
         this.editor.jobs.enqueue(request.projectId, result.job.jobId);
         return result;
+      }
+      case "video.v1.get_analysis": {
+        const request = GetAnalysisInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.analysisSummary(request.projectId, request.assetId, principal),
+        };
       }
       case "video.v1.request_tracked_mask_review":
         return this.editor.store.requestTrackedMaskReview(RequestTrackedMaskReviewSchema.parse(input), principal);
