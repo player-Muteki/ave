@@ -43,3 +43,15 @@ HF_HUB_OFFLINE=1 python scripts/check_vace_bedroom.py generate --model "$VACE_SN
 - 文本编码 8.29 s，视觉阶段 61.34 s，显存峰值 5.04 GiB。原始候选与合成 MP4 的九个视频 PTS 分别检查通过，完整解码通过。合成文件 SHA-256 为 `bbc86aa6a5c63f9feb7645c8342fa812c9e6d104a04d6642c2144fc65653eda5`。
 
 两次均为离线实验。颜色比例使用脚本中的 RGB 判据，贴图细节、目标外观与实际编辑意图仍需人工审片。生产 daemon、真实用户的掩码与成品审批、其他 GPU 和平台仍需独立验收。[逐帧数据与输入摘要](e08-vace-results.json)
+
+## 工作台中的九帧生成与交付
+
+在 Chrome 中将一段 25 fps、320×192 的有声视频导入真实 daemon。用户在源帧 4 点选移动的橙色方块，审看并批准源帧 0–8 的 SAM2 掩码，然后提交正面提示词 `A cobalt blue ceramic rectangle moving right on a dark navy background, fixed camera.`，负面提示词 `orange, yellow, text`，种子 732021。提交方案时只建立 preview 审批。操作员批准后，Worker 才加载本地权重并执行 20 步采样。审看预览、批准成品及批准导出沿用独立的审批记录。成品引用生成时保存的源尺寸母版，导出清单记录实际模型版本、种子、采样映射、掩码和成品摘要。
+
+- 逐像素比对中，编码前有 498,530 个受保护像素与源片一致。检查第 1、5、9 帧，方块呈蓝色，边缘出现亮色高光，背景仍为深蓝。H.264 解码后，掩码内、外的通道绝对差均值分别为 213.18/255 和 0.69/255。
+- 9 个视频帧保留 25 fps 源时钟。导出 H.264 和 48 kHz AAC 两轨从零开始，均长 0.36 秒。AAC 解码的 PCM 与同一源音轨按同一范围、编码参数独立生成的对照逐字节一致。所审母版和交付文件 SHA-256 均为 `7cc6dceb420c86c12abc2ff5a8fe44e675c11ae4ceaa5fbf53ff317fe218331c`。
+- 本次 RTX 5060 Laptop GPU 实测的文本编码约 9.48 秒，视觉生成约 100.62 秒，PyTorch 峰值 allocated 约 5.04 GiB。样片与权重仅保存在本机。
+
+daemon 用 `VIDEO_EDITOR_VACE_PYTHON` 指定已安装 PyTorch、Diffusers、Transformers 和依赖的独立 Python，用 `VIDEO_EDITOR_VACE_MODEL` 指向本地固定快照。两个变量均取绝对路径。可通过 `VIDEO_EDITOR_VACE_SCRATCH` 指定已有的磁盘临时目录，供文本编码器卸载权重。Worker 以 Python 隔离模式启动，离线核验模型清单中的 17 个文件。此配置支持九帧等间隔、方形像素、无旋转、偶数宽高的 SDR 片段。有声片段的时长还需能用输出音轨的 48 kHz 时钟精确表示。SAM2 输入审批的部署方式见[实施记录](../implementation-progress.md)。
+
+复验入口为服务端 `src/server/video/edit-desk.browser.e2e.test.ts` 的 `object mask` 场景。配置上述运行环境、SAM2 和本地 Chrome，并启用 `VIDEO_EDITOR_BROWSER_TEST=1`、`VIDEO_EDITOR_SAM2_TEST=1` 和 `VIDEO_EDITOR_VACE_TEST=1`。[工作台回归](../downstream/paseo/packages/server/src/server/video/edit-desk.browser.e2e.test.ts)
