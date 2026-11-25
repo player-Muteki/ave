@@ -234,6 +234,13 @@ export class EditorRpcService {
     const ref = (() => {
       if (assetId.endsWith(":review-proxy")) return this.editor.store.finalReviewProxy(projectId, assetId, revision, principal).blob;
       if (assetId.endsWith(":candidate")) return this.previewForReview(input, principal);
+      if (assetId.startsWith("contact:")) {
+        const sha = assetId.slice("contact:".length);
+        if (!/^[a-f0-9]{64}$/.test(sha))
+          editorFailure("INVALID_ARGUMENT", "Invalid contact sheet hash");
+        this.editor.store.authorizeProject(projectId, principal, "viewer");
+        return { sha256: sha, bytes: await this.editor.cas.sizeOf(sha), mediaType: "image/jpeg" };
+      }
       if (assetId.endsWith(":export") || assetId.endsWith(":manifest") || assetId.endsWith(":qa")) return this.editor.store.artifact(projectId, assetId, revision, principal).blob;
       return this.editor.store.asset(projectId, assetId, revision, principal).proxy;
     })();

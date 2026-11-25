@@ -78,6 +78,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [sheetBlob, setSheetBlob] = useState<BlobRef | null>(null);
   const [planPrompt, setPlanPrompt] = useState("");
   const [run, setRun] = useState<PlanningRunStatus | null>(null);
   const [runEvents, setRunEvents] = useState<EditorEvent[]>([]);
@@ -203,7 +204,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
     await runJob({ projectId: approval.projectId, approvalId, grantId: grant.grantId, expectedRevision, requestId: `${purpose}-${approvalId}` });
     show(await read({ projectId: approval.projectId }));
   }
-  function mediaControl(label: string, assetId: string, revision: string, blob?: BlobRef, purpose: "play" | "export" | "manifest" | "qa" = "play") {
+  function mediaControl(label: string, assetId: string, revision: string, blob?: BlobRef, purpose: "play" | "export" | "manifest" | "qa" | "contact" = "play") {
     if (layout.platform !== "web" || !project || !blob) return null;
     const key = `${project.projectId}:${assetId}:${revision}:${blob.sha256}:${purpose}`;
     const opened = openMedia === key;
@@ -321,7 +322,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                     maxTiles: "12",
                   });
                   setNotice(`联系表 ${result.columns}x${result.rows}（${result.tiles} 格）已生成 · SHA-256 ${result.blob.sha256.slice(0, 12)}`);
+                  setSheetBlob(result.blob);
                 })}
+              {sheetBlob && project && mediaControl("查看联系表", `contact:${sheetBlob.sha256}`, project.revision, sheetBlob, "contact")}
             </DeskControl>
           ))}
           {selected !== "" && (

@@ -14,12 +14,17 @@ export async function readReviewBytes(
   read: (input: ReadAssetChunkRequest) => Promise<Uint8Array>,
   hash: (input: ArrayBuffer) => Promise<string>,
   signal: AbortSignal,
-  purpose: "play" | "export" | "manifest" | "qa" = "play",
+  purpose: "play" | "export" | "manifest" | "qa" | "contact" = "play",
 ): Promise<ArrayBuffer> {
   const { blob, projectId, assetId, revision } = selected;
   const size = BigInt(blob.bytes);
-  const expectedType = purpose === "manifest" || purpose === "qa" ? "application/json" : "video/mp4";
-  if (purpose !== "play" && !assetId.endsWith(`:${purpose}`))
+  const expectedType =
+    purpose === "manifest" || purpose === "qa"
+      ? "application/json"
+      : purpose === "contact"
+        ? "image/jpeg"
+        : "video/mp4";
+  if (purpose === "contact" ? !assetId.startsWith("contact:") : purpose !== "play" && !assetId.endsWith(`:${purpose}`))
     throw new Error("此文件不是已交付的成品或清单。");
   if (blob.mediaType !== expectedType || size < 1n || size > 64n * 1024n * 1024n)
     throw new Error("文件格式不匹配或超过工作台的 64 MiB 限制。");

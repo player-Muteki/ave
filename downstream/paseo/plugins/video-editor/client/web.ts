@@ -47,9 +47,17 @@ export function mountReviewVideo(parent: unknown, bytes: ArrayBuffer, label: str
   };
 }
 
-export function mountDeliveryLink(parent: unknown, bytes: ArrayBuffer, purpose: "export" | "manifest" | "qa", sha256: string) {
+export function mountDeliveryLink(parent: unknown, bytes: ArrayBuffer, purpose: "export" | "manifest" | "qa" | "contact", sha256: string) {
   if (Platform.OS !== "web" || !(parent instanceof HTMLElement) || !/^[a-f0-9]{64}$/.test(sha256))
     throw new Error("当前工作台无法保存交付文件。");
+  if (purpose === "contact") {
+    const img = document.createElement("img");
+    img.src = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+    img.alt = `contact sheet ${sha256.slice(0, 12)}`;
+    img.style.maxWidth = "100%";
+    parent.appendChild(img);
+    return () => { img.remove(); URL.revokeObjectURL(img.src); };
+  }
   const manifest = purpose === "manifest" || purpose === "qa";
   const link = document.createElement("a");
   const url = URL.createObjectURL(new Blob([bytes], { type: manifest ? "application/json" : "video/mp4" }));

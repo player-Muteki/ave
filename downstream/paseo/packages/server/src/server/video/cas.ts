@@ -29,6 +29,11 @@ export class ContentAddressedStore {
     await mkdir(this.temporary, { recursive: true, mode: 0o700 });
   }
 
+  async sizeOf(sha256: string): Promise<bigint> {
+    const info = await stat(this.pathFor({ sha256 }));
+    return BigInt(info.size);
+  }
+
   pathFor(ref: Pick<BlobRef, "sha256">): string {
     if (!/^[0-9a-f]{64}$/.test(ref.sha256))
       editorFailure("INVALID_ARGUMENT", "Invalid content hash");
