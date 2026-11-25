@@ -3,7 +3,7 @@ import { z } from "zod";
 import { VideoToolCallSchema, type EditorEvent } from "#video-editor/contracts/v1";
 import { randomUUID } from "node:crypto";
 import { VIDEO_PLANNER_PROMPT, videoPlannerPromptSignature } from "./prompt.js";
-import { newRequestId, type DaemonToWorker, type IpcChannel, type WorkerToDaemon } from "./ipc.js";
+import { newRequestId, sha256Hex, type DaemonToWorker, type IpcChannel, type WorkerToDaemon } from "./ipc.js";
 
 export interface PlannerSessionOptions {
   projectId: string;
@@ -105,13 +105,17 @@ export async function createPlannerSession(options: PlannerSessionOptions) {
     return {
       name,
       label: name,
-      description: TOOL_DESCRIPTIONS[name],
+      description: name === "get_project_snapshot"
+        ? `${TOOL_DESCRIPTIONS[name]} Use projectId ${JSON.stringify(options.projectId)} for this run.`
+        : TOOL_DESCRIPTIONS[name],
       parameters,
       executionMode: "sequential" as const,
       constrainedSampling:
         name === "submit_edit_plan" ? { type: "json_schema" as const, strict: "require" as const } : false as const,
       async execute(toolCallId: string, args: unknown) {
-        const request = option.parse({ protocolVersion: "1", toolCallId, tool: name, args });
+        // Pi provider IDs are opaque (Responses uses call_id|item_id). Keep the
+        // entire value for deduplication, encoded in the daemon's ID alphabet.
+        const request = option.parse({ protocolVersion: "1", toolCallId: sha256Hex(toolCallId), tool: name, args });
         const output = await invoke(request);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(output) }],
@@ -150,8 +154,17 @@ export async function createPlannerSession(options: PlannerSessionOptions) {
   }
 
   let seq = 0;
+  let providerFailed = false;
   session.subscribe((piEvent: unknown) => {
-    const e = piEvent as { type?: string; id?: string; toolCallId?: string };
+    const e = piEvent as {
+      type?: string;
+      id?: string;
+      toolCallId?: string;
+      message?: { role?: string; stopReason?: string };
+    };
+    if (e.type === "message_end" && e.message?.role === "assistant") {
+      providerFailed = e.message.stopReason === "error";
+    }
     const type = typeof e?.type === "string" ? e.type : "agent.unknown";
     if (type === "tool_execution_start" || type === "message_end" || type === "agent_end") {
       seq += 1;
@@ -163,7 +176,7 @@ export async function createPlannerSession(options: PlannerSessionOptions) {
         runId: options.runId,
         eventId: typeof e?.id === "string" ? e.id : randomUUID(),
         seq: String(seq),
-        causationId: typeof e?.toolCallId === "string" ? e.toolCallId : undefined,
+        causationId: typeof e?.toolCallId === "string" ? sha256Hex(e.toolCallId) : undefined,
         occurredAt: new Date().toISOString(),
         type: `agent.${type}`,
         payload:
@@ -176,7 +189,12 @@ export async function createPlannerSession(options: PlannerSessionOptions) {
 
   return {
     session,
-    prompt: (text: string) => session.prompt(text),
+    async prompt(text: string) {
+      providerFailed = false;
+      await session.prompt(text);
+      // Pi also represents provider failures as completed assistant messages.
+      if (providerFailed) throw new Error("Planner provider failed");
+    },
     steer: (text: string) => session.steer(text),
     followUp: (text: string) => session.followUp(text),
     abort: () => session.abort(),

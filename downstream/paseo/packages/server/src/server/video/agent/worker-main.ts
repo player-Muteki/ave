@@ -86,7 +86,13 @@ async function main(): Promise<void> {
       case "prompt":
         if (!session || !init) editorFailure("INVALID_ARGUMENT", "Worker not initialized");
         send({ kind: "run_state", state: "running" });
-        await session.prompt(message.text);
+        try {
+          await session.prompt(message.text);
+        } catch {
+          // Provider diagnostics may include request data. Persist only the failure category.
+          send({ kind: "run_state", state: "failed", detail: "Planner prompt failed" });
+          break;
+        }
         send({ kind: "run_state", state: "settled" });
         break;
       case "steer":
