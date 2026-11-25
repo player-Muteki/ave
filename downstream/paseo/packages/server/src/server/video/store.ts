@@ -1245,18 +1245,7 @@ export class EditorStore {
       contentHash: asset.original.sha256,
       durationSeconds,
       frameCount,
-      streams: asset.streams.map(
-        ({ streamUid, kind, codec, timeBase, width, height, sampleRate, averageRate }) => ({
-          streamUid,
-          kind,
-          codec,
-          timeBase,
-          width,
-          height,
-          sampleRate,
-          averageRate,
-        }),
-      ),
+      streams: asset.streams,
     };
   }
 

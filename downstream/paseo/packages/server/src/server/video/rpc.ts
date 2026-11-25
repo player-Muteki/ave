@@ -20,6 +20,7 @@ import {
   GetWaveformInputSchema,
   GetPlanInputSchema,
   GetExportSummaryInputSchema,
+  GetAssetMetadataInputSchema,
   ContactSheetRequestSchema,
   InspectFrameRequestSchema,
   PreviewFramesRequestSchema,
@@ -194,6 +195,13 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...(await this.editor.store.exportSummary(request.projectId, request.jobId, principal)),
+        };
+      }
+      case "video.v1.get_asset_metadata": {
+        const request = GetAssetMetadataInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...(await this.editor.store.assetMetadata(request.projectId, request.assetId, principal)),
         };
       }
       case "video.v1.request_tracked_mask_review":
