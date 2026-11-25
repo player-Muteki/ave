@@ -892,6 +892,76 @@ export const getQaSummaryRpc = {
   output: GetQaSummaryResultSchema,
 };
 
+export const SceneCutsSchema = z
+  .object({
+    assetId: id,
+    contentHash: sha256,
+    jobId: id,
+    state: JobStateSchema,
+    revision: uint,
+    scenecutsArtifactId: id,
+    scenecutsSha256: sha256,
+    threshold: z.string().nullable(),
+    minGapSeconds: z.string().nullable(),
+    rate: RationalSchema.nullable(),
+    frameCount: z.number().int().min(0).nullable(),
+    truncated: z.boolean(),
+    cutCount: z.number().int().min(0),
+    cuts: z
+      .array(
+        z
+          .object({
+            frameIndex: z.number().int().min(0),
+            ptsTime: z.string(),
+            score: z.string(),
+            aligned: RationalSchema,
+          })
+          .strict(),
+      )
+      .max(64),
+    note: z.string(),
+  })
+  .strict();
+export type SceneCuts = z.infer<typeof SceneCutsSchema>;
+export const GetSceneCutsInputSchema = z
+  .object({ requestId, projectId: id, assetId: id })
+  .strict();
+export const GetSceneCutsResultSchema = SceneCutsSchema.extend({ requestId }).strict();
+export const getSceneCutsRpc = {
+  name: "video.v1.get_scene_cuts",
+  input: GetSceneCutsInputSchema,
+  output: GetSceneCutsResultSchema,
+};
+export const WaveformSummarySchema = z
+  .object({
+    assetId: id,
+    contentHash: sha256,
+    jobId: id,
+    state: JobStateSchema,
+    revision: uint,
+    waveformArtifactId: id,
+    waveformSha256: sha256,
+    streamUid: z.string().nullable(),
+    sampleRate: z.number().nullable(),
+    bucketMs: z.number().nullable(),
+    durationAnalyzedMs: z.string().nullable(),
+    truncated: z.boolean(),
+    bucketCount: z.number().int().min(0),
+    buckets: z.array(z.string()).max(1200),
+    note: z.string(),
+  })
+  .strict();
+export type WaveformSummary = z.infer<typeof WaveformSummarySchema>;
+export const GetWaveformInputSchema = z
+  .object({ requestId, projectId: id, assetId: id })
+  .strict();
+export const GetWaveformResultSchema = WaveformSummarySchema.extend({ requestId }).strict();
+export const getWaveformRpc = {
+  name: "video.v1.get_waveform",
+  input: GetWaveformInputSchema,
+  output: GetWaveformResultSchema,
+};
+
 export const contactSheetRpc = {
   name: "video.v1.contact_sheet",
   input: ContactSheetRequestSchema,
