@@ -953,7 +953,9 @@ async function smokePackagedDesktopApp({
     cdpPort,
   });
 
-  const plannerProbe = aveCandidate ? await startPlannerProbe(daemonHome, env) : null;
+  const demoSource = process.env.AVE_DEMO_SOURCE;
+  const probePlanner = aveCandidate && !demoSource;
+  const plannerProbe = probePlanner ? await startPlannerProbe(daemonHome, env) : null;
   const stdout = [];
   const stderr = [];
   const launch = getLaunchCommand(executablePath, launchArgs);
@@ -1006,7 +1008,7 @@ async function smokePackagedDesktopApp({
       deadline,
     });
     console.log("Packaged desktop smoke: renderer-started desktop daemon reported running");
-    await assertBuiltinPluginsStarted(listen, aveCandidate);
+    await assertBuiltinPluginsStarted(listen, probePlanner);
     console.log("Packaged desktop smoke: every built-in plugin started");
     // A server contribution can start even when the host rejects its client bundle.
     const desk = page.getByRole("button", { name: "剪辑工作台", exact: true });
@@ -1016,6 +1018,12 @@ async function smokePackagedDesktopApp({
     await desk.click({ timeout: remainingTime(deadline) });
     await page.getByRole("textbox", { name: "新项目名称" }).waitFor({ timeout: remainingTime(deadline) });
     console.log("Packaged desktop smoke: video editor opened from the sidebar");
+    if (demoSource) {
+      const { runVideoReleaseDemo } = require("./video-release-demo.js");
+      const resources = process.platform === "darwin" ? path.join(appPath, "Contents", "Resources") : path.join(appPath, "resources");
+      await runVideoReleaseDemo({ page, listen, source: demoSource, evidence: process.env.PASEO_DESKTOP_SMOKE_ARTIFACT_DIR,
+        media: path.join(resources, "native-media") });
+    }
     await smokeCliShim({ appPath, env });
     await smokeCliTerminal({ appPath, env });
     if (expectedSandbox !== undefined) {
