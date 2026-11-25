@@ -53,6 +53,8 @@ export class VideoToolBroker {
               intent: plan.intent.slice(0, 200),
             })),
           hasMorePlans: p.plans.length > 32,
+          approvalCount: p.approvals.length,
+          pendingApprovalCount: p.approvals.filter((a) => a.status === "pending").length,
           jobCount: p.jobs.length,
           jobs: p.jobs
             .slice(0, 64)
