@@ -360,7 +360,7 @@ type ExportManifest = {
 | `create_mask_revision/correct_mask_revision` | 创建或修正 mask | operator；产生新 subjectRevision/hash |
 | `create_keyframe_set` | 创建锚帧/参考图集合 | operator；产生新 subjectRevision/hash |
 | `start_agent_run/steer/follow_up/abort` | 控制规划会话 | operator；runId 幂等 |
-| `estimate_timeline` | 方案草稿或已采纳方案（planId）的只读时间线预估：校验问题 + 各轨道段数/总时长/转场重叠/有效输出时长，不渲染不落库 | operator；requestId + draft，或 requestId + projectId + planId |
+| `estimate_timeline` | 方案草稿或已采纳方案（planId）的只读时间线预估：校验问题 + 各轨道段数/总时长/转场重叠/有效输出时长，不渲染不落库 | operator；桌面传 requestId + draft 或 requestId + projectId + planId；规划工具保留直接传完整草稿，也接受只传 {planId}，项目由 daemon 的 run 绑定，未知及跨项目 ID 均返回 ASSET_NOT_FOUND |
 | `submit_plan_review` | 用户对 Plan 提修改，不是 Agent 提交 | operator |
 | `get_approval/decide_approval/revoke_approval` | 查看、approve/reject 或撤销 grant | operator；ApprovalDecision + requestId |
 | `create_preview_job/create_final_job/create_export_job` | 消费对应 purpose grant 创建任务 | operator；requestId + expectedRevision + grantId |

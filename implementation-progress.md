@@ -303,3 +303,9 @@
 真实 Chrome 工作台上传 8 秒 MKV，在第二块已写入、第一块确认已显示时连续点击两次取消。实测只发送两块，项目资产数为零，分块状态已删除，524288 字节临时文件已移除。重新选择同一文件上传，在提交已落库且回执仍在途时点击取消，界面显示素材已导入，项目仅有一份且摘要匹配。服务端按上传 ID 串行处理写入、取消与提交，回执丢失时客户端可按原请求恢复结果。
 
 复验入口为 `edit-desk.browser.e2e.test.ts -t "cancel active upload"`、`upload.test.ts` 和 `import-source.test.ts`。本项在 macOS 上的 Chrome 与真实 daemon 验证。
+
+## v0.1.0 · 规划工具按方案 ID 预估
+
+生产规划 Worker 子进程从本地测试 provider 收到 `estimate_timeline({"planId":"<本次已保存方案>"})`。经过 Pi 工具调用与 daemon IPC 后，provider 收到同一 planId，`effectiveMainDurationSeconds="1.000"`、`valid=true`、`issue=null`，方案数未变化。此记录的 ID 已脱敏，provider 使用固定响应，覆盖工具链路。真实模型生成剪辑区间另在最终包演示中验收。
+
+`agent/planner-approval.test.ts` 覆盖上述调用；`tool-broker.test.ts` 同时验证原草稿和 ID，两种输入得到相同时长，未知及跨项目 ID 均返回 ASSET_NOT_FOUND。TS 工具与契约测试通过 170 项，Python 对 104 个定义验证 161 个线格式样例。

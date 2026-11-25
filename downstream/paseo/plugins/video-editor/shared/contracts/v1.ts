@@ -420,6 +420,11 @@ export const CreateProjectInputSchema = z
 export const ProjectRequestSchema = z.object({ projectId: id }).strict();
 // The daemon binds the principal, project and run to the worker channel. They
 // are never selected by a model-supplied envelope.
+const savedPlanArgs = z.object({ planId: id }).strict();
+// Model providers require one object at the root of function parameters. The wire
+// union below enforces the two mutually exclusive shapes before invoking the daemon.
+export const EstimateTimelineModelParameters = EditPlanDraftV1Schema.partial().extend(savedPlanArgs.partial().shape);
+
 const toolEnvelope = z.object({ protocolVersion: z.literal("1"), toolCallId: id }).strict();
 export const VideoToolCallSchema = z.discriminatedUnion("tool", [
   toolEnvelope.extend({ tool: z.literal("get_project_snapshot"), args: ProjectRequestSchema }),
@@ -436,7 +441,7 @@ export const VideoToolCallSchema = z.discriminatedUnion("tool", [
     args: z.object({ jobId: id }).strict(),
   }),
   toolEnvelope.extend({ tool: z.literal("validate_edit_plan"), args: EditPlanDraftV1Schema }),
-  toolEnvelope.extend({ tool: z.literal("estimate_timeline"), args: EditPlanDraftV1Schema }),
+  toolEnvelope.extend({ tool: z.literal("estimate_timeline"), args: z.union([savedPlanArgs, EditPlanDraftV1Schema]) }),
   toolEnvelope.extend({ tool: z.literal("submit_edit_plan"), args: EditPlanDraftV1Schema }),
   toolEnvelope.extend({
     tool: z.literal("get_contact_sheet"),

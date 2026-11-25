@@ -9,7 +9,7 @@ import {
   type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
-import { VideoToolCallSchema, type EditorEvent } from "#video-editor/contracts/v1";
+import { EstimateTimelineModelParameters, VideoToolCallSchema, type EditorEvent } from "#video-editor/contracts/v1";
 import { VIDEO_PLANNER_PROMPT, videoPlannerPromptSignature } from "./prompt.js";
 import { newRequestId, sha256Hex, type DaemonToWorker, type IpcChannel, type WorkerToDaemon } from "./ipc.js";
 
@@ -57,7 +57,8 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
     "Read-only lifecycle state and recent persisted events of this planning run (no worker internals).",
   diff_plans:
     "Field-level diff between an accepted plan (planId) and a candidate draft before submitting. Read-only.",
-  estimate_timeline: "Estimate draft timeline duration and report validation issues before submission.",
+  list_artifacts: "List bounded artifact metadata for a job in this project.",
+  estimate_timeline: "Estimate duration and validation issues. Supply only planId for a saved plan, or all fields of an edit-plan draft without planId.",
   get_waveform: "Inspect bounded RMS waveform buckets for the asset audio stream.",
   get_qa_summary:
     "Bounded QA summary of a rendered job (streams, duration, loudness, recipe/plan hashes, gates). Never returns pixels or full probe.",
@@ -153,7 +154,7 @@ export async function createPlannerSession(options: PlannerSessionOptions) {
   const customTools = VideoToolCallSchema.options.map((option) => {
     const name = option.shape.tool.value as string;
     const submit = name === "submit_edit_plan";
-    const parameters = z.toJSONSchema(option.shape.args, { io: "input" });
+    const parameters = z.toJSONSchema(name === "estimate_timeline" ? EstimateTimelineModelParameters : option.shape.args, { io: "input" });
     delete (parameters as Record<string, unknown>).$schema;
     return {
       name,

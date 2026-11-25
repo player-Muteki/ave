@@ -101,6 +101,14 @@ it("binds tool calls to the admitted project and persists only a proposed plan",
     );
     const after = store.project(projectId, principal);
     expect(after.plans).toHaveLength(1);
+    const planId = after.plans[0]!.planId;
+    const estimate = { projectId, valid: true, issue: null, effectiveMainDurationSeconds: "1.000" };
+    expect(await call("estimate_timeline", plan)).toMatchObject(estimate);
+    expect(await call("estimate_timeline", { planId })).toMatchObject({ ...estimate, planId });
+    await expect(call("estimate_timeline", { planId: "missing" })).rejects.toMatchObject({ code: "ASSET_NOT_FOUND" });
+    const foreign = new VideoToolBroker(store, { projectId: other.projectId, principal, runId: "other" });
+    await expect(foreign.invoke({ protocolVersion: "1", toolCallId: "estimate", tool: "estimate_timeline", args: { planId } }))
+      .rejects.toMatchObject({ code: "ASSET_NOT_FOUND" });
     expect(after.approvals.map((a) => a.status)).toEqual(["pending"]);
     expect(after.jobs).toEqual([]);
   } finally {

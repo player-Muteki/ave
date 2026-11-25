@@ -119,6 +119,7 @@ it("passes project context to the configured provider and persists a strict tool
       externalDestinations: [],
       maxCostMicros: "0",
     };
+    let savedPlanId: string | undefined;
     server.on("request", async (request, response) => {
       try {
         const chunks: Buffer[] = [];
@@ -126,6 +127,11 @@ it("passes project context to the configured provider and persists a strict tool
         requests.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
         if (requests.length === 1) respondWithTool(response, "get_project_snapshot", { projectId });
         else if (requests.length === 2) respondWithTool(response, "submit_edit_plan", draft);
+        else if (requests.length === 3 && savedPlanId) respondWithTool(response, "estimate_timeline", { planId: savedPlanId });
+        else if (requests.length === 4 && savedPlanId) {
+          response.writeHead(200, { "content-type": "text/event-stream" });
+          response.end('data: {"id":"done","model":"fixture","choices":[{"index":0,"delta":{"role":"assistant","content":"Done"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+        }
         else response.writeHead(400).end("Unexpected request after submitting the plan");
       } catch {
         response.writeHead(400).end("Invalid fixture request");
@@ -207,6 +213,15 @@ it("passes project context to the configured provider and persists a strict tool
       state: "settled",
     });
 
+    savedPlanId = result.plans[0].planId;
+    const estimated = await editor.agents.startRun({ projectId, requestId: "estimate", prompt: "Estimate the saved plan." }, principal);
+    await expect.poll(() => editor.store.runLifecycle(projectId, principal).find(r => r.runId === estimated.runId)?.state,
+      { timeout: 10_000 }).toBe("settled");
+    const reply = requests[3].messages.find(message => message.role === "tool");
+    expect(JSON.parse(String(reply?.content))).toMatchObject({
+      projectId, planId: savedPlanId, effectiveMainDurationSeconds: "1.000", valid: true, issue: null,
+    });
+    expect(editor.store.project(projectId, principal).plans).toEqual(result.plans);
     vi.stubEnv("VIDEO_EDITOR_PLANNER_MODEL", "fixture/missing-model");
     const invalid = await editor.agents.startRun(
       { projectId, requestId: "invalid-model", prompt: draft.intent },
@@ -220,7 +235,7 @@ it("passes project context to the configured provider and persists a strict tool
         { timeout: 10_000 },
       )
       .toBe("failed");
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(4);
     expect(editor.store.project(projectId, principal).plans).toEqual(result.plans);
 
     vi.stubEnv("VIDEO_EDITOR_PLANNER_MODEL", "fixture/fixture");
@@ -236,7 +251,7 @@ it("passes project context to the configured provider and persists a strict tool
         { timeout: 10_000 },
       )
       .toBe("failed");
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(5);
     expect(editor.store.project(projectId, principal).plans).toEqual(result.plans);
   } finally {
     vi.unstubAllEnvs();

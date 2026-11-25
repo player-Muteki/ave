@@ -7135,7 +7135,24 @@
               "const": "estimate_timeline"
             },
             "args": {
-              "$ref": "urn:video-editor:v1:EditPlanDraftV1"
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "planId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                    }
+                  },
+                  "required": [
+                    "planId"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "$ref": "urn:video-editor:v1:EditPlanDraftV1"
+                }
+              ]
             }
           },
           "required": [

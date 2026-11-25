@@ -205,7 +205,10 @@ export class VideoToolBroker {
         return { valid: true };
       case "estimate_timeline":
         return this.store.estimateTimeline(
-          { requestId: sha256Json([projectId, runId, call.toolCallId, "estimate"]), draft: call.args },
+          {
+            requestId: sha256Json([projectId, runId, call.toolCallId, "estimate"]),
+            ...("planId" in call.args ? { projectId, planId: call.args.planId } : { draft: call.args }),
+          },
           principal,
         );
       case "submit_edit_plan": {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { VideoToolCallSchema } from "../shared/contracts/v1.ts";
+import { EstimateTimelineModelParameters, VideoToolCallSchema } from "../shared/contracts/v1.ts";
 
 const prompt =
   "You are a video edit planner. Inspect project metadata and propose a structured plan. Only the human can approve rendering or delivery.";
@@ -24,7 +24,8 @@ const descriptions = {
     "Read-only lifecycle state and recent persisted events of this planning run (no worker internals).",
   diff_plans:
     "Field-level diff between an accepted plan (planId) and a candidate draft before submitting. Read-only.",
-  estimate_timeline: "Estimate draft timeline duration and report validation issues before submission.",
+  list_artifacts: "List bounded artifact metadata for a job in this project.",
+  estimate_timeline: "Estimate duration and validation issues. Supply only planId for a saved plan, or all fields of an edit-plan draft without planId.",
   get_waveform: "Inspect bounded RMS waveform buckets for the asset audio stream.",
   get_qa_summary:
     "Bounded QA summary of a rendered job (streams, duration, loudness, recipe/plan hashes, gates). Never returns pixels or full probe.",
@@ -49,7 +50,7 @@ export async function createClosedVideoPlanner(sdk, { cwd, agentDir, invoke }) {
   };
   const customTools = VideoToolCallSchema.options.map((option) => {
     const name = option.shape.tool.value;
-    const parameters = z.toJSONSchema(option.shape.args, { io: "input" });
+    const parameters = z.toJSONSchema(name === "estimate_timeline" ? EstimateTimelineModelParameters : option.shape.args, { io: "input" });
     delete parameters.$schema;
     return {
       name,
