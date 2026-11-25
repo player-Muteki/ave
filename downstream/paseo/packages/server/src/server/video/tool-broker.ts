@@ -26,6 +26,10 @@ export class VideoToolBroker {
     switch (call.tool) {
       case "get_project_snapshot": {
         const p = this.store.project(projectId, principal);
+        const analysisState = new Map<string, string>();
+        for (const j of [...p.jobs].sort((a, b) => (a.jobId < b.jobId ? 1 : -1)))
+          if (j.analysisAssetId && !analysisState.has(j.analysisAssetId))
+            analysisState.set(j.analysisAssetId, j.state);
         return {
           projectId,
           revision: p.revision,
@@ -33,7 +37,11 @@ export class VideoToolBroker {
           assetCount: p.assets.length,
           assets: p.assets
             .slice(0, 64)
-            .map((a) => ({ assetId: a.assetId, contentHash: a.original.sha256 })),
+            .map((a) => ({
+              assetId: a.assetId,
+              contentHash: a.original.sha256,
+              analysisState: analysisState.get(a.assetId) ?? null,
+            })),
           hasMoreAssets: p.assets.length > 64,
           planCount: p.plans.length,
           plans: p.plans
