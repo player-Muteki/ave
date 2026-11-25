@@ -514,6 +514,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 <Text key={op.opId} style={muted}>
                   {op.trackId} · 源入点 {op.sourceRange.start.num}/{op.sourceRange.start.den} 秒 ·
                   保留 {op.sourceRange.duration.num}/{op.sourceRange.duration.den} 秒
+                  {op.overlayX !== undefined ? ` · 叠加@${op.overlayX},${op.overlayY}` : ""}
                 </Text>
               ))}
             </View>
