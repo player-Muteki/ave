@@ -244,6 +244,10 @@ export class MediaService {
         streamUid: op.source.streamUid,
         sourceRange: op.sourceRange,
         recordRange: op.recordRange,
+        fadeIn: op.fadeIn,
+        fadeOut: op.fadeOut,
+        overlayX: op.overlayX,
+        overlayY: op.overlayY,
       })),
       transitions: plan.transitionOperations.map((tr) => ({
         opId: tr.opId,
@@ -273,6 +277,8 @@ export class MediaService {
         sourceRange: op.sourceRange,
         gainMilli: op.gainMilli,
         mute: op.mute,
+        fadeIn: op.fadeIn,
+        fadeOut: op.fadeOut,
       })),
     });
     this.throwIfCancelled(signal);

@@ -86,6 +86,7 @@
 - 已实现：update_division.py 统计锚定到源码树哈希 + 排除 merge commit，PR merge ref 下 DIVISION.svg 不再报 stale（CI pull_request 事件已 pass）；planner prompt 说 get_plan。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：audioOperations 支持 fadeIn/fadeOut（afade），契约校验两者之和不超片段时长；render 在 volume 后加 afade，客户端 UI 增深入/淡出秒；profile 实测 16 项全 PASS，afade 本机实跑验证。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：片段可带 fadeIn/fadeOut（fade 视频淡入淡出），契约不超片段时长；render 在 trim 后插 fade 滤镜；UI 新增视频淡入/淡出秒；profile 18 项全 PASS，fade 本机实跑 2.000s/50 帧全解码无错。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：export manifest 片段/音频记录补充 fadeIn/fadeOut/overlayX/overlayY 字段。未跑真模型/e2e。
 
 ## 环境与错误
 
