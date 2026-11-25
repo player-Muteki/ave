@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { build } from "esbuild";
 import { expect, test } from "vitest";
 import { decodeFramedChunk, encodeFramedChunk } from "#video-editor/bytes";
-import { EditPlanDraftV1Schema, TrackedMaskManifestSchema, MaskAnchorRevisionSchema, ProjectSnapshotSchema, UploadStatusSchema } from "#video-editor/contracts/v1";
+import { EventsResultSchema, EditPlanDraftV1Schema, TrackedMaskManifestSchema, MaskAnchorRevisionSchema, ProjectSnapshotSchema, UploadStatusSchema } from "#video-editor/contracts/v1";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DatabaseSync } from "./sqlite.js";
@@ -23,6 +23,7 @@ const repo = fileURLToPath(new URL("../../../../../", import.meta.url));
 test
   .skipIf(process.env.VIDEO_EDITOR_BROWSER_TEST !== "1")
   .each(["source import", "preview approval and reviewed delivery", "reject preview", "project creation and discovery",
+    ...(process.env.VIDEO_EDITOR_LIVE_PLANNER === "1" ? ["last-second planning approval"] : []),
     ...(process.env.VIDEO_EDITOR_SAM2_TEST === "1" ? ["object mask"] : [])])(
   "edit desk: %s",
   async (scenario) => {
@@ -61,25 +62,35 @@ test
       const project = ProjectSnapshotSchema.parse(
         await invoke("create_project", { title: "镜头测试", requestId: "project" }),
       );
-      const source = path.join(root, "clip.mp4");
-      await execute(
-        "ffmpeg",
-        [
-          "-v",
-          "error",
-          "-f",
-          "lavfi",
-          "-i",
-          scenario === "object mask" ? "color=c=navy:size=320x192:rate=25:duration=2[bg];color=c=orange:size=84x72:rate=25:duration=2[box];[bg][box]overlay=x=96+5*n:y=60"
-            : "testsrc2=size=160x90:rate=25:duration=2",
-          "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2",
-          "-c:a", "aac",
-          "-c:v",
-          "libx264",
-          source,
-        ],
-        { timeout: 30000 },
-      );
+      const tailRequest = scenario === "last-second planning approval";
+      const source = path.join(root, tailRequest ? "offset.mkv" : "clip.mp4");
+      if (tailRequest) {
+        // Audio starts at native PTS 2.00 s and video at 2.12 s. Both end at 4.40 s.
+        await execute("ffmpeg", [
+          "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=64x48:rate=25:duration=2.4",
+          "-f", "lavfi", "-i", "sine=sample_rate=8000:duration=2.4", "-vf", "select='gte(n,3)*not(eq(n,5))'",
+          "-fps_mode", "vfr", "-c:v", "ffv1", "-c:a", "pcm_s16le", "-output_ts_offset", "2", source,
+        ], { timeout: 30000 });
+      } else {
+        await execute(
+          "ffmpeg",
+          [
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            scenario === "object mask" ? "color=c=navy:size=320x192:rate=25:duration=2[bg];color=c=orange:size=84x72:rate=25:duration=2[box];[bg][box]overlay=x=96+5*n:y=60"
+              : "testsrc2=size=160x90:rate=25:duration=2",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2",
+            "-c:a", "aac",
+            "-c:v",
+            "libx264",
+            source,
+          ],
+          { timeout: 30000 },
+        );
+      }
       const bytes = await readFile(source);
       const digest = createHash("sha256").update(bytes).digest("hex");
       if (scenario !== "source import" && scenario !== "project creation and discovery") {
@@ -87,10 +98,10 @@ test
           await invoke("create_upload", {
             projectId: project.projectId,
             requestId: "upload",
-            displayName: "镜头 A.mp4",
+            displayName: tailRequest ? "镜头 A.mkv" : "镜头 A.mp4",
             expectedSize: String(bytes.length),
             expectedSha256: digest,
-            mediaType: "video/mp4",
+            mediaType: tailRequest ? "video/x-matroska" : "video/mp4",
           }),
         );
         await invoke(
@@ -181,6 +192,63 @@ test
       }
       await web("fill", '[aria-label="项目 ID"]', project.projectId);
       await web("find", "role", "button", "click", "--name", "打开项目");
+      if (tailRequest) {
+        await web("fill", '[aria-label="规划意图（自然语言）"]', "只保留唯一视频素材的最后一秒和原声，提交给我审批。");
+        await clickDesk("开始规划");
+        const getEvents = async () => EventsResultSchema.parse(await invoke("get_events", {
+          projectId: project.projectId, afterSeq: project.latestSeq,
+        })).events;
+        await expect.poll(async () => (await getEvents()).findLast(event =>
+          ["run.settled", "run.failed", "run.interrupted"].includes(event.type),
+        )?.type, { timeout: 150_000, interval: 500 }).toBeDefined();
+        const events = await getEvents();
+        const settled = events.find(event => event.type === "run.settled");
+        expect(settled?.runId).toBeTruthy();
+        await clickDesk("刷新事件");
+        await web("wait", "--text", "预览审批");
+        const snapshot = ProjectSnapshotSchema.parse(await invoke("get_project", { projectId: project.projectId }));
+        expect(snapshot.plans).toHaveLength(1);
+        const plan = snapshot.plans[0]!;
+        expect(plan).toMatchObject({
+          runId: settled!.runId, status: "proposed", deterministicBackendId: "ffmpeg",
+          transformOperations: [], subtitleOperations: [], transitionOperations: [], generationRequests: [],
+          externalDestinations: [],
+        });
+        expect(plan.trimOperations).toHaveLength(1);
+        const trim = plan.trimOperations[0]!;
+        expect(trim.trackId).toBe("v1");
+        expect(trim.fadeIn).toBeUndefined();
+        expect(trim.fadeOut).toBeUndefined();
+        const asset = snapshot.assets[0]!;
+        expect(trim.source).toMatchObject({
+          assetId: asset.assetId, assetContentHash: digest,
+          streamUid: asset.streams.find(stream => stream.kind === "video")!.streamUid,
+        });
+        for (const audio of plan.audioOperations) {
+          expect(audio.source).toMatchObject({
+            assetId: asset.assetId, assetContentHash: digest,
+            streamUid: asset.streams.find(stream => stream.kind === "audio")!.streamUid,
+          });
+          expect(BigInt(audio.gainMilli)).toBe(0n);
+          expect(audio.mute).toBe(false);
+          expect(audio.fadeIn).toBeUndefined();
+          expect(audio.fadeOut).toBeUndefined();
+          expect(BigInt(audio.sourceRange.start.num) * 5n).toBe(BigInt(audio.sourceRange.start.den) * 7n);
+          expect(BigInt(audio.sourceRange.duration.num)).toBe(BigInt(audio.sourceRange.duration.den));
+        }
+        // The user's last second is [1.40, 2.40) in playback time.
+        expect(BigInt(trim.sourceRange.start.num) * 5n).toBe(BigInt(trim.sourceRange.start.den) * 7n);
+        for (const time of [trim.sourceRange.duration, trim.recordRange.duration])
+          expect(BigInt(time.num)).toBe(BigInt(time.den));
+        expect(BigInt(trim.recordRange.start.num)).toBe(0n);
+        expect(snapshot.approvals).toMatchObject([{
+          purpose: "preview", status: "pending", subjectId: plan.planId, subjectHash: plan.planHash,
+        }]);
+        expect(await web("snapshot")).toContain(plan.planHash);
+        expect(snapshot.jobs.filter(job => job.kind !== "analysis")).toEqual([]);
+        expect(createHash("sha256").update(await readFile(source)).digest("hex")).toBe(digest);
+        return;
+      }
       if (scenario === "source import") {
         await web("wait", "--text", "项目中还没有素材");
         const picker = 'input[type="file"][aria-label="选择本机视频"]';
@@ -598,5 +666,5 @@ test
       }
     }
   },
-  process.env.VIDEO_EDITOR_VACE_TEST === "1" ? 420000 : 120000,
+  process.env.VIDEO_EDITOR_VACE_TEST === "1" ? 420000 : process.env.VIDEO_EDITOR_LIVE_PLANNER === "1" ? 210000 : 120000,
 );

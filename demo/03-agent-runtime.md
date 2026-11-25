@@ -142,6 +142,13 @@ VIDEO_EDITOR_LIVE_PLANNER=1 npm exec --workspace=@getpaseo/server -- \
   vitest run src/server/video/agent/planner-approval.real.e2e.test.ts
 ```
 
+在安装了 Chrome、agent-browser 和 FFmpeg 的主机上，可从真实剪辑工作台输入“保留最后一秒和原声”。浏览器用例导入一段播放时长 2.4 秒、带非零时间戳的 MKV，检查模型提交的播放区间为 `[1.4, 2.4)`、审批卡上的方案哈希与 daemon 一致，以及批准前项目内只有分析任务。运行前配置同一规划模型，并用 `CHROME_BIN` 指定本机 Chrome 可执行文件。
+
+```bash
+VIDEO_EDITOR_BROWSER_TEST=1 VIDEO_EDITOR_LIVE_PLANNER=1 npm exec --workspace=@getpaseo/server -- \
+  vitest run src/server/video/edit-desk.browser.e2e.test.ts -t "last-second planning approval"
+```
+
 ## 9. 控制、事件与恢复
 
 | 用户动作 | 正确控制 | 不等价行为 |
