@@ -743,18 +743,11 @@ export class VoiceAssistantWebSocketServer {
     private readonly editorService?: EditorService,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
-    this.unsubscribeVideoRevocation =
-      this.editorService?.access.onRevoke((deviceId) => {
-        for (const [ws, reader] of this.videoReaders) {
-          if (reader.deviceId !== deviceId) continue;
-          this.videoReaders.delete(ws);
-          try {
-            ws.close(1008, "Video device revoked");
-          } catch {
-            // The transport may already be closed.
-          }
-        }
-      }) ?? null;
+    // Video device revocation is enforced per call in handleVideoReader: a revoked device's
+    // next request receives a correlated "access denied" error and only then is its socket
+    // closed. An eager close here would race that response and surface a bare transport error
+    // instead of the authorization failure, so no revoke listener closes sockets eagerly.
+    this.unsubscribeVideoRevocation = null;
     this.workspaceSetupRuntime = workspaceSetupRuntime;
     this.workspaceArchiveOperations = resolveWorkspaceArchiveOperations(workspaceArchiveOperations);
     this.advertiseDaemonStatusRpc = wsConfig.daemonStatusRpc !== false;
@@ -2887,6 +2880,19 @@ export class VoiceAssistantWebSocketServer {
       type: "rpc_error",
       payload: { ...info, error: "Video device access denied", code: "access_denied" },
     });
+    // A revoked device (its principal is gone, not merely a wrong-project read) is kicked
+    // only AFTER the correlated access-denied error above is delivered, so the caller sees
+    // the authorization failure rather than a bare transport close.
+    try {
+      editor?.access.activePrincipal(reader.deviceId);
+    } catch {
+      this.videoReaders.delete(ws);
+      try {
+        ws.close(1008, "Video device revoked");
+      } catch {
+        // The transport may already be closed.
+      }
+    }
   }
 
   private replyToApplicationPing(ws: WebSocketLike): void {
