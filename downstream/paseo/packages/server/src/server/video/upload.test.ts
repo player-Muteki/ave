@@ -6,8 +6,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { EditorService } from "./service.js";
+import { VideoToolBroker } from "./tool-broker.js";
 import { SourceImport } from "../../../../../plugins/video-editor/client/import-source.js";
-import { commitUploadRpc, createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc } from "#video-editor/contracts/v1";
+import { PlannerAssetMetadataSchema, commitUploadRpc, createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc } from "#video-editor/contracts/v1";
 import { decodeChunkMetadata } from "#video-editor/bytes";
 
 it("resumes from confirmed bytes after restart without overwriting acknowledged chunks", async () => {
@@ -106,6 +107,14 @@ it("retains confirmed bytes through probe failure and replays a committed receip
     await editor.start();
     const result = await commit();
     expect(result.original.sha256).toBe(digest);
+    const broker = new VideoToolBroker(editor.store, { projectId, runId: "metadata", principal });
+    const metadata = PlannerAssetMetadataSchema.parse(await broker.invoke({
+      protocolVersion: "1", toolCallId: "timing", tool: "get_asset_metadata",
+      args: { assetId: result.assetId, contentHash: digest },
+    }));
+    const [video] = metadata.streams;
+    expect(video).toMatchObject({ kind: "video", startPts: "0", averageRate: { num: "10", den: "1" } });
+    expect(BigInt(video!.durationTicks!) * BigInt(video!.timeBase.num) * 5n).toBe(BigInt(video!.timeBase.den));
     const snapshot = editor.store.project(projectId, principal);
     expect(snapshot.assets).toHaveLength(1);
     const second = editor.store.createProject({

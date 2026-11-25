@@ -61,6 +61,18 @@ export const StreamDescriptorSchema = z
   .strict();
 export type StreamDescriptor = z.infer<typeof StreamDescriptorSchema>;
 
+export const PlannerAssetMetadataSchema = z.object({
+  assetId: id,
+  contentHash: sha256,
+  streams: z.array(StreamDescriptorSchema.pick({
+    streamUid: true, kind: true, codec: true, timeBase: true,
+    averageRate: true, width: true, height: true, sampleRate: true,
+  }).extend({
+    startPts: RationalSchema.shape.num.optional(),
+    durationTicks: uint.optional(),
+  })),
+}).strict();
+
 export const SourceAssetSchema = z
   .object({
     assetId: id,
