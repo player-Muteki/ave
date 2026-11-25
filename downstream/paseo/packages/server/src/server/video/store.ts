@@ -1149,6 +1149,54 @@ export class EditorStore {
   }
 
   /**
+   * Read the deterministic waveform artifact of the latest analysis job for an
+   * asset. Bounded: at most 1200 RMS buckets (100 ms each), hashes included.
+   * Viewer-level; lets the planner align cuts to loud/silent audio without pixels.
+   */
+  async waveform(projectId: string, assetId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
+    const project = this.project(projectId, principal);
+    const asset = project.assets.find((a) => a.assetId === assetId);
+    if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
+    const latest = project.jobs
+      .filter((j) => j.analysisAssetId === assetId)
+      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+    if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
+    const artifact = latest.artifacts.find((a) => a.kind === "waveform");
+    if (!artifact) editorFailure("ASSET_NOT_FOUND", "The analysis job has no waveform artifact yet");
+    const doc = JSON.parse((await this.cas.readBytes(artifact.blob)).toString("utf8")) as {
+      schemaVersion?: string;
+      streamUid?: string;
+      sampleRate?: number;
+      bucketMs?: number;
+      durationAnalyzedMs?: string;
+      truncated?: boolean;
+      buckets?: string[];
+    };
+    if (doc.schemaVersion !== "video.waveform/v1")
+      editorFailure("ARTIFACT_HASH_MISMATCH", "Unexpected waveform schema version");
+    const buckets = doc.buckets ?? [];
+    return {
+      assetId,
+      contentHash: asset.original.sha256,
+      jobId: latest.jobId,
+      state: latest.state,
+      revision: latest.revision,
+      waveformArtifactId: artifact.artifactId,
+      waveformSha256: artifact.blob.sha256,
+      streamUid: doc.streamUid ?? null,
+      sampleRate: doc.sampleRate ?? null,
+      bucketMs: doc.bucketMs ?? null,
+      durationAnalyzedMs: doc.durationAnalyzedMs ?? null,
+      truncated: doc.truncated ?? false,
+      bucketCount: buckets.length,
+      buckets: buckets.slice(0, 1200),
+      note: "RMS level per bucket normalized to 0..1; use silent buckets (near 0) as dialogue-free cut candidates.",
+    };
+  }
+
+  /**
    * Bounded, parsed view of a job's QA artifact for the planner: stream
    * summary, duration, loudness, recipe/plan hashes and gate statuses. The
    * full probe stays in CAS; only this summary crosses the worker boundary.
