@@ -31,7 +31,7 @@ export const VIDEO_PLANNER_PROMPT = `你是视频编辑规划 Agent，不是渲�
 - transitionOperations：crossfade（叠化）或 fade（黑场淡入淡出），连接相邻片段，时长不得超过任一侧片段。
 - transformOperations：每片段至多一个 crop/scale/rotation，裁剪与缩放尺寸须为正偶数。
 - audioOperations：每片段音量 gainMilli/mute（至多 64 条），音源可以是该片段素材或项目内任一音频素材（如 BGM），record 区间须与对应片段一致。
-- subtitleOperations：仅 burn-in 字幕（至多 64 条），range 落在输出时间线上。
+- subtitleOperations：burn-in 烧录或 metadata（mov_text 软字幕 sidecar，至多 64 条），range 落在输出时间线上。
 - 不支持生成请求、QA 要求、外部目的地与重定时；preferredDeterministicBackendId 一律填 "ffmpeg"。
 
 失败：

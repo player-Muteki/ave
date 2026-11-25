@@ -862,35 +862,46 @@ export class MediaService {
     );
     let vOut = "[vout]";
     let subDir: string | undefined;
-    if (plan.subtitleOperations.length) {
-      // Burn-in cues are written to an SRT in record time and rendered after the
-      // concat/scale so cue ranges refer to the output timeline, not the source.
-      const cues = plan.subtitleOperations.slice().sort((a, b) =>
-        BigInt(a.range.start.num) * BigInt(b.range.start.den) <
-        BigInt(b.range.start.num) * BigInt(a.range.start.den) ? -1 : 1,
-      );
-      const fmt = (s: number) => {
-        const h = Math.floor(s / 3600);
-        const m = Math.floor((s % 3600) / 60);
-        const sec = Math.floor(s % 60);
-        const ms = Math.round((s - Math.floor(s)) * 1000);
-        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
-      };
-      const srt = cues
+    const cues = plan.subtitleOperations.slice().sort((a, b) =>
+      BigInt(a.range.start.num) * BigInt(b.range.start.den) <
+      BigInt(b.range.start.num) * BigInt(a.range.start.den) ? -1 : 1,
+    );
+    const fmt = (s: number) => {
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = Math.floor(s % 60);
+      const ms = Math.round((s - Math.floor(s)) * 1000);
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
+    };
+    const toSrt = (list: typeof cues) =>
+      list
         .map((cue, i) => {
           const start = Number(rationalSeconds(cue.range.start));
           const end = start + Number(rationalSeconds(cue.range.duration));
           return `${i + 1}\n${fmt(start)} --> ${fmt(end)}\n${cue.text.replace(/\s+/g, " ").trim()}\n`;
         })
         .join("\n");
+    // Burn-in cues are rendered after the concat/scale so cue ranges refer to
+    // the output timeline; metadata cues ship as a mov_text sidecar track.
+    const burnCues = cues.filter((c) => c.mode === "burn-in");
+    const metaCues = cues.filter((c) => c.mode === "metadata");
+    if (burnCues.length) {
       subDir = await mkdtemp(path.join(tmpdir(), "video-subs-"));
       const srtPath = path.join(subDir, "cues.srt");
-      await writeFile(srtPath, srt, "utf8");
+      await writeFile(srtPath, toSrt(burnCues), "utf8");
       const escaped = srtPath.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "'\\''");
       filters.push(
         `[vout]subtitles='${escaped}':force_style='FontSize=18,Outline=1,BackColour=&H80000000&'[vfinal]`,
       );
       vOut = "[vfinal]";
+    }
+    let metaSrtIndex = -1;
+    if (metaCues.length) {
+      subDir ??= await mkdtemp(path.join(tmpdir(), "video-subs-"));
+      const srtPath = path.join(subDir, "sidecar.srt");
+      await writeFile(srtPath, toSrt(metaCues), "utf8");
+      args.push("-i", srtPath);
+      metaSrtIndex = args.reduce((n, a) => (a === "-i" ? n + 1 : n), 0) - 1;
     }
     args.push(
       "-filter_complex",
@@ -907,6 +918,8 @@ export class MediaService {
     );
     if (audioSegments.length)
       args.push("-map", "[acat]", "-c:a", "aac", "-ar", "48000");
+    if (metaSrtIndex >= 0)
+      args.push("-map", `${metaSrtIndex}:0`, "-c:s", "mov_text");
     args.push("-movflags", "+faststart", output);
     try {
       await this.spawnChecked(this.tools.ffmpeg, args, signal);
@@ -1056,7 +1069,8 @@ function checkCandidate(
   const outGeo = segmentGeometry(source ?? {}, candidateTransforms.get(v1First.clipId));
   const width = kind === "final" ? outGeo.width || source?.width : 640;
   const height = kind === "final" ? outGeo.height || source?.height : 360;
-  const expectedStreams = 1 + (audioProfile ? 1 : 0);
+  const metaSubs = plan.subtitleOperations.some((op) => op.mode === "metadata") ? 1 : 0;
+  const expectedStreams = 1 + (audioProfile ? 1 : 0) + metaSubs;
   if (
     !video ||
     video.codec_name !== "h264" ||
@@ -1065,6 +1079,8 @@ function checkCandidate(
     doc.streams.length !== expectedStreams
   )
     editorFailure("QA_FAILED", "Unexpected candidate streams or dimensions");
+  if (metaSubs && !doc.streams.some((s) => s.codec_type === "subtitle" && s.codec_name === "mov_text"))
+    editorFailure("QA_FAILED", "Missing mov_text sidecar subtitle stream");
   assertCandidateAudio(audioProfile ? [audioProfile] : [], doc.streams);
   let total = { num: 0n, den: 1n };
   const trackByClip = new Map(plan.trimOperations.map((op) => [op.clipId, op.trackId]));
@@ -1084,6 +1100,7 @@ function checkCandidate(
   }
   const dur: Rational = { num: total.num.toString(), den: total.den.toString() };
   for (const s of doc.streams) {
+    if (s.codec_type === "subtitle") continue;
     if (!s.time_base || !Number.isSafeInteger(s.duration_ts) || s.start_pts !== 0)
       editorFailure("QA_FAILED", "Missing or invalid candidate timeline");
     const base = parseRational(s.time_base);

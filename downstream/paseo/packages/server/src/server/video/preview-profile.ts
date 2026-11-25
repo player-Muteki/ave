@@ -45,11 +45,8 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
     if (!rationalEquals(op.sourceRange.duration, op.recordRange.duration))
       editorFailure("CAPABILITY_UNAVAILABLE", "Audio retiming is not supported");
   }
-  if (draft.subtitleOperations.length > 64 || draft.subtitleOperations.some((op) => op.mode !== "burn-in"))
-    editorFailure(
-      "CAPABILITY_UNAVAILABLE",
-      "This preview profile supports burn-in subtitles only (max 64 cues)",
-    );
+  if (draft.subtitleOperations.length > 64)
+    editorFailure("CAPABILITY_UNAVAILABLE", "At most 64 subtitle cues per plan");
   const ops = draft.trimOperations;
   if (ops.length === 0)
     editorFailure("CAPABILITY_UNAVAILABLE", "At least one trim operation is required");
