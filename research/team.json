@@ -34,8 +34,8 @@
       "name": "C",
       "role": "桌面端、远程控制与桌面端验收",
       "identities": {
-        "names": ["C"],
-        "emails": []
+        "names": ["C", "Miiickeeey"],
+        "emails": ["304061749+Miiickeeey@users.noreply.github.com"]
       }
     }
   ],
@@ -86,8 +86,8 @@
       "id": "desktop-editor",
       "title": "Electron 桌面工作台、时间线与导出交互",
       "owners": ["c"],
-      "status": "planned",
-      "evidence": "demo/05-clients-remote.md"
+      "status": "in_progress",
+      "evidence": "demo/05-clients-remote.md; downstream/paseo/packages/server/src/server/video/agent/planning-approval.real.e2e.test.ts"
     },
     {
       "id": "android-supervision",
