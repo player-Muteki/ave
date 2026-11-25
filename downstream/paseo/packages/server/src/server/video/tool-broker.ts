@@ -199,6 +199,8 @@ export class VideoToolBroker {
         }
         return result;
       }
+      case "get_qa_summary":
+        return this.store.qaSummary(projectId, call.args.jobId, principal);
       case "get_planning_run": {
         const lifecycle = this.store.runLifecycle(projectId, principal);
         const current = lifecycle.find((r) => r.runId === runId);

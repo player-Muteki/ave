@@ -105,6 +105,7 @@
 - 变换/淡入淡出渲染冒烟通过（2026-11-25）：trim 0.5–2.02s（1.52s=38 帧整帧对齐）+ scale 160x90 + rot 90 + fadeIn/Out 0.5s 的方案经真实渲染到 awaiting_review，QA 输出精确 1.520000s、640x360 h264。至此 trim/拼接/crossfade/v2 叠加/transform+旋转/fade/音频增益/mov_text 字幕/完整交付链（含 manifest renderRecipeHash）/场景切点/波形/故事板均已用真实 FFmpeg 冒烟验证。wire 14/14、profile 20/20。仍未跑真模型/e2e。
 - 预览 profile 加固（2026-11-25）：新增 trim clipId 唯一性、片段时长必须为正、起点非负、转场时长必须为正；profile 单测增至 24 项全 PASS。wire 14/14。仍未跑真模型/e2e。
 - 客户端任务卡新增阶段/进度显示与“取消任务”按钮（2026-11-25，接通此前未接线的 video.v1.control_job，action=cancel，活动状态才显示）。esbuild 全绿。未跑真模型/e2e。
+- 新增 planner 工具 get_qa_summary（2026-11-25，第 13 个）：store.qaSummary 经 bindCas 解析 QA artifact，返回有界摘要（流≤8、时长、audioLoudness、renderRecipeHash/planHash/ffmpegBuildHash、门禁状态），完整 probe 不出 CAS；冒烟验证 preview job 摘要 dur=2.000000、h264+aac、响度 -21.1/-17.8dB、G4=passed/G5=manual_required。wire 14/14（48 defs）、profile 24/24、esbuild 全绿。仍未跑真模型/e2e。
 ## 环境与错误
 
 | 问题 | 处理 |
