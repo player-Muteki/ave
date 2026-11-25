@@ -62,6 +62,20 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
     editorFailure("CAPABILITY_UNAVAILABLE", "At least one trim operation is required");
   if (ops.length > 64)
     editorFailure("CAPABILITY_UNAVAILABLE", "At most 64 segments per plan in this profile");
+  const clipIds = new Set<string>();
+  for (const op of ops) {
+    if (clipIds.has(op.clipId))
+      editorFailure("CAPABILITY_UNAVAILABLE", "Duplicate clipId in trim operations");
+    clipIds.add(op.clipId);
+    if (BigInt(op.sourceRange.duration.num) <= 0n || BigInt(op.recordRange.duration.num) <= 0n)
+      editorFailure("CAPABILITY_UNAVAILABLE", "Segment duration must be positive");
+    if (
+      op.sourceRange.start.num.startsWith("-") ||
+      op.recordRange.start.num.startsWith("-") ||
+      op.sourceRange.duration.num.startsWith("-")
+    )
+      editorFailure("CAPABILITY_UNAVAILABLE", "Segment ranges must be non-negative");
+  }
   // v1 is the main timeline; an optional v2 is overlaid on top of it. Each
   // track's record ranges tile [0, track total) contiguously in array order.
   const tracks = new Map<string, typeof ops>();
@@ -131,6 +145,8 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
   for (const tr of draft.transitionOperations) {
     if (tr.kind !== "crossfade" && tr.kind !== "fade")
       editorFailure("CAPABILITY_UNAVAILABLE", "Only crossfade/fade transitions are supported");
+    if (BigInt(tr.duration.num) <= 0n)
+      editorFailure("CAPABILITY_UNAVAILABLE", "Transition duration must be positive");
     const left = byClip.get(tr.leftClipId);
     const right = byClip.get(tr.rightClipId);
     if (!left || !right)

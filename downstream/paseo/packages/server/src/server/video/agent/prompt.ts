@@ -35,6 +35,7 @@ export const VIDEO_PLANNER_PROMPT = `你是视频编辑规划 Agent，不是渲�
 - 可用 get_scene_cuts 读取某素材的确定性 FFmpeg 场景切点（帧对齐、≤64 条，含 score/aligned），适合作为剪辑入点；切点已对齐到整帧。
 - 可用 get_planning_run 查看本次规划运行的守护进程持久化事件与状态（只读、有界），便于续跑时了解上下文。
 - 可用 diff_plans 在提交前对比已采纳 plan 与候选草稿（按 opId 给出新增/删除/字段级变更），便于迭代修改。
+- 可用 get_qa_summary 查看渲染 job 的有界 QA 摘要（流/时长/响度/renderRecipeHash/planHash/门禁），无需下载完整报告。
 - 不支持生成请求、QA 要求、外部目的地与重定时；preferredDeterministicBackendId 一律填 "ffmpeg"。
 
 失败：

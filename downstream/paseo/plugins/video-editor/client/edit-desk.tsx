@@ -10,7 +10,7 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, steerPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, contactSheetRpc, previewFramesRpc, readAssetChunkRpc,
+  analyzeAssetRpc, contactSheetRpc, previewFramesRpc, readAssetChunkRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
@@ -63,6 +63,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const analyze = useRpc(analyzeAssetRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
+  const controlJob = useRpc(controlJobRpc);
   const readChunk = useRpc(readAssetChunkRpc);
   const [sourceImport, setSourceImport] = useState<SourceImport | null>(null);
   const [confirmed, setConfirmed] = useState(0);
@@ -732,6 +733,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             );
             return <View key={job.jobId} style={styles.clip}>
               <Text style={ink}>{job.kind === "preview" ? "预览" : job.kind} · {job.state === "awaiting_review" ? "等待审片" : job.state}</Text>
+              {(job.phaseDetail || job.progress) && (
+                <Text style={muted}>
+                  {job.phaseDetail ?? ""}{job.progress ? ` · ${job.progress.completedUnits}${job.progress.totalUnits ? `/${job.progress.totalUnits}` : ""} 单元` : ""}
+                </Text>
+              )}
+              {["draft", "analyzing", "awaiting_inputs", "rendering_preview", "rendering_final", "validating", "pausing", "paused", "awaiting_plan_approval"].includes(job.state) &&
+                button("取消任务", async () => {
+                  await controlJob({ requestId: requestId(`cancel:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "cancel" });
+                  show(await read({ projectId: project.projectId }));
+                })}
               {job.kind === "export" && job.state === "completed" && job.artifacts.map(a =>
                 a.projectId === project.projectId && a.jobId === job.jobId && (a.kind === "export" || a.kind === "manifest")
                   ? mediaControl(a.kind === "export" ? "准备下载成品视频" : "准备下载导出清单", a.artifactId, a.revision, a.blob, a.kind)

@@ -869,6 +869,61 @@ export class EditorStore {
     };
   }
 
+  /**
+   * Bounded, parsed view of a job's QA artifact for the planner: stream
+   * summary, duration, loudness, recipe/plan hashes and gate statuses. The
+   * full probe stays in CAS; only this summary crosses the worker boundary.
+   */
+  async qaSummary(projectId: string, jobId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
+    const job = this.job(projectId, jobId, principal);
+    const qa = job.artifacts.find((a) => a.kind === "qa");
+    if (!qa) editorFailure("ASSET_NOT_FOUND", "The job has no QA artifact yet");
+    const doc = JSON.parse((await this.cas.readBytes(qa.blob)).toString("utf8")) as {
+      schemaVersion?: string;
+      reportId?: string;
+      subjectHash?: string;
+      revision?: string;
+      planHash?: string;
+      ffmpegBuildHash?: string;
+      renderRecipeHash?: string;
+      audioLoudness?: { meanVolumeDb: string; maxVolumeDb: string } | null;
+      gates?: Array<{ gate: string; status: string; checks?: Array<{ name: string; status: string }> }>;
+      probe?: {
+        format?: { duration?: string };
+        streams?: Array<Record<string, unknown>>;
+      };
+    };
+    return {
+      jobId,
+      kind: job.kind,
+      state: job.state,
+      revision: job.revision,
+      qaArtifactId: qa.artifactId,
+      qaSha256: qa.blob.sha256,
+      subjectHash: doc.subjectHash ?? null,
+      planHash: doc.planHash ?? null,
+      ffmpegBuildHash: doc.ffmpegBuildHash ?? null,
+      renderRecipeHash: doc.renderRecipeHash ?? null,
+      audioLoudness: doc.audioLoudness ?? null,
+      durationSeconds: doc.probe?.format?.duration ?? null,
+      streams: (doc.probe?.streams ?? []).slice(0, 8).map((s) => ({
+        codecType: s.codec_type,
+        codecName: s.codec_name,
+        width: s.width,
+        height: s.height,
+        sampleRate: s.sample_rate,
+        channels: s.channels,
+      })),
+      gates: (doc.gates ?? []).map((g) => ({
+        gate: g.gate,
+        status: g.status,
+        checks: (g.checks ?? []).map((c) => ({ name: c.name, status: c.status })),
+      })),
+    };
+  }
+
   job(projectId: string, jobId: string, principal: EditorPrincipal): JobSnapshot {
     this.authorize(projectId, principal, "viewer");
     const row = this.database
