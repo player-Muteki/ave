@@ -282,7 +282,9 @@ export class MediaService {
     if (job.kind !== "preview" && job.kind !== "final")
       editorFailure("CAPABILITY_UNAVAILABLE", "Not a render job");
     const assets = new Map<string, SourceAsset>();
-    for (const op of plan.trimOperations) {
+    // Audio operations may reference a different project asset (e.g. BGM);
+    // those sources must be verified and opened too, not only trim sources.
+    for (const op of [...plan.trimOperations, ...plan.audioOperations]) {
       const asset = project.assets.find((a) => a.assetId === op.source.assetId);
       if (!asset || (await sha256File(this.cas.pathFor(asset.original))) !== asset.original.sha256)
         editorFailure("ARTIFACT_HASH_MISMATCH", "A source changed before render");
