@@ -131,6 +131,8 @@ type DerivedMask = {
 
 `StreamDescriptor` 至少记录 codec、codec profile、time_base、帧率模式、尺寸、色彩、音频 sample rate/channel layout、字幕类型、语言、disposition。presentation index 记录 decoded presentation PTS/duration/time_base，而不是仅 packet 平均帧率。
 
+规划工具 `get_asset_metadata` 按项目、资产 ID 和内容哈希读取已保存的 probe。返回的 `PlannerAssetMetadata` 可包含各流的 `startPts` 和 `durationTicks`，均为整数字符串，乘以该流的 `timeBase` 即为秒。工具只返回可精确表示的已测量值。可选的 `averageRate` 表示平均帧率。此读取方式也适用于已有资产。
+
 ## 4. EditPlan 与 EditGraph
 
 ### 4.1 模型提交计划

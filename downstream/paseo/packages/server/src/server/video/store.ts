@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import type { ProbeDocument } from "./media.js";
 import type { SqliteDatabase } from "./sqlite-types.js";
 import { DatabaseSync } from "./sqlite.js";
 import { assertRenderablePreview, summarizeDraftTimeline } from "./preview-profile.js";
@@ -16,6 +17,7 @@ import {
   type PlanningRunStatus,
   JobSnapshotSchema,
   ProjectSnapshotSchema,
+  PlannerAssetMetadataSchema,
   SourceAssetSchema,
   type ArtifactRef,
   type AcceptedEditPlan,
@@ -374,6 +376,35 @@ export class EditorStore {
         "The asset revision has changed; download a fresh snapshot",
       );
     return asset;
+  }
+
+  async plannerAssetMetadata(projectId: string, assetId: string, contentHash: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    const row = this.database.prepare("SELECT document FROM assets WHERE project_id = ? AND asset_id = ?")
+      .get(projectId, assetId) as { document: string } | undefined;
+    const asset = row && SourceAssetSchema.parse(JSON.parse(row.document));
+    if (!asset || asset.original.sha256 !== contentHash)
+      editorFailure("ASSET_NOT_FOUND", "Asset identity is not in the bound project");
+    if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
+
+    const probe: ProbeDocument = JSON.parse((await this.cas.readBytes(asset.probe)).toString("utf8"));
+    const byIndex = new Map(probe.streams.map(stream => [stream.index, stream]));
+    return PlannerAssetMetadataSchema.parse({
+      assetId, contentHash,
+      streams: asset.streams.map(({ streamIndex, streamUid, kind, codec, timeBase, averageRate, width, height, sampleRate }) => {
+        const stream = byIndex.get(streamIndex);
+        const sameClock = stream?.codec_type === kind && stream.time_base === `${timeBase.num}/${timeBase.den}`;
+        const start = sameClock ? stream.start_pts : undefined;
+        const duration = sameClock ? stream.duration_ts : undefined;
+        // The saved probe uses JSON numbers. Publish only ticks that survived parsing exactly.
+        return {
+          streamUid, kind, codec, timeBase, averageRate, width, height, sampleRate,
+          startPts: Number.isSafeInteger(start) ? String(start) : undefined,
+          durationTicks: duration !== undefined && duration >= 0 && Number.isSafeInteger(duration)
+            ? String(duration) : undefined,
+        };
+      }),
+    });
   }
 
   recordConstantRateStream(indexSha: string, streamUid: string): void {

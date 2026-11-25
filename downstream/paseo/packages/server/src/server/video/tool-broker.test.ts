@@ -54,9 +54,8 @@ it("binds tool calls to the admitted project and persists only a proposed plan",
     expect(() => call("get_project_snapshot", { projectId: other.projectId })).toThrow(
       "bound to another project",
     );
-    expect(() =>
-      call("get_asset_metadata", { assetId: "clip", contentHash: "0".repeat(64) }),
-    ).toThrow("Asset identity");
+    await expect(call("get_asset_metadata", { assetId: "clip", contentHash: "0".repeat(64) }))
+      .rejects.toThrow("Asset identity");
     expect(() => call("get_project_snapshot", { projectId, principal })).toThrow(
       "Invalid planner tool request",
     );

@@ -4113,6 +4113,89 @@
       ],
       "additionalProperties": false
     },
+    "PlannerAssetMetadata": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:PlannerAssetMetadata",
+      "type": "object",
+      "properties": {
+        "assetId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "streamUid": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "video",
+                  "audio",
+                  "subtitle",
+                  "attachment",
+                  "data"
+                ]
+              },
+              "codec": {
+                "type": "string",
+                "minLength": 1
+              },
+              "timeBase": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "averageRate": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "width": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "height": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "sampleRate": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "startPts": {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)$"
+              },
+              "durationTicks": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              }
+            },
+            "required": [
+              "streamUid",
+              "kind",
+              "codec",
+              "timeBase"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "assetId",
+        "contentHash",
+        "streams"
+      ],
+      "additionalProperties": false
+    },
     "PlanningRunRequest": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:PlanningRunRequest",

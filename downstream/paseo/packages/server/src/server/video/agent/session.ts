@@ -38,7 +38,7 @@ interface PiSession {
 
 const TOOL_DESCRIPTIONS: Record<string, string> = {
   get_project_snapshot: "Inspect the current project revision and immutable asset identifiers.",
-  get_asset_metadata: "Inspect the streams of an identified project asset.",
+  get_asset_metadata: "Inspect stream IDs and timing for an identified project asset. Multiply startPts or durationTicks by timeBase to obtain seconds when reported.",
   get_job_status: "Inspect the daemon-recorded state of a project job.",
   validate_edit_plan: "Validate a proposed edit without saving or executing it.",
   submit_edit_plan:

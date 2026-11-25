@@ -18,6 +18,10 @@ it("projects asset metadata, fails closed on unknown jobs, and reports snapshot 
     const principal = service.principalForOwner();
     const { projectId } = store.createProject({ requestId: "p", title: "Planner", principal });
     const blob = await service.cas.writeBytes(Buffer.from("broker-extra"), "application/octet-stream");
+    const probe = await service.cas.writeJson({ streams: [
+      { index: 1, codec_type: "audio", time_base: "1/48000", start_pts: 0, duration_ts: 2 ** 53 },
+      { index: 0, codec_type: "video", time_base: "1/90000", start_pts: -7200, duration_ts: 90000 },
+    ] });
     store.addAsset(
       projectId,
       {
@@ -25,9 +29,10 @@ it("projects asset metadata, fails closed on unknown jobs, and reports snapshot 
         original: blob,
         displayName: "clip",
         streams: [
-          { kind: "video", streamUid: "stream:0", streamIndex: 0, codec: "h264", timeBase: { num: "1", den: "30" }, disposition: {} },
+          { kind: "video", streamUid: "stream:0", streamIndex: 0, codec: "h264", timeBase: { num: "1", den: "90000" }, averageRate: { num: "24", den: "1" }, disposition: {} },
+          { kind: "audio", streamUid: "stream:1", streamIndex: 1, codec: "aac", timeBase: { num: "1", den: "48000" }, disposition: {} },
         ],
-        probe: blob,
+        probe,
         presentationIndex: blob,
         sourceNeverWritable: true,
       },
@@ -38,10 +43,14 @@ it("projects asset metadata, fails closed on unknown jobs, and reports snapshot 
     const call = (tool: string, args: unknown) =>
       broker.invoke({ protocolVersion: "1", toolCallId: "call", tool, args });
 
-    expect(call("get_asset_metadata", { assetId: "clip", contentHash: blob.sha256 })).toEqual({
+    expect(await call("get_asset_metadata", { assetId: "clip", contentHash: blob.sha256 })).toEqual({
       assetId: "clip",
       contentHash: blob.sha256,
-      streams: [{ streamUid: "stream:0", kind: "video", codec: "h264", timeBase: { num: "1", den: "30" } }],
+      streams: [
+        { streamUid: "stream:0", kind: "video", codec: "h264", timeBase: { num: "1", den: "90000" },
+          averageRate: { num: "24", den: "1" }, startPts: "-7200", durationTicks: "90000" },
+        { streamUid: "stream:1", kind: "audio", codec: "aac", timeBase: { num: "1", den: "48000" }, startPts: "0" },
+      ],
     });
 
     expect(() => call("get_job_status", { jobId: "missing" })).toThrow(/The job does not exist/);

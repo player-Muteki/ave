@@ -32,7 +32,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-interface ProbeDocument {
+export interface ProbeDocument {
   format: { duration?: string; start_time?: string; format_name?: string };
   streams: Array<{
     index: number;
