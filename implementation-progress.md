@@ -71,6 +71,7 @@
 - 已实现待验收（2026-11-25）：素材卡片显示该素材最新 analysis job 状态及 qa 是否已生成。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：preview profile 增加字幕 cue 非负且不超过 v1 输出时长的校验。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：export manifest 血缘补充 trackId/transitions/transforms/跨素材音频完整源信息；preview profile 实测 12 项正/反案用例全 PASS。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：preview profile 增加片段数上限 64 与 transition clipId==rightClipId 校验；profile 实测 12 项仍运 PASS。未跑真模型/e2e。
 
 ## 环境与错误
 

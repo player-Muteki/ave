@@ -50,6 +50,8 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
   const ops = draft.trimOperations;
   if (ops.length === 0)
     editorFailure("CAPABILITY_UNAVAILABLE", "At least one trim operation is required");
+  if (ops.length > 64)
+    editorFailure("CAPABILITY_UNAVAILABLE", "At most 64 segments per plan in this profile");
   // v1 is the main timeline; an optional v2 is overlaid on top of it. Each
   // track's record ranges tile [0, track total) contiguously in array order.
   const tracks = new Map<string, typeof ops>();
@@ -104,6 +106,8 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
     if (!left || !right)
       editorFailure("CAPABILITY_UNAVAILABLE", "Transition endpoints must match trim clips");
     const track = tracks.get(left.trackId)!;
+    if (tr.clipId !== right.clipId)
+      editorFailure("CAPABILITY_UNAVAILABLE", "Transition clipId must match the right segment");
     if (right.trackId !== left.trackId || track.indexOf(right) !== track.indexOf(left) + 1)
       editorFailure(
         "CAPABILITY_UNAVAILABLE",
