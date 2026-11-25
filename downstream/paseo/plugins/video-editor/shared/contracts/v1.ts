@@ -578,6 +578,7 @@ export const EstimateTimelineResultSchema = z
     projectId: id,
     valid: z.boolean(),
     issue: z.string().nullable(),
+    warnings: z.array(z.string()).max(16).optional(),
     mainTrackSegments: z.number().int().min(0),
     overlayTrackSegments: z.number().int().min(0),
     mainDurationSeconds: z.string(),

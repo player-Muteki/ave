@@ -721,7 +721,7 @@ export class EditorStore {
    * Read-only dry run of a plan draft: validation outcome plus a bounded
    * timeline summary. Never persists anything and never touches media.
    */
-  estimateTimeline(input: { requestId: string; draft: EditPlanDraftV1 }, principal: EditorPrincipal) {
+  async estimateTimeline(input: { requestId: string; draft: EditPlanDraftV1 }, principal: EditorPrincipal) {
     this.authorize(input.draft.projectId, principal, "operator");
     let valid = true;
     let issue: string | null = null;
@@ -731,11 +731,34 @@ export class EditorStore {
       valid = false;
       issue = error instanceof Error ? error.message : String(error);
     }
+    const warnings: string[] = [];
+    if (this.cas) {
+      const project = this.project(input.draft.projectId, principal);
+      for (const op of input.draft.trimOperations) {
+        const asset = project.assets.find((a) => a.assetId === op.source.assetId);
+        if (!asset) continue;
+        try {
+          const probe = JSON.parse((await this.cas.readBytes(asset.probe)).toString("utf8")) as {
+            format?: { duration?: string };
+          };
+          const duration = Number(probe.format?.duration ?? "NaN");
+          if (!Number.isFinite(duration)) continue;
+          const start = Number(op.sourceRange.start.num) / Number(op.sourceRange.start.den);
+          const dur = Number(op.sourceRange.duration.num) / Number(op.sourceRange.duration.den);
+          if (start + dur > duration + 1e-6)
+            warnings.push(`trim ${op.opId} exceeds asset ${asset.assetId} duration (${start + dur}s > ${duration}s)`);
+        } catch {
+          // probe unreadable: skip the warning
+        }
+        if (warnings.length >= 16) break;
+      }
+    }
     return {
       requestId: input.requestId,
       projectId: input.draft.projectId,
       valid,
       issue,
+      warnings,
       ...summarizeDraftTimeline(input.draft),
     };
   }

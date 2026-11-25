@@ -8,7 +8,7 @@
       "role": "总体架构、后端、跨端集成",
       "identities": {
         "names": ["K", "player-Muteki"],
-        "emails": ["3219095629@qq.com"]
+        "emails": ["3219095629@qq.com", "237046669+player-Muteki@users.noreply.github.com"]
       }
     },
     {
@@ -16,8 +16,8 @@
       "name": "L",
       "role": "后端、媒体 Worker 与任务运行时",
       "identities": {
-        "names": ["L"],
-        "emails": []
+        "names": ["L", "luochuhao0219"],
+        "emails": ["luochuhao0219@users.noreply.github.com", "315720756+luochuhao0219@users.noreply.github.com"]
       }
     },
     {
@@ -34,7 +34,7 @@
       "name": "C",
       "role": "桌面端、远程控制与桌面端验收",
       "identities": {
-        "names": ["C", "Miiickeeey"],
+        "names": ["C", "Miiickeeey", "WeiHang Chen"],
         "emails": ["304061749+Miiickeeey@users.noreply.github.com"]
       }
     }
