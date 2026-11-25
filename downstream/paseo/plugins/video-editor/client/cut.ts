@@ -24,7 +24,7 @@ export function proposeCut(
   assetId: string,
   start: string,
   end: string,
-  caption?: CaptionCue,
+  caption?: CaptionCue | CaptionCue[],
   audioGainMilli?: string,
   transform?: TransformSpec,
   bgmAssetId?: string,
@@ -142,23 +142,21 @@ export function proposeCut(
           ]
         : [],
     transitionOperations: [],
-    subtitleOperations: caption
-      ? [
-          {
-            opId: "sub-1",
-            order: "1",
-            trackId: "s1",
-            clipId: "clip-1",
-            cueId: "cue-1",
-            range: {
-              start: { num: milliseconds(caption.start).toString(), den: "1000" },
-              duration: { num: (milliseconds(caption.end) - milliseconds(caption.start)).toString(), den: "1000" },
-            },
-            text: caption.text.slice(0, 16_384),
-            mode: subMode ?? ("burn-in" as const),
-          },
-        ]
-      : [],
+    subtitleOperations: (caption ? (Array.isArray(caption) ? caption : [caption]) : []).map(
+      (cue, i) => ({
+        opId: `sub-${i + 1}`,
+        order: (i + 1).toString(),
+        trackId: "s1",
+        clipId: "clip-1",
+        cueId: `cue-${i + 1}`,
+        range: {
+          start: { num: milliseconds(cue.start).toString(), den: "1000" },
+          duration: { num: (milliseconds(cue.end) - milliseconds(cue.start)).toString(), den: "1000" },
+        },
+        text: cue.text.slice(0, 16_384),
+        mode: subMode ?? ("burn-in" as const),
+      }),
+    ),
     generationRequests: [],
     qaRequirements: [],
     externalDestinations: [],
