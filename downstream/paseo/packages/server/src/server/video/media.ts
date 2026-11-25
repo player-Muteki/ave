@@ -327,8 +327,11 @@ export class MediaService {
     if (plan.generationRequests.length) {
       generation=await this.generationForJob(job,plan,firstAsset,signal);
       await this.verifyCandidateDecode(generation.master,signal);
-      checkCandidate((await this.probe(this.cas.pathFor(generation.master))).document,firstAsset,plan,"final",firstAsset.streams.find(s=>s.kind==="audio"));
-      outputBlob=job.kind==="preview" ? await this.createFinalReviewProxy(generation.master,signal) : generation.master;
+      const masterProbe = await this.probe(this.cas.pathFor(generation.master));
+      checkCandidate(masterProbe.document, firstAsset, plan, "final", firstAsset.streams.find(s => s.kind === "audio"));
+      outputBlob = job.kind === "preview"
+        ? await this.createFinalReviewProxy(generation.master, masterProbe.document, signal)
+        : generation.master;
       recipeSha256=createHash("sha256").update(JSON.stringify([plan.planHash,generation.modelRun.modelRevision,generation.master.sha256])).digest("hex");
     } else {
       const directory = await mkdtemp(path.join(tmpdir(), "video-render-"));
@@ -355,7 +358,7 @@ export class MediaService {
     }
     const audioProfile = [...assets.values()].flatMap(a => a.streams).find(s => s.kind === "audio");
     checkCandidate(probe.document, firstAsset, plan, job.kind, audioProfile);
-    const reviewProxy = job.kind === "final" ? await this.createFinalReviewProxy(outputBlob, signal) : undefined;
+    const reviewProxy = job.kind === "final" ? await this.createFinalReviewProxy(outputBlob, probe.document, signal) : undefined;
     if (reviewProxy) {
       checkCandidate((await this.probe(this.cas.pathFor(reviewProxy))).document, firstAsset, plan, "preview", audioProfile);
       await this.verifyCandidateDecode(reviewProxy, signal);
@@ -1192,14 +1195,18 @@ export class MediaService {
     };
   }
 
-  private async createFinalReviewProxy(candidate: BlobRef, signal: AbortSignal): Promise<BlobRef> {
+  private async createFinalReviewProxy(candidate: BlobRef, probe: ProbeDocument, signal: AbortSignal): Promise<BlobRef> {
+    // Scale, pad and setsar preserve the selected stream's presentation clock.
+    const clock = probe.streams.find(stream => stream.codec_type === "video")?.time_base;
+    if (!clock || !/^[1-9][0-9]*\/[1-9][0-9]*$/.test(clock))
+      editorFailure("QA_FAILED", "Missing video time base for review proxy");
     const directory = await mkdtemp(path.join(tmpdir(), "final-review-"));
     try {
       const output = path.join(directory, "review.mp4");
       await this.spawnChecked(this.tools.ffmpeg, [
         "-nostdin", "-v", "error", "-xerror", "-i", this.cas.pathFor(candidate),
         "-map", "0:v:0", "-map", "0:a:0?", "-vf", "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1",
-        "-fps_mode", "vfr", "-enc_time_base:v", "filter", "-c:v", "libx264", "-crf", "27", "-pix_fmt", "yuv420p",
+        "-fps_mode", "vfr", "-enc_time_base:v", clock, "-c:v", "libx264", "-crf", "27", "-pix_fmt", "yuv420p",
         "-c:a", "copy", "-movflags", "+faststart", output,
       ], signal);
       return await this.cas.importFile(output, "video/mp4");
@@ -1386,6 +1393,7 @@ export class MediaService {
     const trackOrder = [...new Set(ops.map((op) => op.trackId))].sort((a, b) =>
       a === "v1" ? -1 : b === "v1" ? 1 : a.localeCompare(b),
     );
+    const sourceTimeBase = `${firstVideo.timeBase.num}/${firstVideo.timeBase.den}`;
     const trackOut: string[] = [];
     for (const trackId of trackOrder) {
       const indices = ops
@@ -1398,11 +1406,10 @@ export class MediaService {
         .filter((tr) => tr !== undefined);
       if (!trackTransitions.length) {
         const vLabels = indices.map((i) => `[vs${i}]`).join("");
-        const clock = `${firstVideo.timeBase.num}/${firstVideo.timeBase.den}`;
         filters.push(
           indices.length === 1
             ? `${vLabels}null[vcat_${tag}]`
-            : `${vLabels}concat=n=${indices.length}:v=1:a=0,settb=${clock}[vcat_${tag}]`,
+            : `${vLabels}concat=n=${indices.length}:v=1:a=0,settb=${sourceTimeBase}[vcat_${tag}]`,
         );
         trackOut.push(`[vcat_${tag}]`);
         continue;
@@ -1537,6 +1544,9 @@ export class MediaService {
       args.push("-i", srtPath);
       metaSrtIndex = args.reduce((n, a) => (a === "-i" ? n + 1 : n), 0) - 1;
     }
+    // A single track without transitions keeps the source clock (concat restores
+    // it with settb). Framesync filters can negotiate their own output clock.
+    const previewClock = trackOrder.length === 1 && !transitions.size ? sourceTimeBase : "filter";
     args.push(
       "-filter_complex",
       filters.join(";"),
@@ -1544,7 +1554,7 @@ export class MediaService {
       vOut,
       "-fps_mode",
       "vfr",
-      ...(kind === "preview" ? ["-enc_time_base:v", "filter"] : []),
+      ...(kind === "preview" ? ["-enc_time_base:v", previewClock] : []),
       "-c:v",
       "libx264",
       "-pix_fmt",
