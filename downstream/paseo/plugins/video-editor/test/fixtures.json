@@ -492,5 +492,29 @@
     "schema": "PlanReviewRequest",
     "valid": false,
     "value": { "requestId": "r", "runId": "run", "toolCallId": "call", "draft": {} }
+  },
+  {
+    "name": "upload declaration size must be a uint string",
+    "schema": "CreateUploadRequest",
+    "valid": false,
+    "value": { "requestId": "r", "projectId": "p", "displayName": "clip.mp4", "expectedSize": 100, "expectedSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "mediaType": "video/mp4" }
+  },
+  {
+    "name": "upload declaration sha256 must be lowercase hex",
+    "schema": "CreateUploadRequest",
+    "valid": false,
+    "value": { "requestId": "r", "projectId": "p", "displayName": "clip.mp4", "expectedSize": "100", "expectedSha256": "0123456789ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef", "mediaType": "video/mp4" }
+  },
+  {
+    "name": "job snapshot kind must be a known enum",
+    "schema": "JobSnapshot",
+    "valid": false,
+    "value": { "jobId": "j", "projectId": "p", "revision": "0", "planHash": "0000000000000000000000000000000000000000000000000000000000000000", "kind": "render", "state": "awaiting_review", "artifacts": [] }
+  },
+  {
+    "name": "job snapshot revision must be a uint string",
+    "schema": "JobSnapshot",
+    "valid": false,
+    "value": { "jobId": "j", "projectId": "p", "revision": 1, "planHash": "0000000000000000000000000000000000000000000000000000000000000000", "kind": "preview", "state": "awaiting_review", "artifacts": [] }
   }
 ]
