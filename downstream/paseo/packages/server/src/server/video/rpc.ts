@@ -23,6 +23,7 @@ import {
   GetSceneCutsInputSchema,
   GetWaveformInputSchema,
   GetPlanInputSchema,
+  ListArtifactsInputSchema,
   GetExportSummaryInputSchema,
   VerifyExportInputSchema,
   GetAssetMetadataInputSchema,
@@ -59,9 +60,11 @@ export class EditorRpcService {
             "analysis-summary",
             "qa-summary",
             "timeline-estimate",
+            "list-artifacts",
+            "plan-estimate",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
-          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "upload", "cancel-upload", "verify-export"],
+          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export"],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
             {
@@ -215,6 +218,13 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...this.editor.store.plan(request.projectId, request.planId, principal),
+        };
+      }
+      case "video.v1.list_artifacts": {
+        const request = ListArtifactsInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.listArtifacts(request.projectId, request.jobId, principal),
         };
       }
       case "video.v1.get_export_summary": {

@@ -12,7 +12,7 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
+  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
@@ -72,6 +72,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readSceneCuts = useRpc(getSceneCutsRpc);
   const readWaveform = useRpc(getWaveformRpc);
   const readPlan = useRpc(getPlanRpc);
+  const listArtifacts = useRpc(listArtifactsRpc);
   const readExportSummary = useRpc(getExportSummaryRpc);
   const verifyExport = useRpc(verifyExportRpc);
   const readAssetMetadata = useRpc(getAssetMetadataRpc);
@@ -831,6 +832,15 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   </View>
                 );
               })}
+              {button("预估时长", async () => {
+                const est = await estimate({
+                  requestId: requestId(`est-plan:${plan.planId}`),
+                  projectId: project.projectId,
+                  planId: plan.planId,
+                });
+                const warn = est.warnings?.length ? ` · 警告 ${est.warnings.slice(0, 3).join("；")}` : "";
+                setNotice(`方案 ${plan.planId.slice(0, 12)} · 主轨 ${est.mainDurationSeconds}s（扣转场 ${est.effectiveMainDurationSeconds}s）· 叠加 ${est.overlayDurationSeconds}s · 转场 ${est.transitionCount} · 音频 ${est.audioOperationCount} · 字幕 ${est.subtitleCueCount}${est.valid ? "" : ` · 方案问题：${est.issue ?? "未知错误"}`}${warn}`);
+              })}
               {plan.transitionOperations.map((tr) => (
                 <Text key={tr.opId} style={muted}>
                   转场 {tr.kind} {tr.leftClipId}→{tr.rightClipId} {tr.duration.num}/{tr.duration.den}s
@@ -927,6 +937,15 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   await controlJob({ requestId: requestId(`resume:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "resume" });
                   show(await read({ projectId: project.projectId }));
                 })}
+              {button("产物", async () => {
+                const arts = await listArtifacts({
+                  requestId: requestId(`arts:${job.jobId}`),
+                  projectId: project.projectId,
+                  jobId: job.jobId,
+                });
+                const summary = arts.artifacts.slice(0, 8).map((a) => `${a.kind} ${a.sizeBytes}B ${a.sha256.slice(0, 8)}`).join(", ");
+                setNotice(`任务 ${job.jobId.slice(0, 12)} · ${arts.artifactCount} 个产物${summary ? ` · ${summary}${arts.artifactCount > 8 ? " …" : ""}` : ""}`);
+              })}
               {button("方案", async () => {
                 const plan = project.plans.find((p) => p.planHash === job.planHash);
                 if (!plan) throw new Error("找不到该任务对应的方案。");

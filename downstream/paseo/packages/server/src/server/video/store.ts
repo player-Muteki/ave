@@ -788,20 +788,31 @@ export class EditorStore {
    * Read-only dry run of a plan draft: validation outcome plus a bounded
    * timeline summary. Never persists anything and never touches media.
    */
-  async estimateTimeline(input: { requestId: string; draft: EditPlanDraftV1 }, principal: EditorPrincipal) {
-    this.authorize(input.draft.projectId, principal, "operator");
+  async estimateTimeline(
+    input: { requestId: string; draft?: EditPlanDraftV1; projectId?: string; planId?: string },
+    principal: EditorPrincipal,
+  ) {
+    const draft =
+      input.draft ??
+      (() => {
+        if (!input.projectId || !input.planId)
+          editorFailure("INVALID_ARGUMENT", "Provide either a draft or a planId");
+        const plan = this.plan(input.projectId, input.planId, principal);
+        return { ...plan } as EditPlanDraftV1;
+      })();
+    this.authorize(draft.projectId, principal, "operator");
     let valid = true;
     let issue: string | null = null;
     try {
-      this.validatePlan(input.draft);
+      this.validatePlan(draft);
     } catch (error) {
       valid = false;
       issue = error instanceof Error ? error.message : String(error);
     }
     const warnings: string[] = [];
     if (this.cas) {
-      const project = this.project(input.draft.projectId, principal);
-      for (const op of input.draft.trimOperations) {
+      const project = this.project(draft.projectId, principal);
+      for (const op of draft.trimOperations) {
         const asset = project.assets.find((a) => a.assetId === op.source.assetId);
         if (!asset) continue;
         try {
@@ -822,11 +833,38 @@ export class EditorStore {
     }
     return {
       requestId: input.requestId,
-      projectId: input.draft.projectId,
+      projectId: draft.projectId,
+      ...(input.planId ? { planId: input.planId } : {}),
       valid,
       issue,
       warnings,
-      ...summarizeDraftTimeline(input.draft),
+      ...summarizeDraftTimeline(draft),
+    };
+  }
+
+  /**
+   * Viewer-level listing of a job's artifacts with blob metadata (no bytes):
+   * kind, size, hash and media type per artifact, bounded for the wire.
+   */
+  listArtifacts(projectId: string, jobId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    const job = this.job(projectId, jobId, principal);
+    return {
+      projectId,
+      jobId: job.jobId,
+      kind: job.kind,
+      state: job.state,
+      revision: job.revision,
+      artifactCount: job.artifacts.length,
+      artifacts: job.artifacts.slice(0, 256).map((a) => ({
+        artifactId: a.artifactId,
+        jobId: a.jobId,
+        revision: a.revision,
+        kind: a.kind,
+        sizeBytes: a.blob.bytes,
+        sha256: a.blob.sha256,
+        mediaType: a.blob.mediaType,
+      })),
     };
   }
 

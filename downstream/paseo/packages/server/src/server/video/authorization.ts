@@ -22,6 +22,7 @@ const READ_METHODS = new Set([
   "video.v1.get_scene_cuts",
   "video.v1.get_waveform",
   "video.v1.get_plan",
+  "video.v1.list_artifacts",
   "video.v1.get_export_summary",
   "video.v1.get_asset_metadata",
   "video.v1.get_approval",

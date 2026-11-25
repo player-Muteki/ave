@@ -300,13 +300,26 @@ export const JobStateSchema = z.enum([
 ]);
 export type JobState = z.infer<typeof JobStateSchema>;
 
+export const ArtifactKindSchema = z.enum([
+  "probe",
+  "proxy",
+  "mask",
+  "candidate",
+  "export",
+  "qa",
+  "manifest",
+  "contact",
+  "scenecuts",
+  "waveform",
+]);
+export type ArtifactKind = z.infer<typeof ArtifactKindSchema>;
 export const ArtifactRefSchema = z
   .object({
     artifactId: id,
     projectId: id,
     jobId: id,
     revision: uint,
-    kind: z.enum(["probe", "proxy", "mask", "candidate", "export", "qa", "manifest", "contact", "scenecuts", "waveform"]),
+    kind: ArtifactKindSchema,
     blob: BlobRefSchema,
   })
   .strict();
@@ -574,9 +587,10 @@ export const submitPlanRpc = {
   output: PlanReviewResultSchema,
 };
 
-export const EstimateTimelineRequestSchema = z
-  .object({ requestId, draft: EditPlanDraftV1Schema })
-  .strict();
+export const EstimateTimelineRequestSchema = z.union([
+  z.object({ requestId, draft: EditPlanDraftV1Schema }).strict(),
+  z.object({ requestId, projectId: id, planId: id }).strict(),
+]);
 export type EstimateTimelineRequest = z.infer<typeof EstimateTimelineRequestSchema>;
 export const TimelineSegmentSummarySchema = z
   .object({
@@ -591,6 +605,7 @@ export const EstimateTimelineResultSchema = z
   .object({
     requestId,
     projectId: id,
+    planId: id.optional(),
     valid: z.boolean(),
     issue: z.string().nullable(),
     warnings: z.array(z.string()).max(16).optional(),
@@ -1046,6 +1061,41 @@ export const getPlanRpc = {
   name: "video.v1.get_plan",
   input: GetPlanInputSchema,
   output: GetPlanResultSchema,
+};
+
+export const ListArtifactsInputSchema = z
+  .object({ requestId, projectId: id, jobId: id })
+  .strict();
+export type ListArtifactsInput = z.infer<typeof ListArtifactsInputSchema>;
+export const ArtifactInfoSchema = z
+  .object({
+    artifactId: id,
+    jobId: id,
+    revision: uint,
+    kind: ArtifactKindSchema,
+    sizeBytes: uint,
+    sha256,
+    mediaType: z.string().min(1).max(128),
+  })
+  .strict();
+export type ArtifactInfo = z.infer<typeof ArtifactInfoSchema>;
+export const ListArtifactsResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    jobId: id,
+    kind: z.enum(["analysis", "preview", "final", "export"]),
+    state: JobStateSchema,
+    revision: uint,
+    artifactCount: z.number().int().min(0),
+    artifacts: z.array(ArtifactInfoSchema).max(256),
+  })
+  .strict();
+export type ListArtifactsResult = z.infer<typeof ListArtifactsResultSchema>;
+export const listArtifactsRpc = {
+  name: "video.v1.list_artifacts",
+  input: ListArtifactsInputSchema,
+  output: ListArtifactsResultSchema,
 };
 
 export const GetExportSummaryInputSchema = z

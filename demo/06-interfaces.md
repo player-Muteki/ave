@@ -360,7 +360,7 @@ type ExportManifest = {
 | `create_mask_revision/correct_mask_revision` | 创建或修正 mask | operator；产生新 subjectRevision/hash |
 | `create_keyframe_set` | 创建锚帧/参考图集合 | operator；产生新 subjectRevision/hash |
 | `start_agent_run/steer/follow_up/abort` | 控制规划会话 | operator；runId 幂等 |
-| `estimate_timeline` | 方案草稿的只读时间线预估：校验问题 + 各轨道段数/总时长/转场重叠/有效输出时长，不渲染不落库 | operator；requestId + draft |
+| `estimate_timeline` | 方案草稿或已采纳方案（planId）的只读时间线预估：校验问题 + 各轨道段数/总时长/转场重叠/有效输出时长，不渲染不落库 | operator；requestId + draft，或 requestId + projectId + planId |
 | `submit_plan_review` | 用户对 Plan 提修改，不是 Agent 提交 | operator |
 | `get_approval/decide_approval/revoke_approval` | 查看、approve/reject 或撤销 grant | operator；ApprovalDecision + requestId |
 | `create_preview_job/create_final_job/create_export_job` | 消费对应 purpose grant 创建任务 | operator；requestId + expectedRevision + grantId |
@@ -370,6 +370,7 @@ type ExportManifest = {
 | `get_qa_report` | 查询 QA | viewer |
 | `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |
 | `get_plan` | 按 planId 读取已采纳方案全文（操作列表、hash、状态） | viewer；requestId + projectId + planId |
+| `list_artifacts` | 按 jobId 列出产物元数据：kind/大小/SHA-256/mediaType（上限 256 条，不出 CAS 字节） | viewer；requestId + projectId + jobId |
 | `get_export_summary` | export 任务 manifest 的有界摘要：hash 链（plan/recipe/源 manifest）、各 op 计数、输出 blob 引用与响度 | viewer；requestId + projectId + jobId |
 | `verify_export` | 重新计算交付字节 SHA-256 并与 manifest 对账 | operator；requestId + projectId + jobId |
 | `get_artifact` | 读取产物元数据 | viewer 仅 proxy/QA；最终 export 需 operator |
