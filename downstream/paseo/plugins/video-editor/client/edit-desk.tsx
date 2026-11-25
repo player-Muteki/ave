@@ -11,7 +11,7 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
+  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
@@ -67,6 +67,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readQaSummary = useRpc(getQaSummaryRpc);
   const readSceneCuts = useRpc(getSceneCutsRpc);
   const readWaveform = useRpc(getWaveformRpc);
+  const readPlan = useRpc(getPlanRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
   const controlJob = useRpc(controlJobRpc);
@@ -853,6 +854,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   await controlJob({ requestId: requestId(`cancel:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "cancel" });
                   show(await read({ projectId: project.projectId }));
                 })}
+              {button("方案", async () => {
+                const plan = project.plans.find((p) => p.planHash === job.planHash);
+                if (!plan) throw new Error("找不到该任务对应的方案。");
+                const full = await readPlan({
+                  requestId: requestId(`plan:${plan.planId}`),
+                  projectId: project.projectId,
+                  planId: plan.planId,
+                });
+                setNotice(`方案 ${full.planId.slice(0, 12)} · 裁剪 ${full.trimOperations.length} · 转场 ${full.transitionOperations.length} · 音频 ${full.audioOperations.length} · 字幕 ${full.subtitleOperations.length} · 变换 ${full.transformOperations.length} · hash ${String(full.planHash).slice(0, 12)}`);
+              })}
               {(job.state === "failed" || job.state === "cancelled") &&
                 button("重试任务", async () => {
                   await controlJob({ requestId: requestId(`retry:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "retry" });
