@@ -489,18 +489,31 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {sceneCuts && sceneCuts.assetId === asset.assetId && (
                 <View style={row}>
                   <Text style={muted}>切点（点击设为入点）:</Text>
-                  {sceneCuts.doc.cuts.map((c, i) => (
-                    <DeskControl
-                      key={`${c.frameIndex}-${i}`}
-                      accessibilityRole="button"
-                      disabled={busy}
-                      action={(v: string) => setStart(v)}
-                      value={String(Number(c.aligned.num) / Number(c.aligned.den) / 1000)}
-                      style={styles.button}
-                    >
-                      <Text style={styles.actionText}>{`${c.ptsTime}s · ${c.score}`}</Text>
-                    </DeskControl>
-                  ))}
+                  {sceneCuts.doc.cuts.map((c, i) => {
+                    const t = String(Number(c.aligned.num) / Number(c.aligned.den) / 1000);
+                    return (
+                      <View key={`${c.frameIndex}-${i}`} style={row}>
+                        <DeskControl
+                          accessibilityRole="button"
+                          disabled={busy}
+                          action={(v: string) => setStart(v)}
+                          value={t}
+                          style={styles.button}
+                        >
+                          <Text style={styles.actionText}>{`入 ${c.ptsTime}s · ${c.score}`}</Text>
+                        </DeskControl>
+                        <DeskControl
+                          accessibilityRole="button"
+                          disabled={busy}
+                          action={(v: string) => setEnd(v)}
+                          value={t}
+                          style={styles.button}
+                        >
+                          <Text style={styles.actionText}>{`出 ${c.ptsTime}s · ${c.score}`}</Text>
+                        </DeskControl>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
               {waveform && waveform.assetId === asset.assetId && (
