@@ -55,6 +55,27 @@ def run_git(repo: Path, *args: str, check: bool = True) -> str:
     return result.stdout
 
 
+def source_tree_hash(repo: Path, revision: str) -> str:
+    """Tree hash of the revision excluding DIVISION.svg itself, so the
+    generated file never changes its own snapshot label."""
+    entries = [
+        line
+        for line in run_git(repo, "ls-tree", revision).splitlines()
+        if line.split("\t", 1)[1].strip() != "DIVISION.svg"
+    ]
+    result = subprocess.run(
+        ["git", "-C", str(repo), "mktree"],
+        input="\n".join(entries) + "\n",
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode:
+        return run_git(repo, "rev-parse", f"{revision}^{{tree}}").strip()
+    return result.stdout.strip()
+
+
 def has_head(repo: Path) -> bool:
     result = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "--verify", "HEAD"],
@@ -156,7 +177,7 @@ def collect_git_metrics(repo: Path, members: list[dict]) -> tuple[dict, dict, st
     # commit: on a PR merge ref the tree is identical but the tip commit (and
     # its timestamp) is a merge commit, which would otherwise skew the snapshot.
     revision = run_git(repo, "rev-parse", "HEAD").strip()
-    tree = run_git(repo, "rev-parse", f"{revision}^{{tree}}").strip()
+    tree = source_tree_hash(repo, revision)
     history = run_git(repo, "log", "--no-merges", "--format=%H%x00%ct%x00%s", revision).splitlines()
     non_stats = [line for line in history if not line.split("\x00", 2)[2].startswith("chore(stats):")]
     epochs = [int(line.split("\x00", 2)[1]) for line in non_stats]

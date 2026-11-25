@@ -3,7 +3,7 @@
 <desc id="desc">成员职责、里程碑完成度、Git 提交数和当前有效代码行。图形由 scripts/update_division.py 生成。</desc>
 <g font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans CJK SC, sans-serif" fill="currentColor">
 <text x="40" y="48" font-size="28" font-weight="700" text-anchor="start" opacity="1">团队分工与交付进度</text>
-<text x="40" y="76" font-size="13" font-weight="400" text-anchor="start" opacity="0.68">统计快照 6973115b38ba · 数据时点 2026-11-25T10:04:59+00:00</text>
+<text x="40" y="76" font-size="13" font-weight="400" text-anchor="start" opacity="0.68">统计快照 64a73e0d222f · 数据时点 2026-11-25T10:04:59+00:00</text>
 <text x="40" y="106" font-size="13" font-weight="400" text-anchor="start" opacity="0.76">进度 = 已完成工作流 / 已分配工作流；代码量与提交量仅作活动记录，不代表质量或完成度。</text>
 <path d="M40 126H960" stroke="currentColor" opacity="0.18"/>
 <rect x="40" y="150" width="920" height="108" rx="12" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.22"/>
