@@ -71,6 +71,37 @@ function draft(project: ReturnType<EditorStore["createProject"]>, requestId = "p
 }
 
 describe("EditorStore durable workflow", () => {
+  it("retains the reviewed anchor, its save receipt and input approval across database reopen", async () => {
+    const { root, store, project, cas } = await fixture();
+    const label = await cas.writeBytes(Uint8Array.of(255, 0), "application/octet-stream");
+    const jpeg = await cas.writeBytes(Uint8Array.of(1, 2), "image/jpeg");
+    const stream = { streamUid: "v", streamIndex: 0, kind: "video" as const, codec: "ffv1",
+      timeBase: {num: "1", den: "9"}, disposition: {}, width: 2, height: 1 };
+    await store.addAsset(project.projectId, {assetId: "clip", displayName: "clip", original: jpeg,
+      presentationIndex: jpeg, probe: jpeg, streams: [stream], sourceNeverWritable: true}, "add", owner);
+    const expectedRevision = store.project(project.projectId, owner).revision;
+    const anchor = { projectId: project.projectId, assetId: "clip", streamUid: "v", frame: 0,
+      sourcePresentationIndexHash: jpeg.sha256, points: [{x: 0, y: 0, foreground: true}] };
+    const request = { requestId: "save", expectedRevision, anchor, expectedLabelSha256: label.sha256, expectedPreviewSha256: jpeg.sha256 };
+    const header = {...anchor, sourceSha256: jpeg.sha256, pts: "0", timeBase: stream.timeBase, frameCount: 1,
+      width: 2, height: 1, previewWidth: 2, previewHeight: 1, previewSha256: jpeg.sha256,
+      mask: { engine: "sam2.1-tiny" as const, weightsSha256: "1".repeat(64), labelSha256: label.sha256, foregroundPixels: 1 }};
+    const pending = store.saveMaskRevision(request, header, label, jpeg, owner);
+    store.close();
+    const reopened = await EditorStore.create(root);
+    try {
+      expect(reopened.savedMaskApproval(request, owner)).toEqual(pending);
+      expect(() => reopened.savedMaskApproval({...request, expectedLabelSha256: jpeg.sha256}, owner)).toThrow();
+      expect(reopened.maskRevision(project.projectId, pending.subjectId, owner).rawLabelMask).toEqual(label);
+      expect(() => reopened.maskRevision("other-project", pending.subjectId, owner)).toThrow();
+      const decision = reopened.decideApproval({requestId: "approval", decision: "approve", expectedRevision,
+        approvalId: pending.approvalId}, owner);
+      expect(decision.approval.status).toBe("approved");
+      expect(decision.grant).toBeUndefined();
+      expect(reopened.project(project.projectId, owner).jobs).toEqual([]);
+    } finally { reopened.close(); }
+  });
+
   it("replays creation and enforces viewer read-only project access", async () => {
     const { store, project, cas } = await fixture();
     const blob = await cas.writeBytes(Buffer.from("viewer-test"), "video/mp4");

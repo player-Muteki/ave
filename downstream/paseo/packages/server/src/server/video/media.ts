@@ -8,6 +8,7 @@ import { execFile } from "node:child_process";
 import { ContentAddressedStore, sha256File } from "./cas.js";
 import { EditorError, editorFailure } from "./errors.js";
 import { assertRenderablePreview } from "./preview-profile.js";
+import { encodeFramedChunk } from "#video-editor/bytes";
 import { FrameInspector } from "./frame-inspector.js";
 import { PyWorker } from "./py-worker.js";
 import { EditorStore } from "./store.js";
@@ -23,6 +24,8 @@ import {
   type StreamDescriptor,
   type ContactSheetResult,
   type InspectFrameRequest,
+  type CreateMaskRevisionRequest,
+  type MaskAnchorRevision,
 } from "#video-editor/contracts/v1";
 
 const execFileAsync = promisify(execFile);
@@ -114,7 +117,34 @@ export class MediaService {
     const project = this.store.project(input.projectId, principal);
     const asset = project.assets.find(a => a.assetId === input.assetId);
     if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
-    return this.frameInspector.inspect(input, asset, this.cas, this.tools.ffmpeg);
+    const { header, jpeg } = await this.frameInspector.inspect(input, asset, this.cas, this.tools.ffmpeg);
+    return encodeFramedChunk(header, jpeg);
+  }
+
+  async createMaskRevision(request: CreateMaskRevisionRequest, principal: EditorPrincipal) {
+    const input = request.anchor;
+    const previous = this.store.savedMaskApproval(request, principal);
+    if (previous) return previous;
+    const asset = this.store.asset(input.projectId, input.assetId, request.expectedRevision, principal);
+    if (!input.points.length) editorFailure("INVALID_ARGUMENT", "Select a foreground point before saving");
+    const rendered = await this.frameInspector.inspect(input, asset, this.cas, this.tools.ffmpeg, request);
+    if (!rendered.rawLabelMask || !rendered.header.mask) editorFailure("QA_FAILED", "No anchor label was produced");
+    const reviewImage = await this.cas.writeBytes(rendered.jpeg, "image/jpeg");
+    return this.store.saveMaskRevision(request, rendered.header, rendered.rawLabelMask, reviewImage, principal);
+  }
+
+  async verifyMaskFiles(revision: MaskAnchorRevision) {
+    if (revision.rawLabelMask.sha256 !== revision.anchor.mask.labelSha256 ||
+        revision.reviewImage.sha256 !== revision.anchor.previewSha256 ||
+        BigInt(revision.rawLabelMask.bytes) !== BigInt(revision.anchor.width) * BigInt(revision.anchor.height))
+      editorFailure("ARTIFACT_HASH_MISMATCH", "Stored mask or review image differs from its source frame");
+    await this.cas.readBytes(revision.rawLabelMask);
+    return this.cas.readBytes(revision.reviewImage);
+  }
+
+  async readMaskRevision(projectId: string, maskRevisionId: string, principal: EditorPrincipal) {
+    const revision = this.store.maskRevision(projectId, maskRevisionId, principal);
+    return encodeFramedChunk(revision, await this.verifyMaskFiles(revision));
   }
 
   /** Working sample rate for analysis jobs (CFR grid); VFR sources keep their index ticks. */

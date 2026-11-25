@@ -5,6 +5,7 @@ import {
   CreateUploadRequestSchema,
   WriteUploadChunkSchema,
   DecideApprovalResultSchema,
+  ApprovalDecisionSchema,
   ProjectRequestSchema,
   PlanReviewRequestSchema,
   ReadAssetChunkRequestSchema,
@@ -15,6 +16,8 @@ import {
   ContactSheetRequestSchema,
   InspectFrameRequestSchema,
   PreviewFramesRequestSchema,
+  CreateMaskRevisionRequestSchema,
+  MaskRevisionReviewRequestSchema,
   type EditorPrincipal,
 } from "#video-editor/contracts/v1";
 import { decodeFramedChunk } from "#video-editor/bytes";
@@ -57,18 +60,12 @@ export class EditorRpcService {
         return this.editor.store.createPlan({ ...request, principal });
       }
       case "video.v1.decide_approval": {
-        const result = this.editor.store.decideApproval(
-          z
-            .object({
-              requestId: z.string(),
-              approvalId: z.string(),
-              expectedRevision: z.string(),
-              decision: z.enum(["approve", "reject"]),
-              comment: z.string().optional(),
-            })
-            .parse(input),
-          principal,
-        );
+        const request = ApprovalDecisionSchema.parse(input);
+        if (request.decision === "approve") {
+          const revision = this.editor.store.pendingMaskForDecision(request.approvalId, principal);
+          if (revision) await this.editor.media.verifyMaskFiles(revision);
+        }
+        const result = this.editor.store.decideApproval(request, principal);
         return DecideApprovalResultSchema.parse(result);
       }
       case "video.v1.create_job": {
@@ -127,6 +124,12 @@ export class EditorRpcService {
         const result = this.editor.store.createAnalysisJob({ ...request, principal });
         this.editor.jobs.enqueue(request.projectId, result.job.jobId);
         return result;
+      }
+      case "video.v1.create_mask_revision":
+        return this.editor.media.createMaskRevision(CreateMaskRevisionRequestSchema.parse(input), principal);
+      case "video.v1.get_mask_revision": {
+        const request = MaskRevisionReviewRequestSchema.parse(input);
+        return this.editor.media.readMaskRevision(request.projectId, request.maskRevisionId, principal);
       }
       case "video.v1.inspect_frame": {
         const request = InspectFrameRequestSchema.parse(input);

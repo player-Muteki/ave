@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { encodeFramedChunk } from "#video-editor/bytes";
 import {
   InspectFrameHeaderSchema,
   type InspectFrameRequest,
+  type InspectFrameHeader,
+  type CreateMaskRevisionRequest,
   type SourceAsset,
 } from "#video-editor/contracts/v1";
 import { ContentAddressedStore, sha256File } from "./cas.js";
@@ -136,6 +137,30 @@ async function decodeIndexedFrame(
     editorFailure("QA_FAILED", "Decoded frame clock or geometry differs from its index");
 }
 
+async function storeReviewedLabel(
+  save: CreateMaskRevisionRequest,
+  header: InspectFrameHeader,
+  cas: ContentAddressedStore,
+  directory: string,
+) {
+  const { width, height } = header;
+  if (
+    header.mask?.labelSha256 !== save.expectedLabelSha256 ||
+    header.previewSha256 !== save.expectedPreviewSha256
+  )
+    editorFailure("REVISION_CONFLICT", "Recomputed mask differs from the reviewed anchor");
+  const rawLabelMask = await cas.importFile(
+    path.join(directory, "label.raw"),
+    "application/octet-stream",
+  );
+  if (
+    rawLabelMask.sha256 !== save.expectedLabelSha256 ||
+    BigInt(rawLabelMask.bytes) !== BigInt(width) * BigInt(height)
+  )
+    editorFailure("QA_FAILED", "Stored mask does not match the reviewed source raster");
+  return rawLabelMask;
+}
+
 export class FrameInspector {
   private tracking = false;
 
@@ -144,6 +169,7 @@ export class FrameInspector {
     asset: SourceAsset,
     cas: ContentAddressedStore,
     ffmpeg: string,
+    save?: CreateMaskRevisionRequest,
   ) {
     const frame = await resolveFrame(request, asset, cas);
     const { width, height, pts, frameCount, previewWidth, previewHeight } = frame;
@@ -174,10 +200,14 @@ export class FrameInspector {
           "inspect_mask.py",
         );
         try {
-          const result = await execute(python, ["-I", "-B", script], {
-            ...options,
-            timeout: 120_000,
-          });
+          const result = await execute(
+            python,
+            ["-I", "-B", script, ...(save ? ["--save-label"] : [])],
+            {
+              ...options,
+              timeout: 120_000,
+            },
+          );
           mask = JSON.parse(result.stdout);
         } catch {
           editorFailure(
@@ -229,7 +259,9 @@ export class FrameInspector {
         previewSha256: createHash("sha256").update(stdout).digest("hex"),
         mask,
       });
-      return encodeFramedChunk(header, stdout);
+      if (!save) return { header, jpeg: stdout };
+      const rawLabelMask = await storeReviewedLabel(save, header, cas, directory);
+      return { header, jpeg: stdout, rawLabelMask };
     } finally {
       if (acquired) this.tracking = false;
       await rm(directory, { recursive: true, force: true });

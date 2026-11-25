@@ -1213,6 +1213,40 @@
       ],
       "additionalProperties": false
     },
+    "CreateMaskRevisionRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:CreateMaskRevisionRequest",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "expectedRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "anchor": {
+          "$ref": "urn:video-editor:v1:InspectFrameRequest"
+        },
+        "expectedLabelSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "expectedPreviewSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "expectedRevision",
+        "anchor",
+        "expectedLabelSha256",
+        "expectedPreviewSha256"
+      ],
+      "additionalProperties": false
+    },
     "CreateProjectInput": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:CreateProjectInput",
@@ -2376,6 +2410,215 @@
         "cancel_requested",
         "cancelled"
       ]
+    },
+    "MaskAnchorRevision": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:MaskAnchorRevision",
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "video.mask-anchor/v1"
+        },
+        "maskRevisionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "baseTimelineRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "anchor": {
+          "type": "object",
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "assetId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "streamUid": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "sourcePresentationIndexHash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "frame": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "points": {
+              "maxItems": 32,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "foreground": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "foreground"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "sourceSha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "pts": {
+              "type": "string",
+              "pattern": "^-?[0-9]+$"
+            },
+            "timeBase": {
+              "$ref": "urn:video-editor:v1:Rational"
+            },
+            "frameCount": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "width": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "height": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "previewWidth": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 640
+            },
+            "previewHeight": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 640
+            },
+            "previewSha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "mask": {
+              "type": "object",
+              "properties": {
+                "engine": {
+                  "type": "string",
+                  "const": "sam2.1-tiny"
+                },
+                "weightsSha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "labelSha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "foregroundPixels": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "engine",
+                "weightsSha256",
+                "labelSha256",
+                "foregroundPixels"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "projectId",
+            "assetId",
+            "streamUid",
+            "sourcePresentationIndexHash",
+            "frame",
+            "points",
+            "sourceSha256",
+            "pts",
+            "timeBase",
+            "frameCount",
+            "width",
+            "height",
+            "previewWidth",
+            "previewHeight",
+            "previewSha256",
+            "mask"
+          ],
+          "additionalProperties": false
+        },
+        "rotation": {
+          "type": "string"
+        },
+        "sampleAspectRatio": {
+          "type": "string"
+        },
+        "rawLabelMask": {
+          "$ref": "urn:video-editor:v1:BlobRef"
+        },
+        "reviewImage": {
+          "$ref": "urn:video-editor:v1:BlobRef"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "maskRevisionId",
+        "projectId",
+        "baseTimelineRevision",
+        "anchor",
+        "rotation",
+        "sampleAspectRatio",
+        "rawLabelMask",
+        "reviewImage"
+      ],
+      "additionalProperties": false
+    },
+    "MaskRevisionReviewRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:MaskRevisionReviewRequest",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "maskRevisionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "projectId",
+        "maskRevisionId"
+      ],
+      "additionalProperties": false
     },
     "PlanReviewRequest": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

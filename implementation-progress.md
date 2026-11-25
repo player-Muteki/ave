@@ -237,4 +237,12 @@
 
 在本地 RTX 5060 Laptop GPU 上，从 Chrome 经真实 WebSocket 和 daemon 在 320×192 视频上点选对象。单前景点选中已知矩形，追加背景点后显示 2 个点与 6,190 个前景像素；清除后的 JPEG 与点选前相同。源文件哈希保持不变。39 项服务端视频回归（含四个浏览器场景）、16 项契约样例及服务端与插件类型检查通过。
 
-部署单帧点选需为 daemon 设置绝对路径 `VIDEO_EDITOR_SAM2_PYTHON`（含 CUDA、PyTorch 和 SAM2 依赖）、`VIDEO_EDITOR_SAM2_SOURCE`（固定提交的干净 SAM2 checkout）与 `VIDEO_EDITOR_SAM2_WEIGHTS`（固定 Tiny 权重）。普通取帧仅需 FFmpeg。掩码预览随工作台状态保存于内存；持久化掩码版本、输入审批及从该版本调度 VACE 待接入。
+部署单帧点选需为 daemon 设置绝对路径 `VIDEO_EDITOR_SAM2_PYTHON`（含 CUDA、PyTorch 和 SAM2 依赖）、`VIDEO_EDITOR_SAM2_SOURCE`（固定提交的干净 SAM2 checkout）与 `VIDEO_EDITOR_SAM2_WEIGHTS`（固定 Tiny 权重）。普通取帧仅需 FFmpeg。点选预览保存在工作台内存中，点击「保存掩码供审批」才创建持久版本。
+
+## 2026-11-25 · 单帧掩码保存、复核与输入审批
+
+工作台保存时，daemon 按已审看的点重新计算 SAM2 掩码，核对原始标签和审片 JPEG 的摘要。两个文件写入 CAS，版本与待审批记录在同一个 SQLite 事务内提交。版本记录包含原始素材、流、显示序号、精确 PTS、编码尺寸、SAR、旋转、点提示、权重摘要和前景像素数。
+
+真实 Chrome、daemon 和 CUDA 实测覆盖了添加正负点、保存、清除当前预览、刷新网页、重新打开项目、逐字节复核保存的 JPEG，以及批准输入。CAS 中的标签逐像素为 0/255，前景像素总数与报告一致，正负点落在各自对应区域。测试中临时移走已生成的标签后，批准请求失败，审批保持 pending。恢复标签后批准成功，媒体 Job 数量仍为零。独立数据库重开测试验证了版本、请求回执和审批决策，输入批准没有签发渲染或导出 grant。
+
+52 份 schema 定义同步，18 项契约样例、40 项服务端视频测试（含四个 Chrome 场景）及服务端和插件类型检查通过。已验收范围为单帧输入。整镜头掩码传播、审片及从该版本执行 VACE 仍待接入。

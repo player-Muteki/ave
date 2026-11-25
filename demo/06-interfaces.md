@@ -349,6 +349,7 @@ type ExportManifest = {
 | `get_upload_status/commit_upload/cancel_upload` | 查询 nextOffset、完成或取消 | operator；最终长度和 SHA-256，重复 commit 返回同 Asset |
 | `get_asset_metadata` | 流、PTS、色彩、镜头 | viewer |
 | `inspect_frame` | 按素材、流、索引摘要和显示序号取帧，可附编码像素坐标的正负点 | operator；返回二进制 JPEG、源 PTS、时基、尺寸与掩码摘要。v1 增量接口；旧客户端可继续读取代理。原帧检查仅需 FFmpeg，点选预览需配置 SAM2。 |
+| `create_mask_revision`（单帧锚点） / `get_mask_revision` | 保存已查看的原始 0/255 标签和 JPEG，或按项目读取已存版本与审片图 | 创建需 operator、时间线版本、标签及审片图双摘要；读取需项目访问权。独立 input 审批绑定完整版本摘要，批准记录审批设备。现有预览、渲染和导出 grant 语义不变。 |
 | `create_mask_revision/correct_mask_revision` | 创建或修正 mask | operator；产生新 subjectRevision/hash |
 | `create_keyframe_set` | 创建锚帧/参考图集合 | operator；产生新 subjectRevision/hash |
 | `start_agent_run/steer/follow_up/abort` | 控制规划会话 | operator；runId 幂等 |

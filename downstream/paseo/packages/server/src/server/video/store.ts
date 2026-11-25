@@ -18,6 +18,9 @@ import {
   type ArtifactRef,
   type AcceptedEditPlan,
   type ApprovalDecision,
+  type CreateMaskRevisionRequest,
+  type InspectFrameHeader,
+  MaskAnchorRevisionSchema,
   type ApprovalGrant,
   type ApprovalRequest,
   type EditPlanDraftV1,
@@ -86,6 +89,12 @@ CREATE TABLE IF NOT EXISTS project_grants (
 CREATE TABLE IF NOT EXISTS assets (
   asset_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
   revision TEXT NOT NULL, document TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mask_anchors (
+  mask_revision_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
+  approval_id TEXT NOT NULL REFERENCES approvals(approval_id), request_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL, document TEXT NOT NULL, approved_by TEXT,
+  UNIQUE(project_id, request_id)
 );
 CREATE TABLE IF NOT EXISTS plans (
   plan_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
@@ -646,6 +655,63 @@ export class EditorStore {
     });
   }
 
+  savedMaskApproval(request: CreateMaskRevisionRequest, principal: EditorPrincipal) {
+    this.authorize(request.anchor.projectId, principal, "operator");
+    const row = this.database.prepare(
+      "SELECT approval_id, request_hash FROM mask_anchors WHERE project_id = ? AND request_id = ?",
+    ).get(request.anchor.projectId, request.requestId) as { approval_id: string; request_hash: string } | undefined;
+    if (!row) return undefined;
+    if (row.request_hash !== sha256Json(request)) editorFailure("IDEMPOTENCY_CONFLICT", "Mask save request changed");
+    return this.approval(row.approval_id);
+  }
+
+  pendingMaskForDecision(id: string, principal: EditorPrincipal) {
+    const approval = this.approval(id);
+    this.authorize(approval.projectId, principal, "operator");
+    if (approval.status === "pending" && approval.subjectType === "mask_revision")
+      return this.maskRevision(approval.projectId, approval.subjectId, principal);
+    return undefined;
+  }
+
+  maskRevision(projectId: string, id: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    const row = this.database.prepare(
+      "SELECT document FROM mask_anchors WHERE project_id = ? AND mask_revision_id = ?",
+    ).get(projectId, id) as { document: string } | undefined;
+    if (!row) editorFailure("ASSET_NOT_FOUND", "Unknown mask revision in this project");
+    return MaskAnchorRevisionSchema.parse(JSON.parse(row.document));
+  }
+
+  saveMaskRevision(request: CreateMaskRevisionRequest, anchor: InspectFrameHeader, rawLabelMask: BlobRef,
+    reviewImage: BlobRef, principal: EditorPrincipal): ApprovalRequest {
+    const projectId = request.anchor.projectId;
+    this.authorize(projectId, principal, "operator");
+    return this.mutate({ projectId, requestId: request.requestId, payload: request, execute: () => {
+      const asset = this.asset(projectId, anchor.assetId, request.expectedRevision, principal);
+      const stream = asset.streams.find(s => s.streamUid === anchor.streamUid);
+      if (!stream || asset.original.sha256 !== anchor.sourceSha256 || asset.presentationIndex.sha256 !== anchor.sourcePresentationIndexHash)
+        editorFailure("REVISION_CONFLICT", "Mask inputs changed");
+      const revision = MaskAnchorRevisionSchema.parse({
+        schemaVersion: "video.mask-anchor/v1", maskRevisionId: randomUUID(), projectId,
+        baseTimelineRevision: request.expectedRevision, anchor, rotation: stream.rotation ?? "0",
+        sampleAspectRatio: stream.sampleAspectRatio ?? "unknown", rawLabelMask, reviewImage,
+      });
+      const approval = ApprovalRequestSchema.parse({
+        approvalId: randomUUID(), projectId, subjectType: "mask_revision", subjectId: revision.maskRevisionId,
+        subjectRevision: "1", subjectHash: sha256Json(revision), baseTimelineRevision: request.expectedRevision,
+        purpose: "input", requiredInputs: [{type: "asset", id: asset.assetId, revision: request.expectedRevision, hash: asset.original.sha256}],
+        diffSummary: {intent: "单帧对象掩码", operationCount: 1, summary: `${asset.displayName} · 源帧 ${anchor.frame}`},
+        generationCostCapMicros: "0", externalDestinations: [], status: "pending",
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      });
+      this.insertApproval(approval);
+      this.database.prepare("INSERT INTO mask_anchors(mask_revision_id,project_id,approval_id,request_id,request_hash,document) VALUES(?,?,?,?,?,?)")
+        .run(revision.maskRevisionId, projectId, approval.approvalId, request.requestId, sha256Json(request), JSON.stringify(revision));
+      this.emit(projectId, "approval.requested", { approvalId: approval.approvalId, purpose: "input" });
+      return approval;
+    }});
+  }
+
   decideApproval(
     input: ApprovalDecision,
     principal: EditorPrincipal,
@@ -675,6 +741,16 @@ export class EditorStore {
             decision: "rejected",
           });
           return { approval: rejected };
+        }
+        if (current.purpose === "input" && current.subjectType === "mask_revision") {
+          const revision = this.maskRevision(current.projectId, current.subjectId, principal);
+          if (sha256Json(revision) !== current.subjectHash) editorFailure("ARTIFACT_HASH_MISMATCH", "Mask revision changed");
+          const approved = { ...current, status: "approved" as const };
+          this.updateApproval(approved);
+          this.database.prepare("UPDATE mask_anchors SET approved_by = ? WHERE project_id = ? AND mask_revision_id = ?")
+            .run(principal.principalId, current.projectId, current.subjectId);
+          this.emit(current.projectId, "approval.decided", { approvalId: current.approvalId, decision: "approved" });
+          return { approval: approved };
         }
         const grant = ApprovalGrantSchema.parse({
           grantId: randomUUID(),
@@ -1295,6 +1371,11 @@ export class EditorStore {
         },
       ),
     );
+    // Invalid times are semantic errors, independent of the selected render profile.
+    for (const operation of draft.trimOperations) {
+      this.validateRange(operation.sourceRange);
+      this.validateRange(operation.recordRange);
+    }
     assertRenderablePreview(draft);
     for (const operation of draft.trimOperations) {
       const asset = assets.get(operation.source.assetId);
@@ -1306,8 +1387,6 @@ export class EditorStore {
         )
       )
         editorFailure("PLAN_SEMANTIC_INVALID", "The trim must select an existing video stream");
-      this.validateRange(operation.sourceRange);
-      this.validateRange(operation.recordRange);
       // CFR sources quantize to whole frames; misaligned durations would fail
       // the exact candidate duration check after render.
       const videoStream = asset.streams.find(

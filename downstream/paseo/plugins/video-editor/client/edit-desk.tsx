@@ -158,6 +158,12 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
         "",
     );
   }
+  const openProjectId = project?.projectId;
+  const refreshMaskApprovals = useCallback(async () => {
+    if (!openProjectId) return;
+    const snapshot = await read({ projectId: openProjectId });
+    setProject(current => current?.projectId === openProjectId ? snapshot : current);
+  }, [openProjectId, read]);
   const colors = theme.colors;
   const styles = useMemo(
     () => ({
@@ -333,19 +339,19 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             <Text style={muted}>项目中还没有素材。导入视频后可设置入点和出点。</Text>
           )}
           {project.assets.map((asset) => (
-            <DeskControl
-              key={asset.assetId}
-              accessibilityRole="button"
-              accessibilityState={selected === asset.assetId ? SELECTED : NOT_SELECTED}
-              disabled={busy || !asset.streams.some((s) => s.kind === "video")}
-              action={select}
-              value={asset.assetId}
-              style={selected === asset.assetId ? styles.clip : styles.source}
-            >
-              <Text style={ink}>{asset.displayName}</Text>
-              <Text style={muted}>
-                {asset.streams.map((s) => s.codec).join(" / ")} · {asset.original.bytes} 字节
-              </Text>
+            <View key={asset.assetId} style={selected === asset.assetId ? styles.clip : styles.source}>
+              <DeskControl
+                accessibilityRole="button"
+                accessibilityState={selected === asset.assetId ? SELECTED : NOT_SELECTED}
+                disabled={busy || !asset.streams.some((s) => s.kind === "video")}
+                action={select}
+                value={asset.assetId}
+              >
+                <Text style={ink}>{asset.displayName}</Text>
+                <Text style={muted}>
+                  {asset.streams.map((s) => s.codec).join(" / ")} · {asset.original.bytes} 字节
+                </Text>
+              </DeskControl>
               {(() => {
                 const job = project.jobs
                   .filter((j) => j.analysisAssetId === asset.assetId)
@@ -452,13 +458,13 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   </Text>
                 </View>
               )}
-            </DeskControl>
+            </View>
           ))}
           {selected !== "" && (
             <>
               {mediaControl("查看源素材代理（无声）", selected, project.revision, project.assets.find(a => a.assetId === selected)?.proxy)}
               {project.assets.filter(a => a.assetId === selected && a.streams.some(s => s.kind === "video")).map(asset =>
-                <FrameInspector key={project.projectId + asset.assetId} projectId={project.projectId} asset={asset} theme={theme} />)}
+                <FrameInspector key={project.projectId + asset.assetId} project={project} refresh={refreshMaskApprovals} asset={asset} theme={theme} />)}
               <Text style={heading}>单段裁剪</Text>
               <View style={row}>
                 {field("入点（秒，含）", start, setStart)}

@@ -73,3 +73,11 @@ export async function digestSource(bytes: ArrayBuffer): Promise<string> {
   if (Platform.OS !== "web" || !globalThis.crypto?.subtle) throw new Error("当前工作台不支持文件校验。");
   return Array.from(new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes)), value => value.toString(16).padStart(2, "0")).join("");
 }
+
+export function imageUri(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+  }
+  return "data:image/jpeg;base64," + btoa(binary);
+}
