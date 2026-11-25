@@ -33,7 +33,7 @@ it("projects asset metadata, fails closed on unknown jobs, and reports snapshot 
           { kind: "audio", streamUid: "stream:1", streamIndex: 1, codec: "aac", timeBase: { num: "1", den: "48000" }, disposition: {} },
         ],
         probe,
-        presentationIndex: blob,
+        presentationIndex: await service.cas.writeJson({ frames: [{ stream_index: 1 }, { stream_index: 0 }] }),
         sourceNeverWritable: true,
       },
       "asset",
@@ -46,6 +46,8 @@ it("projects asset metadata, fails closed on unknown jobs, and reports snapshot 
     expect(await call("get_asset_metadata", { assetId: "clip", contentHash: blob.sha256 })).toEqual({
       assetId: "clip",
       contentHash: blob.sha256,
+      durationSeconds: null,
+      frameCount: 1,
       streams: [
         { streamUid: "stream:0", kind: "video", codec: "h264", timeBase: { num: "1", den: "90000" },
           averageRate: { num: "24", den: "1" }, startPts: "-7200", durationTicks: "90000" },

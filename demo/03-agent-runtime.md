@@ -46,7 +46,7 @@ FilmCraft 是候选确定性执行后端，**不是新的 Agent 控制面**。�
 | 工具 | 输入摘要 | 结果与边界 |
 | --- | --- | --- |
 | `get_project_snapshot` | `projectId` | 紧凑镜头、当前 Revision、后端能力；不下发整份时间线 |
-| `get_asset_metadata` | `assetId + contentHash` | ffprobe/流/PTS/色彩事实；不接受路径 |
+| `get_asset_metadata` | `assetId + contentHash` | 流表（含 averageRate）+ 输出时长/帧数（读 CAS 内 probe/index），有界元数据 |
 | `get_contact_sheet` | 镜头、帧索引、数量、用途 | 限尺寸/数量的派生图像引用；记录预算 |
 | `get_audio_context` | 资产、区间、转写配置 ID | 音频元数据/已存在转写；云转写需用户另行批准 |
 | `validate_edit_plan` | 候选 EditPlan | schema + 业务错误；不落库、不执行 |

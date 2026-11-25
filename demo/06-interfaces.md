@@ -349,7 +349,7 @@ type ExportManifest = {
 | `import_asset` | 桌面原生授权导入 | operator；hash/配额 |
 | `create_upload/write_upload_chunk` | 初始化上传、写一块 | operator；uploadId/requestId/offset/chunkSha256 |
 | `get_upload_status/commit_upload/cancel_upload` | 查询 nextOffset、完成或取消 | operator；最终长度和 SHA-256，重复 commit 返回同 Asset |
-| `get_asset_metadata` | 流、PTS、色彩、镜头 | viewer |
+| `get_asset_metadata` | 流描述符 + 输出时长/帧数（读 CAS 内 probe/presentation index），有界元数据 | viewer；requestId + projectId + assetId |
 | `get_analysis` | 最新 analysis job 的有界元数据：state/速率/artifact 引用（含 hash）/error，字节不出 CAS | viewer；requestId + projectId + assetId |
 | `get_scene_cuts` / `get_waveform` | 确定性切点（整帧对齐、≤64 条、含 score/aligned）与首音轨 RMS 波形桶（100ms、≤1200 桶），有界只读，无像素 | viewer；requestId + projectId + assetId |
 | `inspect_frame` | 按素材、流、索引摘要和显示序号取帧，可附编码像素坐标的正负点 | operator；返回二进制 JPEG、源 PTS、时基、尺寸与掩码摘要。v1 增量接口；旧客户端可继续读取代理。原帧检查仅需 FFmpeg，点选预览需配置 SAM2。 |

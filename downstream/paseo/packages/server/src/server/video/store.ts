@@ -378,19 +378,29 @@ export class EditorStore {
     return asset;
   }
 
-  async plannerAssetMetadata(projectId: string, assetId: string, contentHash: string, principal: EditorPrincipal) {
+  private async readAssetMetadata(projectId: string, assetId: string, principal: EditorPrincipal, contentHash?: string) {
     this.authorize(projectId, principal, "viewer");
     const row = this.database.prepare("SELECT document FROM assets WHERE project_id = ? AND asset_id = ?")
       .get(projectId, assetId) as { document: string } | undefined;
     const asset = row && SourceAssetSchema.parse(JSON.parse(row.document));
-    if (!asset || asset.original.sha256 !== contentHash)
+    if (!asset || (contentHash !== undefined && asset.original.sha256 !== contentHash))
       editorFailure("ASSET_NOT_FOUND", "Asset identity is not in the bound project");
     if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
 
     const probe: ProbeDocument = JSON.parse((await this.cas.readBytes(asset.probe)).toString("utf8"));
+    const index = JSON.parse((await this.cas.readBytes(asset.presentationIndex)).toString("utf8")) as {
+      frames: { stream_index: number }[];
+    };
+    const primaryVideo = asset.streams.find(stream => stream.kind === "video");
+    const frameCount = primaryVideo ? index.frames.reduce((n, f) => n + Number(f.stream_index === primaryVideo.streamIndex), 0) : null;
+    return { asset, probe, frameCount, durationSeconds: probe.format?.duration ?? null };
+  }
+
+  async plannerAssetMetadata(projectId: string, assetId: string, contentHash: string, principal: EditorPrincipal) {
+    const { asset, probe, frameCount, durationSeconds } = await this.readAssetMetadata(projectId, assetId, principal, contentHash);
     const byIndex = new Map(probe.streams.map(stream => [stream.index, stream]));
     return PlannerAssetMetadataSchema.parse({
-      assetId, contentHash,
+      assetId, contentHash, frameCount, durationSeconds,
       streams: asset.streams.map(({ streamIndex, streamUid, kind, codec, timeBase, averageRate, width, height, sampleRate }) => {
         const stream = byIndex.get(streamIndex);
         const sameClock = stream?.codec_type === kind && stream.time_base === `${timeBase.num}/${timeBase.den}`;
@@ -1249,6 +1259,17 @@ export class EditorStore {
     });
   }
 
+  async assetMetadata(projectId: string, assetId: string, principal: EditorPrincipal) {
+    const { asset, durationSeconds, frameCount } = await this.readAssetMetadata(projectId, assetId, principal);
+    return {
+      assetId,
+      contentHash: asset.original.sha256,
+      durationSeconds,
+      frameCount,
+      streams: asset.streams,
+    };
+  }
+
   /**
    * Read the deterministic scene-cut artifact of the latest analysis job for an
    * asset. Bounded: at most 64 cuts, frame-aligned, hashes included. Viewer-level.
@@ -1259,9 +1280,10 @@ export class EditorStore {
     const project = this.project(projectId, principal);
     const asset = project.assets.find((a) => a.assetId === assetId);
     if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
-    const latest = project.jobs
+    const jobs = project.jobs
       .filter((j) => j.analysisAssetId === assetId)
-      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1));
+    const latest = jobs.find((j) => j.artifacts.some((a) => a.kind === "scenecuts")) ?? jobs[0];
     if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
     const artifact = latest.artifacts.find((a) => a.kind === "scenecuts");
     if (!artifact) editorFailure("ASSET_NOT_FOUND", "The analysis job has no scene-cut artifact yet");
@@ -1306,9 +1328,10 @@ export class EditorStore {
     const project = this.project(projectId, principal);
     const asset = project.assets.find((a) => a.assetId === assetId);
     if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
-    const latest = project.jobs
+    const jobs = project.jobs
       .filter((j) => j.analysisAssetId === assetId)
-      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1));
+    const latest = jobs.find((j) => j.artifacts.some((a) => a.kind === "waveform")) ?? jobs[0];
     if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
     const artifact = latest.artifacts.find((a) => a.kind === "waveform");
     if (!artifact) editorFailure("ASSET_NOT_FOUND", "The analysis job has no waveform artifact yet");
@@ -1354,9 +1377,10 @@ export class EditorStore {
     const asset = project.assets.find((a) => a.assetId === assetId);
     if (!asset || (expectedHash !== undefined && asset.original.sha256 !== expectedHash))
       editorFailure("ASSET_NOT_FOUND", "Asset identity is not in the bound project");
-    const latest = project.jobs
+    const jobs = project.jobs
       .filter((j) => j.analysisAssetId === assetId)
-      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1));
+    const latest = jobs.find((j) => j.state === "completed" && j.artifacts.length > 0) ?? jobs[0];
     if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
     return {
       projectId,

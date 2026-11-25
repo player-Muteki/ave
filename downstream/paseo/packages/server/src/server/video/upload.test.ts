@@ -112,6 +112,8 @@ it("retains confirmed bytes through probe failure and replays a committed receip
       protocolVersion: "1", toolCallId: "timing", tool: "get_asset_metadata",
       args: { assetId: result.assetId, contentHash: digest },
     }));
+    expect(metadata.frameCount).toBe(2);
+    expect(Number(metadata.durationSeconds)).toBeCloseTo(0.2);
     const [video] = metadata.streams;
     expect(video).toMatchObject({ kind: "video", startPts: "0", averageRate: { num: "10", den: "1" } });
     expect(BigInt(video!.durationTicks!) * BigInt(video!.timeBase.num) * 5n).toBe(BigInt(video!.timeBase.den));

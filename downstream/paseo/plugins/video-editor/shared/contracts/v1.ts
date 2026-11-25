@@ -62,6 +62,8 @@ export const StreamDescriptorSchema = z
 export type StreamDescriptor = z.infer<typeof StreamDescriptorSchema>;
 
 export const PlannerAssetMetadataSchema = z.object({
+  durationSeconds: z.string().nullable().optional(),
+  frameCount: z.number().int().min(0).nullable().optional(),
   assetId: id,
   contentHash: sha256,
   streams: z.array(StreamDescriptorSchema.pick({
@@ -1021,6 +1023,26 @@ export const getExportSummaryRpc = {
   name: "video.v1.get_export_summary",
   input: GetExportSummaryInputSchema,
   output: GetExportSummaryResultSchema,
+};
+
+export const AssetMetadataSchema = z
+  .object({
+    assetId: id,
+    contentHash: sha256,
+    durationSeconds: z.string().nullable(),
+    frameCount: z.number().int().min(0).nullable(),
+    streams: z.array(StreamDescriptorSchema),
+  })
+  .strict();
+export type AssetMetadata = z.infer<typeof AssetMetadataSchema>;
+export const GetAssetMetadataInputSchema = z
+  .object({ requestId, projectId: id, assetId: id })
+  .strict();
+export const GetAssetMetadataResultSchema = AssetMetadataSchema.extend({ requestId }).strict();
+export const getAssetMetadataRpc = {
+  name: "video.v1.get_asset_metadata",
+  input: GetAssetMetadataInputSchema,
+  output: GetAssetMetadataResultSchema,
 };
 
 export const contactSheetRpc = {

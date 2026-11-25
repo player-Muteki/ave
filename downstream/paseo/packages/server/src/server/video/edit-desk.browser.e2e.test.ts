@@ -201,6 +201,8 @@ test
           displayName: "clip.mp4",
           original: { sha256: digest, bytes: String(bytes.length) },
         });
+        await clickDesk("元数据");
+        await web("wait", "--text", "50 帧 · 160x90");
         await clickDesk("生成联系表");
         await web("wait", "--text", "查看联系表").catch(async (cause) => {
           throw new Error(`Contact sheet did not appear: ${await web("snapshot")}`, { cause });
