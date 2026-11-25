@@ -8,6 +8,7 @@ import {
   DecideApprovalResultSchema,
   GetApprovalInputSchema,
   RevokeApprovalRequestSchema,
+  GetMutationResultInputSchema,
   ApprovalDecisionSchema,
   ProjectRequestSchema,
   PlanReviewRequestSchema,
@@ -83,6 +84,14 @@ export class EditorRpcService {
       case "video.v1.submit_plan": {
         const request = PlanReviewRequestSchema.parse(input);
         return this.editor.store.createPlan({ ...request, principal });
+      }
+      case "video.v1.get_mutation_result": {
+        const request = GetMutationResultInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          mutation: this.editor.store.mutationResult(request.projectId, request.requestId, principal),
+        };
       }
       case "video.v1.get_approval": {
         const request = GetApprovalInputSchema.parse(input);

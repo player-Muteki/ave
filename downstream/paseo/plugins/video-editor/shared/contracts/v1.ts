@@ -639,6 +639,29 @@ export const revokeApprovalRpc = {
   input: RevokeApprovalRequestSchema,
   output: RevokeApprovalResultSchema,
 };
+
+export const GetMutationResultInputSchema = z
+  .object({ requestId, projectId: id })
+  .strict();
+export type GetMutationResultInput = z.infer<typeof GetMutationResultInputSchema>;
+export const GetMutationResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    fingerprint: sha256,
+    response: z.unknown(),
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+export type GetMutationResult = z.infer<typeof GetMutationResultSchema>;
+export const GetMutationResultResultSchema = z
+  .object({ requestId, projectId: id, mutation: GetMutationResultSchema.nullable() })
+  .strict();
+export const getMutationResultRpc = {
+  name: "video.v1.get_mutation_result",
+  input: GetMutationResultInputSchema,
+  output: GetMutationResultResultSchema,
+};
 export const createJobRpc = {
   name: "video.v1.create_job",
   input: CreateJobRequestSchema,

@@ -1113,6 +1113,25 @@ export class EditorStore {
     }});
   }
 
+  /**
+   * Reconciliation read: return the stored response for a mutation requestId,
+   * or null when the request was never applied. Viewer-level.
+   */
+  mutationResult(projectId: string, requestId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    const row = this.database
+      .prepare("SELECT fingerprint, response, created_at FROM mutations WHERE project_id = ? AND request_id = ?")
+      .get(projectId, requestId) as { fingerprint: string; response: string; created_at: string } | undefined;
+    if (!row) return null;
+    return {
+      requestId,
+      projectId,
+      fingerprint: row.fingerprint,
+      response: JSON.parse(row.response),
+      createdAt: row.created_at,
+    };
+  }
+
   /** Read one approval (with its grant) by id. Viewer-level. */
   approvalById(projectId: string, approvalId: string, principal: EditorPrincipal): ApprovalRequest {
     this.authorize(projectId, principal, "viewer");
