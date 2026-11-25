@@ -42,6 +42,9 @@ import {
 } from "#video-editor/contracts/v1";
 import { describeEditorError, EditorError, editorFailure } from "./errors.js";
 
+/** Server-side cap for a single chunked upload (clients cap at 64 MiB). */
+const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
+
 interface ProjectRow {
   project_id: string;
   title: string;
@@ -518,6 +521,9 @@ export class EditorStore {
       mediaType,
     } = input;
     this.authorize(projectId, principal, "operator");
+    const size = Number(expectedSize);
+    if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_UPLOAD_BYTES)
+      editorFailure("INVALID_ARGUMENT", `Upload size must be a positive integer not exceeding ${MAX_UPLOAD_BYTES} bytes`);
     return this.mutate({
       projectId,
       requestId,
