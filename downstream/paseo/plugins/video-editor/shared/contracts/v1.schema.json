@@ -3177,6 +3177,189 @@
       ],
       "additionalProperties": false
     },
+    "TrackMaskRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:TrackMaskRequest",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "expectedRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "anchorApprovalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "anchorHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "firstFrame": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "frameCount": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 81
+        }
+      },
+      "required": [
+        "projectId",
+        "requestId",
+        "expectedRevision",
+        "anchorApprovalId",
+        "anchorHash",
+        "firstFrame",
+        "frameCount"
+      ],
+      "additionalProperties": false
+    },
+    "TrackedMaskManifest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:TrackedMaskManifest",
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "video.tracked-mask/v1"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "anchorApprovalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "anchorHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "maskRevisionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "sourceSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sourcePresentationIndexHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "assetId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "streamUid": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "engine": {
+          "type": "string",
+          "const": "sam2.1-tiny"
+        },
+        "weightsSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "anchorFrame": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "width": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "height": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "timeBase": {
+          "$ref": "urn:video-editor:v1:Rational"
+        },
+        "frames": {
+          "minItems": 2,
+          "maxItems": 81,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sourceFrame": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "pts": {
+                "type": "string",
+                "pattern": "^-?[0-9]+$"
+              },
+              "foregroundPixels": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "label": {
+                "$ref": "urn:video-editor:v1:BlobRef"
+              }
+            },
+            "required": [
+              "sourceFrame",
+              "pts",
+              "foregroundPixels",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reviewImageRate": {
+          "type": "number",
+          "const": 9
+        },
+        "reviewVideo": {
+          "$ref": "urn:video-editor:v1:BlobRef"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "projectId",
+        "jobId",
+        "anchorApprovalId",
+        "anchorHash",
+        "maskRevisionId",
+        "sourceSha256",
+        "sourcePresentationIndexHash",
+        "assetId",
+        "streamUid",
+        "engine",
+        "weightsSha256",
+        "anchorFrame",
+        "width",
+        "height",
+        "timeBase",
+        "frames",
+        "reviewImageRate",
+        "reviewVideo"
+      ],
+      "additionalProperties": false
+    },
     "UploadRequest": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:UploadRequest",

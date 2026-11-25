@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { build } from "esbuild";
 import { expect, test } from "vitest";
 import { decodeFramedChunk, encodeFramedChunk } from "#video-editor/bytes";
-import { MaskAnchorRevisionSchema, ProjectSnapshotSchema, UploadStatusSchema } from "#video-editor/contracts/v1";
+import { TrackedMaskManifestSchema, MaskAnchorRevisionSchema, ProjectSnapshotSchema, UploadStatusSchema } from "#video-editor/contracts/v1";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { ContentAddressedStore } from "./cas.js";
@@ -69,7 +69,7 @@ test
           "-f",
           "lavfi",
           "-i",
-          scenario === "object mask" ? "color=c=navy:size=320x192:rate=25:duration=2,drawbox=x=118:y=60:w=85:h=72:color=orange:t=fill"
+          scenario === "object mask" ? "color=c=navy:size=320x192:rate=25:duration=2[bg];color=c=orange:size=84x72:rate=25:duration=2[box];[bg][box]overlay=x=96+5*n:y=60"
             : "testsrc2=size=160x90:rate=25:duration=2",
           "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2",
           "-c:a", "aac",
@@ -197,6 +197,7 @@ test
       }
       await web("wait", '[aria-label="入点（秒，含）"]');
       if (scenario === "object mask") {
+        await web("fill", '[aria-label="源帧序号（从零开始）"]', "4");
         await clickDesk("查看源帧");
         await web("wait", "--text", "320×192");
         const img = "document.querySelector('[aria-label=\"点选源帧\"] img')";
@@ -225,6 +226,9 @@ test
         expect(saved.jobs).toHaveLength(0);
         const [approval] = saved.approvals;
         expect(approval).toMatchObject({status: "pending", purpose: "input", subjectType: "mask_revision"});
+        const track = {projectId: saved.projectId, expectedRevision: saved.revision, anchorApprovalId: approval!.approvalId,
+          anchorHash: approval!.subjectHash, firstFrame: 0, frameCount: 9};
+        await expect(invoke("track_mask", {...track, requestId: "unapproved"})).rejects.toThrow();
         const review = decodeFramedChunk(await invoke("get_mask_revision", {
           projectId: project.projectId, maskRevisionId: approval!.subjectId,
         }) as Uint8Array);
@@ -265,6 +269,41 @@ test
         expect(approved.jobs).toHaveLength(0);
         expect(approved.approvals).toHaveLength(1);
         expect(approved.approvals[0]).toMatchObject({status: "approved", purpose: "input", subjectHash: approval!.subjectHash});
+        await expect(invoke("track_mask", {...track, firstFrame: 5, requestId:"outside-anchor"})).rejects.toThrow();
+        await clickDesk("传播已批准的掩码");
+        await expect.poll(async () => {
+          const p = ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId}));
+          if (p.jobs[0]?.state === "failed") throw Error(JSON.stringify(p.jobs[0].error));
+          return p.jobs[0]?.state;
+        }, {timeout: 45000}).toBe("completed");
+        const finished = ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId}));
+        expect(finished.approvals).toHaveLength(1);
+        const job = finished.jobs[0]!;
+        expect(job.analysisAssetId).toBeUndefined();
+        const artifact = job.artifacts.find(a => a.kind === "mask")!;
+        const manifest = TrackedMaskManifestSchema.parse(JSON.parse((await cas.readBytes(artifact.blob)).toString("utf8")));
+        expect(manifest.frames[4]!.label).toEqual(revision.rawLabelMask);
+        expect(manifest.frames.map(f => BigInt(f.pts)*BigInt(manifest.timeBase.num)*25n)).toEqual(
+          Array.from({length:9},(_,i) => BigInt(i)*BigInt(manifest.timeBase.den)));
+        const {stdout: rgb} = await execute("ffmpeg", ["-v","error","-i",source,"-frames:v","9","-pix_fmt","rgb24","-f","rawvideo","pipe:1"],
+          {encoding:"buffer",maxBuffer:4<<20});
+        for (const [i, row] of manifest.frames.entries()) {
+          const label = await cas.readBytes(row.label);
+          let intersection=0, union=0;
+          for (let pixel=0;pixel<label.length;pixel++) {
+            const pos=(i*label.length+pixel)*3;
+            const orange=rgb[pos]!>155 && rgb[pos+1]!>70 && rgb[pos+2]!<80;
+            if (orange || label[pixel]) union++;
+            if (orange && label[pixel]) intersection++;
+          }
+          expect(intersection/union).toBeGreaterThan(.90);
+        }
+        await web("wait", "--text", "播放掩码传播审片");
+        await clickDesk("播放掩码传播审片（9 帧/秒）");
+        await web("wait", "--fn", "document.querySelector('video')?.readyState >= 2");
+        expect(Number(await web("eval", "document.querySelector('video').duration"))).toBe(1);
+        await web("eval", "(async () => { const v = document.querySelector('video'); v.muted = true; await v.play(); })()");
+        await expect.poll(async () => Number(await web("eval", "document.querySelector('video').currentTime"))).toBeGreaterThan(0.25);
         expect(createHash("sha256").update(await readFile(source)).digest("hex")).toBe(digest);
         return;
       }

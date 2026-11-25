@@ -8,6 +8,7 @@ import {
   MaskAnchorRevisionSchema,
   type ApprovalRequest,
 } from "../shared/contracts/v1.js";
+import { ShotTracking } from "./shot-tracking.js";
 import { digestSource, imageUri } from "./web.js";
 
 export function MaskReview({
@@ -23,7 +24,7 @@ export function MaskReview({
 }) {
   const read = useRpc(getMaskRevisionRpc);
   const decide = useRpc(decideApprovalRpc);
-  const [picture, setPicture] = useState<{ uri: string; width: number; height: number }>();
+  const [picture, setPicture] = useState<{ uri: string; width: number; height: number; frame: number; length: number }>();
   const [decoded, setDecoded] = useState(false);
   const loaded = useCallback(() => setDecoded(true), []);
   const failed = useCallback(() => {
@@ -66,7 +67,7 @@ export function MaskReview({
         )
           throw new Error("掩码审片图校验失败。");
         setPicture({
-          uri: imageUri(payload),
+          uri: imageUri(payload), frame: revision.anchor.frame, length: revision.anchor.frameCount,
           width: revision.anchor.previewWidth,
           height: revision.anchor.previewHeight,
         });
@@ -123,6 +124,8 @@ export function MaskReview({
           style={styles.image}
         />
       )}
+      {picture && decoded && approval.status === "approved" && approval.baseTimelineRevision === timeline &&
+        <ShotTracking approval={approval} anchor={picture.frame} length={picture.length} refresh={refresh} theme={theme}/>}
       {image && canDecide && (
         <Action label="批准此输入掩码" kind="approve" busy={busy} run={run} style={styles.action} />
       )}

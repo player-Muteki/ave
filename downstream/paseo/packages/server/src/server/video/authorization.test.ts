@@ -50,7 +50,7 @@ describe("authorizeVideoMethod role matrix", () => {
     }
   });
   it("viewer cannot modify or manage", () => {
-    for (const method of ["video.v1.submit_plan", "video.v1.create_job", "video.v1.control_job"]) {
+    for (const method of ["video.v1.submit_plan", "video.v1.create_job", "video.v1.control_job", "video.v1.track_mask"]) {
       expect(() => authorizeVideoMethod(method, device(viewer))).toThrow("viewer cannot modify");
     }
     expect(() => authorizeVideoMethod("video.v1.create_invitation", device(viewer))).toThrow(
@@ -66,6 +66,7 @@ describe("authorizeVideoMethod role matrix", () => {
       "video.v1.submit_plan",
       "video.v1.create_job",
       "video.v1.decide_approval",
+      "video.v1.track_mask",
       "video.v1.control_job",
     ]) {
       expect(authorizeVideoMethod(method, device(operator))).toEqual(operator);

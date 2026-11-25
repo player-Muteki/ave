@@ -19,6 +19,7 @@ import {
   type AcceptedEditPlan,
   type ApprovalDecision,
   type CreateMaskRevisionRequest,
+  TrackMaskRequestSchema, type TrackMaskRequest,
   type InspectFrameHeader,
   MaskAnchorRevisionSchema,
   type ApprovalGrant,
@@ -89,6 +90,9 @@ CREATE TABLE IF NOT EXISTS project_grants (
 CREATE TABLE IF NOT EXISTS assets (
   asset_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
   revision TEXT NOT NULL, document TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mask_tracking_jobs (
+  job_id TEXT PRIMARY KEY REFERENCES jobs(job_id), project_id TEXT NOT NULL REFERENCES projects(project_id), request TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS mask_anchors (
   mask_revision_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
@@ -845,12 +849,43 @@ export class EditorStore {
     });
   }
 
+  approvedTrackingAnchor(request: TrackMaskRequest, principal: EditorPrincipal) {
+    this.authorize(request.projectId, principal, "operator");
+    const approval = this.approval(request.anchorApprovalId);
+    if (approval.projectId !== request.projectId || approval.subjectType !== "mask_revision" ||
+        approval.status !== "approved" || approval.purpose !== "input" || approval.subjectHash !== request.anchorHash)
+      editorFailure("PERMISSION_DENIED", "An approved anchor in this project is required");
+    if (approval.baseTimelineRevision !== request.expectedRevision ||
+        this.projectRow(request.projectId).revision !== request.expectedRevision)
+      editorFailure("REVISION_CONFLICT", "The approved anchor belongs to another timeline revision");
+    const revision = this.maskRevision(request.projectId, approval.subjectId, principal);
+    if (sha256Json(revision) !== approval.subjectHash)
+      editorFailure("ARTIFACT_HASH_MISMATCH", "Approved anchor manifest changed");
+    const stop = request.firstFrame + request.frameCount;
+    if (stop > revision.anchor.frameCount || revision.anchor.frame < request.firstFrame || revision.anchor.frame >= stop)
+      editorFailure("INVALID_ARGUMENT", "The source range must include the approved anchor");
+    return revision;
+  }
+
+  trackingRequest(projectId: string, jobId: string) {
+    const row = this.database.prepare("SELECT request FROM mask_tracking_jobs WHERE project_id = ? AND job_id = ?")
+      .get(projectId, jobId) as { request: string } | undefined;
+    return row && TrackMaskRequestSchema.parse(JSON.parse(row.request));
+  }
+
+  createTrackingJob(request: TrackMaskRequest, principal: EditorPrincipal) {
+    const revision = this.approvedTrackingAnchor(request, principal);
+    return this.createAnalysisJob({projectId: request.projectId, requestId: request.requestId,
+      assetId: revision.anchor.assetId, principal, tracking: request});
+  }
+
   /** Read-only analysis job: no approval/grant, operator-or-above, deduplicated per asset+hash. */
   createAnalysisJob(input: {
     requestId: string;
     projectId: string;
     assetId: string;
     rate?: string;
+    tracking?: TrackMaskRequest;
     principal: EditorPrincipal;
   }): JobResult {
     this.authorize(input.projectId, input.principal, "operator");
@@ -867,7 +902,9 @@ export class EditorStore {
         const asset = project.assets.find((a) => a.assetId === input.assetId);
         if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
         const rate = input.rate ?? "25/1";
-        const planHash = sha256Json(["analysis", input.assetId, asset.original.sha256, rate]);
+        const track = input.tracking;
+        const planHash = track ? sha256Json(["track", track.anchorApprovalId, track.anchorHash, track.expectedRevision, track.firstFrame, track.frameCount])
+          : sha256Json(["analysis", input.assetId, asset.original.sha256, rate]);
         const existing = this.database
           .prepare(
             "SELECT document FROM jobs WHERE project_id = ? AND plan_hash = ? AND kind = 'analysis' AND active = 1",
@@ -885,14 +922,18 @@ export class EditorStore {
           phaseDetail: "queued",
           progress: { completedUnits: "0" },
           artifacts: [],
-          analysisAssetId: input.assetId,
-          analysisRate: rate,
+          // Asset analysis panels and planner tools use this field for scene, audio and sampling data.
+          // Mask tracking binds its source through the approved revision instead.
+          analysisAssetId: track ? undefined : input.assetId,
+          analysisRate: track ? undefined : rate,
         });
         this.database
           .prepare(
             "INSERT INTO jobs(job_id, project_id, plan_hash, revision, kind, document, active) VALUES (?, ?, ?, ?, ?, ?, 1)",
           )
           .run(job.jobId, job.projectId, planHash, job.revision, job.kind, JSON.stringify(job));
+        if (track) this.database.prepare("INSERT INTO mask_tracking_jobs(job_id,project_id,request) VALUES(?,?,?)")
+          .run(job.jobId, job.projectId, JSON.stringify(track));
         this.emit(input.projectId, "job.state.changed", { jobId: job.jobId, state: job.state });
         return { job, deduplicated: false };
       },

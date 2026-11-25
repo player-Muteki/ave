@@ -14,7 +14,7 @@ TINY = "7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69"
 REVISION = "2b90b9f5ceec907a1c18123530e92e794ad901a4"
 
 
-def verified_predictor():
+def verified_predictor(*, video=False):
     source = Path(os.environ["VIDEO_EDITOR_SAM2_SOURCE"]).resolve(strict=True)
     weights = Path(os.environ["VIDEO_EDITOR_SAM2_WEIGHTS"]).resolve(strict=True)
     head = subprocess.check_output(["git", "-C", source, "rev-parse", "HEAD"], timeout=10).decode().strip()
@@ -28,6 +28,11 @@ def verified_predictor():
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         raise RuntimeError("SAM2 Tiny preview requires BF16-capable CUDA")
     sys.path.insert(0, str(source))
+    if video:
+        from sam2.build_sam import build_sam2_video_predictor
+        predictor = build_sam2_video_predictor("configs/sam2.1/sam2.1_hiera_t.yaml", str(weights))
+        predictor.fill_hole_area = 0
+        return predictor
     from sam2.build_sam import build_sam2
     from sam2.sam2_image_predictor import SAM2ImagePredictor
 
