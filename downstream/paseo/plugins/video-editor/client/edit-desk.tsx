@@ -18,7 +18,7 @@ import {
 import { FrameInspector } from "./frame-inspector.js";
 import { TrackedMaskReview } from "./tracked-mask-review.js";
 import { ReviewPlayer } from "./review-player.js";
-import { proposeCut, proposeCutOut, proposeConcat, proposeOverlay } from "./cut.js";
+import { proposeCut, proposeCutOut, proposeConcat, proposeOverlay, findSilentRange } from "./cut.js";
 import { SourceImport } from "./import-source.js";
 import { mountSourcePicker, digestSource } from "./web.js";
 import { planningRunUpdate } from "./planning-events.js";
@@ -677,6 +677,21 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {button(fadeKind === "crossfade" ? "转场类型：叠化" : "转场类型：黑场", () =>
                   setFadeKind(fadeKind === "crossfade" ? "fade" : "crossfade"))}
               </View>
+              {button("静音挖洞", async () => {
+                if (!waveform || waveform.assetId !== selected) throw new Error("请先对当前素材运行「分析切点/波形」。");
+                const range = findSilentRange(waveform.doc, cutStart, cutEnd);
+                if (!range) throw new Error("该区间内没有足够长的静音段。");
+                const draft = proposeCutOut(project, selected, range.start, range.end, totalSec);
+                const token = requestId(JSON.stringify(draft));
+                await submit({
+                  requestId: token,
+                  runId: `manual-${token}`,
+                  toolCallId: token,
+                  draft,
+                });
+                setNotice(`已按静音区间 ${range.start}s–${range.end}s 生成挖洞方案，等待审批。`);
+                show(await read({ projectId: project.projectId }));
+              })}
               {button("删除中段并拼接", async () => {
                 const draft = proposeCutOut(project, selected, cutStart, cutEnd, totalSec);
                 const token = requestId(JSON.stringify(draft));
