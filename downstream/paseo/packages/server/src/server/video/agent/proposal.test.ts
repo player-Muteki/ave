@@ -41,7 +41,7 @@ it("routes Responses tool calls through Pi and persists one proposal for human a
     await writeFile(path.join(root, "auth.json"), JSON.stringify({ openai: { type: "api_key", key: "fixture" } }));
     vi.stubEnv("PI_OFFLINE", "1");
     let turn = 0;
-    let scopeDescription = "";
+    let strictSubmit = false;
     const range = { start: { num: "0", den: "1" }, duration: { num: "1", den: "1" } };
     const draft = {
       schemaVersion: "video.edit-plan/v1", projectId, baseTimelineRevision: snapshot.revision,
@@ -61,7 +61,7 @@ it("routes Responses tool calls through Pi and persists one proposal for human a
       if (!req.url.endsWith("/responses")) throw new Error("Unexpected fixture request");
       const body = await req.json();
       const tools = body.tools ?? body.input.find((item: { type?: string }) => item.type === "additional_tools")?.tools;
-      if (tools) scopeDescription = tools.find((tool: { name: string }) => tool.name === "get_project_snapshot").description;
+      if (tools) strictSubmit = tools.find((tool: { name: string }) => tool.name === "submit_edit_plan")?.strict === true;
       const call = calls[turn++];
       if (!call) return new Response("fixture rejection", { status: 400 });
       const item = { type: "function_call", call_id: "call_" + turn, id: "fc_" + turn,
@@ -82,7 +82,7 @@ it("routes Responses tool calls through Pi and persists one proposal for human a
         if (event.causationId) causes.push(event.causationId);
       } });
     await session.prompt("Keep the first second of the clip.");
-    expect(scopeDescription).toContain(projectId);
+    expect(strictSubmit).toBe(true);
     expect(callIds).toEqual([1, 2, 3].map(i => sha256Hex("call_" + i + "|fc_" + i)));
     expect(causes).toEqual(callIds);
     const after = service.store.project(projectId, principal);
@@ -90,8 +90,10 @@ it("routes Responses tool calls through Pi and persists one proposal for human a
     expect(after.plans[0]).toMatchObject({ runId: "run", status: "proposed", trimOperations: draft.trimOperations });
     expect(after.approvals).toMatchObject([{ subjectId: after.plans[0].planId, status: "pending" }]);
     expect(after.jobs).toEqual([]);
-    await expect(session.prompt("Try another edit")).rejects.toThrow("Planner provider failed");
-    expect(service.store.project(projectId, principal).plans).toHaveLength(1);
+    // Replaying the same provider call must return the original pending proposal.
+    const replay = broker.invoke({ protocolVersion: "1", tool: "submit_edit_plan", toolCallId: callIds[2], args: draft });
+    expect(replay).toMatchObject({ planId: after.plans[0].planId });
+    expect(service.store.project(projectId, principal).approvals).toHaveLength(1);
   } finally {
     await session?.dispose();
     toDaemon.end();
