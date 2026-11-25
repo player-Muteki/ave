@@ -884,6 +884,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
           {project.approvals.filter(a => a.purpose === "preview" && a.status === "rejected").map(a => (
             <Text key={a.approvalId} style={muted}>已拒绝预览 · {a.diffSummary.intent}</Text>
           ))}
+          {project.approvals.filter(a => a.status === "revoked").map(a => (
+            <Text key={a.approvalId} style={muted}>已撤销 · {a.diffSummary.intent}</Text>
+          ))}
           {project.jobs.map(job => {
             const preview = job.kind === "preview" && job.state === "awaiting_review"
               ? job.artifacts.find(a => a.kind === "candidate" && a.revision === job.candidateRevision)
