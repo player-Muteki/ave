@@ -157,12 +157,7 @@ export class AgentRunController {
         break;
       }
       case "event":
-        this.store.recordExternalEvent(
-          handle.projectId,
-          message.event.type,
-          { ...((message.event.payload as object) ?? {}), runId: handle.runId, workerEventId: message.event.eventId },
-          handle.principal,
-        );
+        this.store.recordPlannerEvent(handle, message.event, handle.principal);
         break;
       case "run_state":
         handle.state = message.state;
