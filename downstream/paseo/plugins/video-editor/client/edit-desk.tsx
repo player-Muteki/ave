@@ -447,6 +447,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {runEvents.slice(-12).map((event) => (
                 <Text key={event.eventId} style={muted}>
                   {event.seq} · {event.type}
+                  {event.payload && typeof event.payload === "object" && "tool" in event.payload
+                    ? ` · ${String((event.payload as { tool: unknown }).tool)}`
+                    : ""}
                 </Text>
               ))}
             </View>

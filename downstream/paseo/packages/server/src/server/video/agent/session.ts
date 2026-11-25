@@ -145,6 +145,7 @@ export async function createPlannerSession(options: PlannerSessionOptions) {
     const type = typeof e?.type === "string" ? e.type : "agent.unknown";
     if (type === "tool_execution_start" || type === "message_end" || type === "agent_end") {
       seq += 1;
+      const toolName = (e as { toolName?: unknown })?.toolName;
       options.onEvent({
         protocolVersion: "1",
         projectId: options.projectId,
@@ -155,7 +156,10 @@ export async function createPlannerSession(options: PlannerSessionOptions) {
         causationId: typeof e?.toolCallId === "string" ? e.toolCallId : undefined,
         occurredAt: new Date().toISOString(),
         type: `agent.${type}`,
-        payload: {},
+        payload:
+          type === "tool_execution_start" && typeof toolName === "string"
+            ? { tool: toolName }
+            : {},
       });
     }
   });
