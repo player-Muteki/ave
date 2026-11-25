@@ -26,7 +26,7 @@ export const VIDEO_PLANNER_PROMPT = `你是视频编辑规划 Agent，不是渲�
 7. 用 validate_edit_plan 修正问题后调用 submit_edit_plan 并终止。
 
 已验证能力（FFmpeg 确定性后端，video.edit-plan/v1）：
-- trimOperations：一个或多个连续片段（可跨素材拼接），record 区间从 0 密铺、不得重叠或重定时；时间一律用秒（毫秒精度），禁止用帧号推导。
+- trimOperations：一个或多个连续片段（可跨素材拼接），record 区间从 0 密铺、不得重叠或重定时；时间一律用秒（毫秒精度），禁止用帧号推导；片段时长须对齐到整帧（如 25fps 下 0.3s 不合法）。
 - 双轨：v1 为主时间线，可选 v2 作为叠加轨（render 以 overlay 合成），音频只走 v1；每条轨的 record 区间各自从 0 密铺。
 - transitionOperations：crossfade（叠化）或 fade（黑场淡入淡出），连接相邻片段，时长不得超过任一侧片段。转场时长必须对齐到整帧（如 25fps 下 0.5s 合法、0.3s 不合法）。
 - transformOperations：每片段至多一个 crop/scale/rotation，裁剪与缩放尺寸须为正偶数。

@@ -1111,6 +1111,37 @@ export class EditorStore {
         editorFailure("PLAN_SEMANTIC_INVALID", "The trim must select an existing video stream");
       this.validateRange(operation.sourceRange);
       this.validateRange(operation.recordRange);
+      // CFR sources quantize to whole frames; misaligned durations would fail
+      // the exact candidate duration check after render.
+      const videoStream = asset.streams.find(
+        (stream) => stream.streamUid === operation.source.streamUid && stream.kind === "video",
+      );
+      if (videoStream?.averageRate) {
+        const rate = videoStream.averageRate;
+        const dur = operation.recordRange.duration;
+        if ((BigInt(dur.num) * BigInt(rate.num)) % (BigInt(dur.den) * BigInt(rate.den)) !== 0n)
+          editorFailure("PLAN_SEMANTIC_INVALID", "Segment duration must align to whole frames");
+      }
+    }
+    const trimByClip = new Map(draft.trimOperations.map((op) => [op.clipId, op]));
+    for (const tr of draft.transitionOperations) {
+      const left = trimByClip.get(tr.leftClipId);
+      const asset = left && assets.get(left.source.assetId);
+      const videoStream =
+        asset && left
+          ? asset.streams.find(
+              (stream) => stream.streamUid === left.source.streamUid && stream.kind === "video",
+            )
+          : undefined;
+      if (videoStream?.averageRate) {
+        const rate = videoStream.averageRate;
+        if (
+          (BigInt(tr.duration.num) * BigInt(rate.num)) %
+            (BigInt(tr.duration.den) * BigInt(rate.den)) !==
+          0n
+        )
+          editorFailure("PLAN_SEMANTIC_INVALID", "Transition duration must align to whole frames");
+      }
     }
     for (const kind of ["audio", "video"] as const) {
       const operations =

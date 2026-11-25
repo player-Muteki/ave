@@ -67,6 +67,7 @@
 - 已实现待验收（2026-11-25）：转场时长增加整帧对齐验（xfade 按帧贴入，不对齐会导致整体时长 QA），render 在转场前拒绝；合并后全路径本机实测（变换+xfade+overlay+BGM(-6dB)+mov_text）。
 - 已实现待验收（2026-11-25）：客户端字幕模式切换（烧录/软字幕 mov_text），proposeCut 增加 subMode 参数。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：agent tool_execution_start 事件的 payload 携带 tool 名，客户端事件流展示工具名。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：store.validatePlan 增加 CFR 整帧对齐校验（trim 时长与转场时长均必须整帧对齐），提前拒绝 PLAN_SEMANTIC_INVALID；prompt 同步。未跑真模型/e2e。
 
 ## 环境与错误
 
