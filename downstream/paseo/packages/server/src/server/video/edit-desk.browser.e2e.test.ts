@@ -12,6 +12,7 @@ import { decodeFramedChunk, encodeFramedChunk } from "#video-editor/bytes";
 import { TrackedMaskManifestSchema, MaskAnchorRevisionSchema, ProjectSnapshotSchema, UploadStatusSchema } from "#video-editor/contracts/v1";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { DatabaseSync } from "./sqlite.js";
 import { ContentAddressedStore } from "./cas.js";
 import { BuiltinPluginLoader, builtinPlugins } from "../plugins/builtin/index.js";
 
@@ -298,12 +299,54 @@ test
           }
           expect(intersection/union).toBeGreaterThan(.90);
         }
+        const reviewRequest = {projectId:job.projectId,jobId:job.jobId,expectedRevision:job.revision,
+          manifestHash:artifact.blob.sha256,reviewHash:manifest.reviewVideo.sha256,requestId:"wrong-proxy"};
+        await expect(invoke("request_tracked_mask_review", {...reviewRequest, reviewHash:"0".repeat(64)})).rejects.toThrow();
+        await web("wait","--text","提交整段掩码审批");
+        await clickDesk("提交整段掩码审批");
+        await web("wait","--text","等待整段掩码审批");
+        const approveButton = '[aria-label="批准整段掩码作为输入"]';
+        expect(await web("eval",`document.querySelector('${approveButton}').getAttribute('aria-disabled')`)).toContain("true");
+        await clickDesk("拒绝整段掩码");
+        await web("wait","--text","整段掩码已拒绝");
+        await clickDesk("重新提交整段掩码审批");
+        await web("wait","--text","等待整段掩码审批");
+        const pendingSequence = ProjectSnapshotSchema.parse(await invoke("get_project",{projectId:job.projectId})).approvals
+          .find(a => a.subjectId===artifact.artifactId && a.status==="pending")!;
+        expect(pendingSequence).toMatchObject({purpose:"input",subjectHash:artifact.blob.sha256});
+        expect(await invoke("request_tracked_mask_review",{...reviewRequest,requestId:"same-input"})).toEqual(pendingSequence);
         await web("wait", "--text", "播放掩码传播审片");
         await clickDesk("播放掩码传播审片（9 帧/秒）");
         await web("wait", "--fn", "document.querySelector('video')?.readyState >= 2");
         expect(Number(await web("eval", "document.querySelector('video').duration"))).toBe(1);
         await web("eval", "(async () => { const v = document.querySelector('video'); v.muted = true; await v.play(); })()");
         await expect.poll(async () => Number(await web("eval", "document.querySelector('video').currentTime"))).toBeGreaterThan(0.25);
+        await web("wait","--fn","document.querySelector('video').ended");
+        const decision = {approvalId:pendingSequence.approvalId,expectedRevision:job.revision,decision:"approve",
+          requestId:`approve-${pendingSequence.approvalId}`};
+        for (const blob of [manifest.frames[7]!.label,manifest.reviewVideo]) {
+          const file = cas.pathFor(blob);
+          await rename(file,file+".offline");
+          try {
+            await expect(invoke("decide_approval",decision)).rejects.toThrow();
+            const snapshot = ProjectSnapshotSchema.parse(await invoke("get_project",{projectId:job.projectId}));
+            expect(snapshot.approvals.find(a=>a.approvalId===pendingSequence.approvalId)?.status).toBe("pending");
+          } finally {await rename(file+".offline",file);}
+        }
+        await clickDesk("批准整段掩码作为输入");
+        await web("wait","--text","整段掩码已批准");
+        const decided = await invoke("decide_approval",decision);
+        expect(decided).toEqual({approval:{...pendingSequence,status:"approved"}});
+        const done = ProjectSnapshotSchema.parse(await invoke("get_project",{projectId:job.projectId}));
+        expect(done.approvals.filter(a=>a.purpose==="input").map(a=>a.status).sort()).toEqual(["approved","approved","rejected"]);
+        expect(done.jobs.map(j=>j.jobId)).toEqual([job.jobId]);
+        const ledger = new DatabaseSync(path.join(daemon.paseoHome,"video-editor","editor.sqlite"));
+        try {
+          const rows = ledger.prepare("SELECT r.decided_by, a.grant FROM tracked_mask_reviews r JOIN approvals a USING(approval_id) WHERE r.job_id = ? ORDER BY r.rowid").all(job.jobId);
+          expect(rows).toEqual([{decided_by:"owner",grant:null},{decided_by:"owner",grant:null}]);
+        } finally {ledger.close();}
+
+
         expect(createHash("sha256").update(await readFile(source)).digest("hex")).toBe(digest);
         return;
       }

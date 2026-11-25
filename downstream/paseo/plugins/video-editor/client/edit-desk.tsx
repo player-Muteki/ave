@@ -14,6 +14,7 @@ import {
   type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
+import { TrackedMaskReview } from "./tracked-mask-review.js";
 import { ReviewPlayer } from "./review-player.js";
 import { readReviewBytes } from "./review-bytes.js";
 import { proposeCut, proposeCutOut, proposeConcat, proposeOverlay } from "./cut.js";
@@ -754,9 +755,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   ? mediaControl(a.kind === "export" ? "准备下载成品视频" : "准备下载导出清单", a.artifactId, a.revision, a.blob, a.kind)
                   : null,
               )}
-              {job.kind === "analysis" && job.state === "completed" && job.artifacts.map(a =>
-                a.kind === "proxy" && a.jobId === job.jobId && a.artifactId === job.jobId + ":tracking-preview"
-                  ? mediaControl("播放掩码传播审片（9 帧/秒）", a.artifactId, a.revision, a.blob) : null)}
+              {layout.platform === "web" && job.kind === "analysis" && job.state === "completed" &&
+                <TrackedMaskReview project={project} job={job} refresh={refreshMaskApprovals} theme={theme} />}
               {preview && mediaControl("观看预览候选", preview.artifactId, preview.revision, preview.blob)}
               {preview && button("预览帧", async () => {
                 const result = await frames({

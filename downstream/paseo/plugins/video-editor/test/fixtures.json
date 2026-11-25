@@ -1,4 +1,6 @@
 [
+  {"name": "request review of the exact tracked labels and proxy", "schema": "RequestTrackedMaskReview", "valid": true, "value": {"projectId": "p", "requestId": "request-1", "jobId": "job-1", "expectedRevision": "2", "manifestHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "reviewHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+  {"name": "tracked review requires a proxy digest", "schema": "RequestTrackedMaskReview", "valid": false, "value": {"projectId": "p", "requestId": "request-1", "jobId": "job-1", "expectedRevision": "2", "manifestHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}},
   {
     "name": "exact signed PTS",
     "schema": "Rational",

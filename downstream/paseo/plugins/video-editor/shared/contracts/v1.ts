@@ -704,6 +704,13 @@ export const TrackedMaskManifestSchema = z.object({
     foregroundPixels: z.number().int().nonnegative(), label: BlobRefSchema }).strict()).min(2).max(81),
   reviewImageRate: z.literal(9), reviewVideo: BlobRefSchema,
 }).strict();
+export const RequestTrackedMaskReviewSchema = z.object({
+  projectId: id, requestId, jobId: id, expectedRevision: uint, manifestHash: sha256, reviewHash: sha256,
+}).strict();
+export type RequestTrackedMaskReview = z.infer<typeof RequestTrackedMaskReviewSchema>;
+export const requestTrackedMaskReviewRpc = {
+  name: "video.v1.request_tracked_mask_review", input: RequestTrackedMaskReviewSchema, output: ApprovalRequestSchema,
+};
 export const trackMaskRpc = { name: "video.v1.track_mask", input: TrackMaskRequestSchema, output: CreateJobResultSchema };
 
 export const createMaskRevisionRpc = {

@@ -18,10 +18,10 @@ import {
   type ArtifactRef,
   type AcceptedEditPlan,
   type ApprovalDecision,
-  type CreateMaskRevisionRequest,
+  type CreateMaskRevisionRequest, type RequestTrackedMaskReview,
   TrackMaskRequestSchema, type TrackMaskRequest,
   type InspectFrameHeader,
-  MaskAnchorRevisionSchema,
+  MaskAnchorRevisionSchema, type MaskAnchorRevision,
   type ApprovalGrant,
   type ApprovalRequest,
   type EditPlanDraftV1,
@@ -62,6 +62,13 @@ export interface CreateJobInput {
   principal: EditorPrincipal;
 }
 
+export interface TrackedMaskReviewInputs {
+  tracking: TrackMaskRequest;
+  anchor: MaskAnchorRevision;
+  manifest: ArtifactRef;
+  proxy: ArtifactRef;
+}
+
 export interface JobResult {
   job: JobSnapshot;
   deduplicated: boolean;
@@ -94,6 +101,11 @@ CREATE TABLE IF NOT EXISTS assets (
 CREATE TABLE IF NOT EXISTS mask_tracking_jobs (
   job_id TEXT PRIMARY KEY REFERENCES jobs(job_id), project_id TEXT NOT NULL REFERENCES projects(project_id), request TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS tracked_mask_reviews (
+  approval_id TEXT PRIMARY KEY REFERENCES approvals(approval_id),
+  job_id TEXT NOT NULL REFERENCES mask_tracking_jobs(job_id), decided_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_tracked_reviews_job ON tracked_mask_reviews(job_id);
 CREATE TABLE IF NOT EXISTS mask_anchors (
   mask_revision_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
   approval_id TEXT NOT NULL REFERENCES approvals(approval_id), request_id TEXT NOT NULL,
@@ -669,11 +681,158 @@ export class EditorStore {
     return this.approval(row.approval_id);
   }
 
+  private trackingReviewInputs(
+    projectId: string,
+    jobId: string,
+    revision: string,
+    principal: EditorPrincipal,
+  ): TrackedMaskReviewInputs {
+    const job = this.job(projectId, jobId, principal);
+    const tracking = this.trackingRequest(projectId, jobId);
+    if (!tracking || job.kind !== "analysis" || job.state !== "completed")
+      editorFailure("INVALID_ARGUMENT", "A completed mask tracking job is required");
+    if (job.revision !== revision || tracking.expectedRevision !== revision)
+      editorFailure("REVISION_CONFLICT", "Mask tracking revision changed");
+    const anchor = this.approvedTrackingAnchor(tracking, principal);
+    const match = (kind: ArtifactRef["kind"], suffix: string) =>
+      job.artifacts.find(
+        (a) =>
+          a.kind === kind &&
+          a.projectId === projectId &&
+          a.jobId === jobId &&
+          a.revision === revision &&
+          a.artifactId === jobId + suffix,
+      );
+    const manifest = match("mask", ":tracked-mask");
+    const proxy = match("proxy", ":tracking-preview");
+    if (!manifest || !proxy)
+      editorFailure("ASSET_NOT_FOUND", "Missing tracked mask or review proxy");
+    return { tracking, anchor, manifest, proxy };
+  }
+
+  requestTrackedMaskReview(request: RequestTrackedMaskReview, principal: EditorPrincipal) {
+    const { projectId, jobId, expectedRevision } = request;
+    this.authorize(projectId, principal, "operator");
+    return this.mutate({
+      projectId,
+      requestId: request.requestId,
+      payload: request,
+      execute: () => {
+        const { tracking, manifest, proxy } = this.trackingReviewInputs(
+          projectId,
+          jobId,
+          expectedRevision,
+          principal,
+        );
+        if (
+          manifest.blob.sha256 !== request.manifestHash ||
+          proxy.blob.sha256 !== request.reviewHash
+        )
+          editorFailure("ARTIFACT_HASH_MISMATCH", "Tracked mask or review video changed");
+        const last = this.database
+          .prepare(
+            "SELECT approval_id FROM tracked_mask_reviews WHERE job_id = ? ORDER BY rowid DESC LIMIT 1",
+          )
+          .get(jobId) as { approval_id: string } | undefined;
+        if (last) {
+          const existing = this.approval(last.approval_id);
+          if (
+            existing.status === "approved" ||
+            (existing.status === "pending" && Date.parse(existing.expiresAt) > Date.now())
+          )
+            return existing;
+          if (existing.status === "pending")
+            this.updateApproval({ ...existing, status: "expired" });
+        }
+        const approval = ApprovalRequestSchema.parse({
+          projectId,
+          approvalId: randomUUID(),
+          subjectType: "mask_revision",
+          subjectId: manifest.artifactId,
+          subjectRevision: manifest.revision,
+          subjectHash: manifest.blob.sha256,
+          baseTimelineRevision: expectedRevision,
+          purpose: "input",
+          requiredInputs: [
+            {
+              type: "anchor_approval",
+              id: tracking.anchorApprovalId,
+              revision: expectedRevision,
+              hash: tracking.anchorHash,
+            },
+            {
+              type: "review_proxy",
+              id: proxy.artifactId,
+              revision: proxy.revision,
+              hash: proxy.blob.sha256,
+            },
+          ],
+          diffSummary: {
+            intent: "整段对象掩码",
+            operationCount: tracking.frameCount,
+            summary: `源帧 ${tracking.firstFrame}–${tracking.firstFrame + tracking.frameCount - 1}，共 ${tracking.frameCount} 帧`,
+          },
+          generationCostCapMicros: "0",
+          externalDestinations: [],
+          status: "pending",
+          expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+        });
+        this.insertApproval(approval);
+        this.database
+          .prepare("INSERT INTO tracked_mask_reviews(approval_id,job_id) VALUES(?,?)")
+          .run(approval.approvalId, jobId);
+        this.emit(projectId, "approval.requested", {
+          approvalId: approval.approvalId,
+          purpose: "input",
+        });
+        return approval;
+      },
+    });
+  }
+
+  private maskInput(approval: ApprovalRequest, principal: EditorPrincipal) {
+    const row = this.database
+      .prepare("SELECT job_id FROM tracked_mask_reviews WHERE approval_id = ?")
+      .get(approval.approvalId) as { job_id: string } | undefined;
+    if (row) {
+      const sequence = this.trackingReviewInputs(
+        approval.projectId,
+        row.job_id,
+        approval.baseTimelineRevision,
+        principal,
+      );
+      const { manifest, proxy, tracking } = sequence;
+      if (
+        manifest.artifactId !== approval.subjectId ||
+        manifest.blob.sha256 !== approval.subjectHash ||
+        !approval.requiredInputs.some(
+          (i) =>
+            i.type === "review_proxy" &&
+            i.id === proxy.artifactId &&
+            i.hash === proxy.blob.sha256 &&
+            i.revision === proxy.revision,
+        ) ||
+        !approval.requiredInputs.some(
+          (i) =>
+            i.type === "anchor_approval" &&
+            i.id === tracking.anchorApprovalId &&
+            i.hash === tracking.anchorHash,
+        )
+      )
+        editorFailure("ARTIFACT_HASH_MISMATCH", "Tracked input revision changed");
+      return { kind: "sequence" as const, ...sequence };
+    }
+    const revision = this.maskRevision(approval.projectId, approval.subjectId, principal);
+    if (sha256Json(revision) !== approval.subjectHash)
+      editorFailure("ARTIFACT_HASH_MISMATCH", "Mask revision changed");
+    return { kind: "anchor" as const, revision };
+  }
+
   pendingMaskForDecision(id: string, principal: EditorPrincipal) {
     const approval = this.approval(id);
     this.authorize(approval.projectId, principal, "operator");
     if (approval.status === "pending" && approval.subjectType === "mask_revision")
-      return this.maskRevision(approval.projectId, approval.subjectId, principal);
+      return this.maskInput(approval, principal);
     return undefined;
   }
 
@@ -740,6 +899,8 @@ export class EditorStore {
         if (input.decision === "reject") {
           const rejected = { ...current, status: "rejected" as const };
           this.updateApproval(rejected);
+          if (current.subjectType === "mask_revision") this.database.prepare("UPDATE tracked_mask_reviews SET decided_by = ? WHERE approval_id = ?")
+            .run(principal.principalId, current.approvalId);
           this.emit(approval.projectId, "approval.decided", {
             approvalId: current.approvalId,
             decision: "rejected",
@@ -747,11 +908,12 @@ export class EditorStore {
           return { approval: rejected };
         }
         if (current.purpose === "input" && current.subjectType === "mask_revision") {
-          const revision = this.maskRevision(current.projectId, current.subjectId, principal);
-          if (sha256Json(revision) !== current.subjectHash) editorFailure("ARTIFACT_HASH_MISMATCH", "Mask revision changed");
+          const inputMask = this.maskInput(current, principal);
           const approved = { ...current, status: "approved" as const };
           this.updateApproval(approved);
-          this.database.prepare("UPDATE mask_anchors SET approved_by = ? WHERE project_id = ? AND mask_revision_id = ?")
+          if (inputMask.kind === "sequence")
+            this.database.prepare("UPDATE tracked_mask_reviews SET decided_by = ? WHERE approval_id = ?").run(principal.principalId, current.approvalId);
+          else this.database.prepare("UPDATE mask_anchors SET approved_by = ? WHERE project_id = ? AND mask_revision_id = ?")
             .run(principal.principalId, current.projectId, current.subjectId);
           this.emit(current.projectId, "approval.decided", { approvalId: current.approvalId, decision: "approved" });
           return { approval: approved };

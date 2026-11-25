@@ -12,10 +12,11 @@ interface ReviewProps {
   blob: BlobRef;
   label: string;
   theme: PluginSurfaceProps["theme"];
+  onEnded?: () => void;
   purpose?: "play" | "export" | "manifest" | "qa" | "contact";
 }
 
-export function ReviewPlayer({projectId, assetId, revision, blob, label, theme, purpose = "play"}: ReviewProps) {
+export function ReviewPlayer({projectId, assetId, revision, blob, label, theme, purpose = "play", onEnded}: ReviewProps) {
   const read = useRpc(readAssetChunkRpc);
   const parent = useRef<View>(null);
   const [message, setMessage] = useState("");
@@ -33,14 +34,14 @@ export function ReviewPlayer({projectId, assetId, revision, blob, label, theme, 
           setMessage("文件已校验，点击下方链接保存。");
           return dispose;
         }
-        dispose = mountReviewVideo(parent.current, data, label, () => setMessage("浏览器无法解码这段视频。"));
+        dispose = mountReviewVideo(parent.current, data, label, () => setMessage("浏览器无法解码这段视频。"), onEnded);
         setMessage("视频校验通过，可播放或拖动进度条。");
         return dispose;
       }).catch((e:unknown) => {
         if (!controller.signal.aborted) setMessage(e instanceof Error ? e.message : "无法读取文件。");
       });
     return () => {controller.abort(); dispose?.();};
-  }, [projectId, assetId, revision, bytes, sha256, mediaType, read, label, purpose]);
+  }, [projectId, assetId, revision, bytes, sha256, mediaType, read, label, purpose, onEnded]);
   return <View>
     <Text accessibilityLiveRegion="polite" style={messageStyle}>{message}</Text>
     <View ref={parent} collapsable={false} />

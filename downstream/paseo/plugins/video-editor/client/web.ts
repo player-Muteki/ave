@@ -24,7 +24,7 @@ export function mountSourcePicker(parent: unknown, onSelected: (file: DeskSource
   };
 }
 
-export function mountReviewVideo(parent: unknown, bytes: ArrayBuffer, label: string, onError: () => void) {
+export function mountReviewVideo(parent: unknown, bytes: ArrayBuffer, label: string, onError: () => void, onEnded?: () => void) {
   if (Platform.OS !== "web" || !(parent instanceof HTMLElement)) throw new Error("当前工作台无法显示视频。");
   const video = document.createElement("video");
   const url = URL.createObjectURL(new Blob([bytes], { type: "video/mp4" }));
@@ -35,10 +35,12 @@ export function mountReviewVideo(parent: unknown, bytes: ArrayBuffer, label: str
   video.style.maxHeight = "60vh";
   video.setAttribute("aria-label", label);
   video.addEventListener("error", onError);
+  if (onEnded) video.addEventListener("ended", onEnded);
   video.src = url;
   parent.appendChild(video);
   return () => {
     video.removeEventListener("error", onError);
+    if (onEnded) video.removeEventListener("ended", onEnded);
     video.pause();
     video.removeAttribute("src");
     video.load();

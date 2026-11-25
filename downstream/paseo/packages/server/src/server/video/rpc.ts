@@ -18,7 +18,7 @@ import {
   PreviewFramesRequestSchema,
   CreateMaskRevisionRequestSchema,
   MaskRevisionReviewRequestSchema,
-  TrackMaskRequestSchema,
+  TrackMaskRequestSchema, RequestTrackedMaskReviewSchema,
   type EditorPrincipal,
 } from "#video-editor/contracts/v1";
 import { decodeFramedChunk } from "#video-editor/bytes";
@@ -64,7 +64,8 @@ export class EditorRpcService {
         const request = ApprovalDecisionSchema.parse(input);
         if (request.decision === "approve") {
           const revision = this.editor.store.pendingMaskForDecision(request.approvalId, principal);
-          if (revision) await this.editor.media.verifyMaskFiles(revision);
+          if (revision?.kind === "anchor") await this.editor.media.verifyMaskFiles(revision.revision);
+          if (revision?.kind === "sequence") await this.editor.media.verifyTrackedMaskFiles(revision);
         }
         const result = this.editor.store.decideApproval(request, principal);
         return DecideApprovalResultSchema.parse(result);
@@ -126,6 +127,8 @@ export class EditorRpcService {
         this.editor.jobs.enqueue(request.projectId, result.job.jobId);
         return result;
       }
+      case "video.v1.request_tracked_mask_review":
+        return this.editor.store.requestTrackedMaskReview(RequestTrackedMaskReviewSchema.parse(input), principal);
       case "video.v1.track_mask": {
         const request = TrackMaskRequestSchema.parse(input);
         const result = this.editor.store.createTrackingJob(request, principal);

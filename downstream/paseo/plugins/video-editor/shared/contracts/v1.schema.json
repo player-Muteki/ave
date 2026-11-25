@@ -2938,6 +2938,46 @@
       ],
       "additionalProperties": false
     },
+    "RequestTrackedMaskReview": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RequestTrackedMaskReview",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "expectedRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "manifestHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reviewHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "projectId",
+        "requestId",
+        "jobId",
+        "expectedRevision",
+        "manifestHash",
+        "reviewHash"
+      ],
+      "additionalProperties": false
+    },
     "SourceAsset": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:SourceAsset",
