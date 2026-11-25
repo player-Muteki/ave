@@ -6,6 +6,8 @@ import {
   CancelUploadRequestSchema,
   WriteUploadChunkSchema,
   DecideApprovalResultSchema,
+  GetApprovalInputSchema,
+  RevokeApprovalRequestSchema,
   ApprovalDecisionSchema,
   ProjectRequestSchema,
   PlanReviewRequestSchema,
@@ -81,6 +83,20 @@ export class EditorRpcService {
       case "video.v1.submit_plan": {
         const request = PlanReviewRequestSchema.parse(input);
         return this.editor.store.createPlan({ ...request, principal });
+      }
+      case "video.v1.get_approval": {
+        const request = GetApprovalInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.approvalById(request.projectId, request.approvalId, principal),
+        };
+      }
+      case "video.v1.revoke_approval": {
+        const request = RevokeApprovalRequestSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.revokeApproval(request, principal),
+        };
       }
       case "video.v1.decide_approval": {
         const request = ApprovalDecisionSchema.parse(input);

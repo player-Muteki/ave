@@ -618,6 +618,27 @@ export const decideApprovalRpc = {
   input: ApprovalDecisionSchema,
   output: DecideApprovalResultSchema,
 };
+
+export const GetApprovalInputSchema = z
+  .object({ requestId, projectId: id, approvalId: id })
+  .strict();
+export type GetApprovalInput = z.infer<typeof GetApprovalInputSchema>;
+export const GetApprovalResultSchema = ApprovalRequestSchema.extend({ requestId }).strict();
+export const getApprovalRpc = {
+  name: "video.v1.get_approval",
+  input: GetApprovalInputSchema,
+  output: GetApprovalResultSchema,
+};
+export const RevokeApprovalRequestSchema = z
+  .object({ requestId, projectId: id, approvalId: id })
+  .strict();
+export type RevokeApprovalRequest = z.infer<typeof RevokeApprovalRequestSchema>;
+export const RevokeApprovalResultSchema = ApprovalRequestSchema.extend({ requestId }).strict();
+export const revokeApprovalRpc = {
+  name: "video.v1.revoke_approval",
+  input: RevokeApprovalRequestSchema,
+  output: RevokeApprovalResultSchema,
+};
 export const createJobRpc = {
   name: "video.v1.create_job",
   input: CreateJobRequestSchema,

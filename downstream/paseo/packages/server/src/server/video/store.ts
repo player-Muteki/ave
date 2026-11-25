@@ -23,6 +23,7 @@ import {
   type ArtifactRef,
   type AcceptedEditPlan,
   type CancelUploadRequest,
+  type RevokeApprovalRequest,
   type CancelUploadResult,
   type ApprovalDecision,
   type CreateMaskRevisionRequest, type RequestTrackedMaskReview,
@@ -1094,6 +1095,47 @@ export class EditorStore {
       this.emit(projectId, "approval.requested", { approvalId: approval.approvalId, purpose: "input" });
       return approval;
     }});
+  }
+
+  /** Read one approval (with its grant) by id. Viewer-level. */
+  approvalById(projectId: string, approvalId: string, principal: EditorPrincipal): ApprovalRequest {
+    this.authorize(projectId, principal, "viewer");
+    const stored = this.storedApproval(approvalId);
+    if (stored.request.projectId !== projectId)
+      editorFailure("PERMISSION_DENIED", "The approval belongs to another project");
+    return stored.request;
+  }
+
+  /**
+   * Revoke a pending or approved approval and its grant, so no job can be
+   * created from it afterwards. Idempotent per requestId.
+   */
+  revokeApproval(input: RevokeApprovalRequest, principal: EditorPrincipal): ApprovalRequest {
+    const approval = this.approval(input.approvalId);
+    this.authorize(approval.projectId, principal, "operator");
+    return this.mutate({
+      projectId: approval.projectId,
+      requestId: input.requestId,
+      payload: { approvalId: input.approvalId },
+      execute: () => {
+        const stored = this.storedApproval(input.approvalId);
+        const current = stored.request;
+        if (current.projectId !== input.projectId)
+          editorFailure("PERMISSION_DENIED", "The approval belongs to another project");
+        if (!["pending", "approved"].includes(current.status))
+          editorFailure("APPROVAL_CONSUMED", "Only pending or approved approvals can be revoked");
+        const revoked = { ...current, status: "revoked" as const };
+        this.updateApproval(
+          revoked,
+          stored.grant ? { ...stored.grant, revokedReason: "revoked by operator" } : undefined,
+        );
+        this.emit(current.projectId, "approval.decided", {
+          approvalId: current.approvalId,
+          decision: "revoked",
+        });
+        return revoked;
+      },
+    });
   }
 
   decideApproval(

@@ -8,7 +8,7 @@ import {
   listProjectsRpc,
   submitPlanRpc,
   estimateTimelineRpc,
-  decideApprovalRpc,
+  decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
@@ -55,6 +55,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const submit = useRpc(submitPlanRpc);
   const estimate = useRpc(estimateTimelineRpc);
   const decide = useRpc(decideApprovalRpc);
+  const revoke = useRpc(revokeApprovalRpc);
   const runJob = useRpc(createJobRpc);
   const declare = useRpc(createUploadRpc);
   const status = useRpc(getUploadStatusRpc);
@@ -871,6 +872,14 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               show(await read({projectId: project.projectId}));
             }, approval.baseTimelineRevision !== project.revision)}
             {button("批准并渲染预览", () => approveJob(approval, "preview"), approval.baseTimelineRevision !== project.revision)}
+            {button("撤销审批", async () => {
+              await revoke({
+                requestId: requestId(`revoke:${approval.approvalId}`),
+                projectId: project.projectId,
+                approvalId: approval.approvalId,
+              });
+              show(await read({ projectId: project.projectId }));
+            })}
           </View>)}
           {project.approvals.filter(a => a.purpose === "preview" && a.status === "rejected").map(a => (
             <Text key={a.approvalId} style={muted}>已拒绝预览 · {a.diffSummary.intent}</Text>

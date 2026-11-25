@@ -2610,6 +2610,185 @@
       ],
       "additionalProperties": false
     },
+    "GetApprovalInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetApprovalInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "approvalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "approvalId"
+      ],
+      "additionalProperties": false
+    },
+    "GetApprovalResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetApprovalResult",
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "subjectType": {
+          "type": "string",
+          "enum": [
+            "mask_revision",
+            "keyframe_set",
+            "edit_plan",
+            "candidate_revision",
+            "export"
+          ]
+        },
+        "subjectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "subjectRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "subjectHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "planHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "baseTimelineRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "purpose": {
+          "type": "string",
+          "enum": [
+            "input",
+            "preview",
+            "final",
+            "export"
+          ]
+        },
+        "requiredInputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "revision",
+              "hash"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "diffSummary": {
+          "type": "object",
+          "properties": {
+            "intent": {
+              "type": "string"
+            },
+            "operationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "intent",
+            "operationCount",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "generationCostCapMicros": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "externalDestinations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "superseded",
+            "expired",
+            "revoked"
+          ]
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "approvalId",
+        "projectId",
+        "subjectType",
+        "subjectId",
+        "subjectRevision",
+        "subjectHash",
+        "baseTimelineRevision",
+        "purpose",
+        "requiredInputs",
+        "diffSummary",
+        "generationCostCapMicros",
+        "externalDestinations",
+        "status",
+        "expiresAt",
+        "requestId"
+      ],
+      "additionalProperties": false
+    },
     "GetAssetMetadataInput": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:GetAssetMetadataInput",
@@ -5341,6 +5520,185 @@
         "expectedRevision",
         "manifestHash",
         "reviewHash"
+      ],
+      "additionalProperties": false
+    },
+    "RevokeApprovalRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RevokeApprovalRequest",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "approvalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "approvalId"
+      ],
+      "additionalProperties": false
+    },
+    "RevokeApprovalResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RevokeApprovalResult",
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "subjectType": {
+          "type": "string",
+          "enum": [
+            "mask_revision",
+            "keyframe_set",
+            "edit_plan",
+            "candidate_revision",
+            "export"
+          ]
+        },
+        "subjectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "subjectRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "subjectHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "planHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "baseTimelineRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "purpose": {
+          "type": "string",
+          "enum": [
+            "input",
+            "preview",
+            "final",
+            "export"
+          ]
+        },
+        "requiredInputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "revision",
+              "hash"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "diffSummary": {
+          "type": "object",
+          "properties": {
+            "intent": {
+              "type": "string"
+            },
+            "operationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "intent",
+            "operationCount",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "generationCostCapMicros": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "externalDestinations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "superseded",
+            "expired",
+            "revoked"
+          ]
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "approvalId",
+        "projectId",
+        "subjectType",
+        "subjectId",
+        "subjectRevision",
+        "subjectHash",
+        "baseTimelineRevision",
+        "purpose",
+        "requiredInputs",
+        "diffSummary",
+        "generationCostCapMicros",
+        "externalDestinations",
+        "status",
+        "expiresAt",
+        "requestId"
       ],
       "additionalProperties": false
     },
