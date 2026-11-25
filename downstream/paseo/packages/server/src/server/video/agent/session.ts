@@ -11,7 +11,7 @@ import {
 import { z } from "zod";
 import { VideoToolCallSchema, type EditorEvent } from "#video-editor/contracts/v1";
 import { VIDEO_PLANNER_PROMPT, videoPlannerPromptSignature } from "./prompt.js";
-import { newRequestId, type DaemonToWorker, type IpcChannel, type WorkerToDaemon } from "./ipc.js";
+import { newRequestId, sha256Hex, type DaemonToWorker, type IpcChannel, type WorkerToDaemon } from "./ipc.js";
 
 export interface PlannerSessionOptions {
   projectId: string;
@@ -163,7 +163,11 @@ export async function createPlannerSession(options: PlannerSessionOptions) {
         submit ? { type: "json_schema" as const, strict: "require" as const } : false as const,
       ...(submit && { prepareArguments: (args: unknown) => omitStrictToolNulls(args, option.shape.args) }),
       async execute(toolCallId: string, args: unknown) {
-        const request = option.parse({ protocolVersion: "1", toolCallId, tool: name, args });
+        // Pi combines the provider call ID and item ID for Responses tool calls.
+        // Hash both parts so IPC, event correlation and replay use one stable ID.
+        const request = option.parse({
+          protocolVersion: "1", toolCallId: sha256Hex(toolCallId), tool: name, args,
+        });
         const output = await invoke(request);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(output) }],
@@ -221,7 +225,7 @@ export async function createPlannerSession(options: PlannerSessionOptions) {
         runId: options.runId,
         eventId: typeof e?.id === "string" ? e.id : randomUUID(),
         seq: String(seq),
-        causationId: typeof e?.toolCallId === "string" ? e.toolCallId : undefined,
+        causationId: typeof e?.toolCallId === "string" ? sha256Hex(e.toolCallId) : undefined,
         occurredAt: new Date().toISOString(),
         type: `agent.${type}`,
         payload:
