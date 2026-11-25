@@ -345,7 +345,7 @@ type ExportManifest = {
 | 操作 | 作用 | 权限/约束 |
 | --- | --- | --- |
 | `get_capabilities` | 协议、feature、Worker profile | 所有已认证角色 |
-| `create_project/get_project` | 创建/读取项目 | operator / viewer 只读 |
+| `create_project/get_project` | 创建/读取项目（快照内 plans≤128、approvals≤256、jobs≤256，专用 reader 不受限） | operator / viewer 只读 |
 | `import_asset` | 桌面原生授权导入 | operator；hash/配额 |
 | `create_upload/write_upload_chunk` | 初始化上传、写一块 | operator；uploadId/requestId/offset/chunkSha256 |
 | `get_upload_status/commit_upload/cancel_upload` | 查询 nextOffset、完成或取消 | operator；最终长度和 SHA-256，重复 commit 返回同 Asset |

@@ -315,18 +315,27 @@ export class EditorStore {
   project(projectId: string, principal: EditorPrincipal): ProjectSnapshot {
     this.authorize(projectId, principal, "viewer");
     const row = this.projectRow(projectId);
+    // Bound the snapshot arrays so long-lived projects stay small on the wire;
+    // the store keeps the full rows and dedicated readers (get_plan, get_job,
+    // get_approval, events) are unaffected.
     const plans = this.rows(
       "SELECT document FROM plans WHERE project_id = ? ORDER BY revision",
       projectId,
-    ).map((document) => AcceptedEditPlanSchema.parse(JSON.parse(document)));
+    )
+      .map((document) => AcceptedEditPlanSchema.parse(JSON.parse(document)))
+      .slice(-128);
     const approvals = this.rows(
       "SELECT request FROM approvals WHERE project_id = ? ORDER BY created_at, approval_id",
       projectId,
-    ).map((document) => ApprovalRequestSchema.parse(JSON.parse(document)));
+    )
+      .map((document) => ApprovalRequestSchema.parse(JSON.parse(document)))
+      .slice(-256);
     const jobs = this.rows(
       "SELECT document FROM jobs WHERE project_id = ? ORDER BY job_id",
       projectId,
-    ).map((document) => JobSnapshotSchema.parse(JSON.parse(document)));
+    )
+      .map((document) => JobSnapshotSchema.parse(JSON.parse(document)))
+      .slice(-256);
     return ProjectSnapshotSchema.parse({
       protocolVersion: "1",
       projectId,
