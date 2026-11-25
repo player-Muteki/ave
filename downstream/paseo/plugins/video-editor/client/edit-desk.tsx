@@ -2,6 +2,7 @@ import { type PluginSurfaceProps, useRpc } from "@getpaseo/plugin/client";
 import { useEffect, useRef, useState, useMemo, useCallback, type ComponentProps } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import {
+  getCapabilitiesRpc,
   createProjectRpc,
   getProjectRpc,
   listProjectsRpc,
@@ -12,7 +13,7 @@ import {
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
-  type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
+  type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
 import { TrackedMaskReview } from "./tracked-mask-review.js";
@@ -47,6 +48,7 @@ interface WaveformDoc {
 }
 
 export function EditDesk({ theme, layout }: PluginSurfaceProps) {
+  const caps = useRpc(getCapabilitiesRpc);
   const create = useRpc(createProjectRpc);
   const read = useRpc(getProjectRpc);
   const list = useRpc(listProjectsRpc);
@@ -95,6 +97,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [rot, setRot] = useState("0");
   const [bgm, setBgm] = useState("");
   const [subMode, setSubMode] = useState<"burn-in" | "metadata">("burn-in");
+  const [capsInfo, setCapsInfo] = useState<CapabilitySet | null>(null);
   const [ovX, setOvX] = useState("0");
   const [ovY, setOvY] = useState("0");
   const [fadeIn, setFadeIn] = useState("");
@@ -117,6 +120,15 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const locked = useRef(false);
   const pickerParent = useRef<View>(null);
   const projectId = project?.projectId;
+  useEffect(() => {
+    if (capsInfo && !capsInfo.features.includes("burn-in-subtitles"))
+      setSubMode((m) => (m === "burn-in" ? "metadata" : m));
+  }, [capsInfo]);
+  useEffect(() => {
+    caps({})
+      .then(setCapsInfo)
+      .catch(() => setCapsInfo(null));
+  }, [caps]);
   useEffect(() => {
     if (layout.platform !== "web" || busy || !projectId) return;
     return mountSourcePicker(pickerParent.current, (file) => {
@@ -541,6 +553,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {field("字幕文本", captionText, setCaptionText)}
                 {button(subMode === "burn-in" ? "字幕模式：烧录" : "字幕模式：软字幕", () =>
                   setSubMode(subMode === "burn-in" ? "metadata" : "burn-in"))}
+                {capsInfo && !capsInfo.features.includes("burn-in-subtitles") && subMode === "burn-in" && (
+                  <Text style={styles.error}>当前主机无 fontconfig，烧录字幕不可用；点击上方按钮切到软字幕</Text>
+                )}
                 {field("字幕起点（秒）", captionStart, setCaptionStart)}
                 {field("字幕终点（秒）", captionEnd, setCaptionEnd)}
                 {field("音量增益（毫分贝，可空）", gainMilli, setGainMilli)}
