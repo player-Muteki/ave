@@ -12,7 +12,7 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, getExportSummaryRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
+  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, getExportSummaryRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
@@ -71,6 +71,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readWaveform = useRpc(getWaveformRpc);
   const readPlan = useRpc(getPlanRpc);
   const readExportSummary = useRpc(getExportSummaryRpc);
+  const readAssetMetadata = useRpc(getAssetMetadataRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
   const controlJob = useRpc(controlJobRpc);
@@ -411,6 +412,15 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 <Text style={muted}>
                   {asset.streams.map((s) => s.codec).join(" / ")} · {asset.original.bytes} 字节
                 </Text>
+                {button("元数据", async () => {
+                  const meta = await readAssetMetadata({
+                    requestId: requestId(`meta:${asset.assetId}`),
+                    projectId: project.projectId,
+                    assetId: asset.assetId,
+                  });
+                  const video = meta.streams.find((st) => st.kind === "video");
+                  setNotice(`${asset.displayName} · 时长 ${meta.durationSeconds ?? "?"}s · ${meta.frameCount ?? "?"} 帧${video ? ` · ${video.width ?? "?"}x${video.height ?? "?"} @${video.averageRate ? `${video.averageRate.num}/${video.averageRate.den}` : "?"}fps` : ""} · hash ${meta.contentHash.slice(0, 12)}`);
+                })}
               </DeskControl>
               {(() => {
                 const job = project.jobs
