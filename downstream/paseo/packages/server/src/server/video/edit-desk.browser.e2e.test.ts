@@ -22,7 +22,7 @@ const repo = fileURLToPath(new URL("../../../../../", import.meta.url));
 // Opt-in: requires agent-browser and a local Chrome binary. Never attaches to a user's browser.
 test
   .skipIf(process.env.VIDEO_EDITOR_BROWSER_TEST !== "1")
-  .each(["source import", "preview approval and reviewed delivery", "reject preview", "project creation and discovery",
+  .each(["source import", "preview approval and reviewed delivery", "reject preview", "project creation and discovery", "remove verified silence",
     ...(process.env.VIDEO_EDITOR_LIVE_PLANNER === "1" ? ["last-second planning approval"] : []),
     ...(process.env.VIDEO_EDITOR_SAM2_TEST === "1" ? ["object mask"] : [])])(
   "edit desk: %s",
@@ -63,7 +63,9 @@ test
         await invoke("create_project", { title: "镜头测试", requestId: "project" }),
       );
       const tailRequest = scenario === "last-second planning approval";
-      const source = path.join(root, tailRequest ? "offset.mkv" : "clip.mp4");
+      const silenceCut = scenario === "remove verified silence";
+      const matroska = tailRequest || silenceCut;
+      const source = path.join(root, matroska ? "offset.mkv" : "clip.mp4");
       if (tailRequest) {
         // Audio starts at native PTS 2.00 s and video at 2.12 s. Both end at 4.40 s.
         await execute("ffmpeg", [
@@ -71,6 +73,14 @@ test
           "-f", "lavfi", "-i", "sine=sample_rate=8000:duration=2.4", "-vf", "select='gte(n,3)*not(eq(n,5))'",
           "-fps_mode", "vfr", "-c:v", "ffv1", "-c:a", "pcm_s16le", "-output_ts_offset", "2", source,
         ], { timeout: 30000 });
+      } else if (silenceCut) {
+        // 57 frames total. Removing the middle second leaves 32 frames with two distinct tones.
+        await execute("ffmpeg", [
+          "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=25:duration=2.28",
+          "-f", "lavfi", "-i",
+          "aevalsrc='if(lt(t,0.6),0.3*sin(2*PI*440*t),if(lt(t,1.6),0,0.3*sin(2*PI*880*t)))':s=48000:d=2.28",
+          "-c:v", "libx264", "-c:a", "pcm_s16le", source,
+        ]);
       } else {
         await execute(
           "ffmpeg",
@@ -98,10 +108,10 @@ test
           await invoke("create_upload", {
             projectId: project.projectId,
             requestId: "upload",
-            displayName: tailRequest ? "镜头 A.mkv" : "镜头 A.mp4",
+            displayName: matroska ? "镜头 A.mkv" : "镜头 A.mp4",
             expectedSize: String(bytes.length),
             expectedSha256: digest,
-            mediaType: tailRequest ? "video/x-matroska" : "video/mp4",
+            mediaType: matroska ? "video/x-matroska" : "video/mp4",
           }),
         );
         await invoke(
@@ -515,27 +525,50 @@ test
         expect(createHash("sha256").update(await readFile(source)).digest("hex")).toBe(digest);
         return;
       }
-      // This range is exact on the 25 fps source, but not representable on a 30 fps grid.
-      await web("fill", '[aria-label="入点（秒，含）"]', "0.120");
-      await web("fill", '[aria-label="出点（秒，不含）"]', "1.400");
-      await web("eval", `[...document.querySelectorAll('[role="button"],button')]
-        .find(node => node.textContent.includes('提交裁剪方案'))
-        ?.scrollIntoView({block: 'center', inline: 'center'});`);
-      await web("find", "role", "button", "click", "--name", "提交裁剪方案");
-      await web("wait", "--text", "保留 镜头 A.mp4");
-      const tree = await web("snapshot");
-      expect(tree).toContain("120/1000");
-      expect(tree).toContain("1280/1000");
+      if (silenceCut) {
+        await clickDesk("分析切点/波形");
+        await web("wait", "--text", "场景切点");
+        await web("fill", '[aria-label="素材总长（秒）"]', "2.28");
+        await web("fill", '[aria-label="删除起点（秒）"]', "0");
+        await web("fill", '[aria-label="删除终点（秒）"]', "0.55");
+        await clickDesk("静音挖洞");
+        await web("wait", "--text", "所选区间内没有连续至少");
+        const untouched = ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId}));
+        expect(untouched.plans).toHaveLength(0);
+        await web("fill", '[aria-label="删除起点（秒）"]', "0.550");
+        await web("fill", '[aria-label="删除终点（秒）"]', "1.650");
+        await clickDesk("静音挖洞");
+        await web("wait", "--text", "0.600s–1.600s");
+      } else {
+        // This range is exact on the 25 fps source, but not representable on a 30 fps grid.
+        await web("fill", '[aria-label="入点（秒，含）"]', "0.120");
+        await web("fill", '[aria-label="出点（秒，不含）"]', "1.400");
+        await web("eval", `[...document.querySelectorAll('[role="button"],button')]
+          .find(node => node.textContent.includes('提交裁剪方案'))
+          ?.scrollIntoView({block: 'center', inline: 'center'});`);
+        await web("find", "role", "button", "click", "--name", "提交裁剪方案");
+        await web("wait", "--text", "保留 镜头 A.mp4");
+        const tree = await web("snapshot");
+        expect(tree).toContain("120/1000");
+        expect(tree).toContain("1280/1000");
+      }
       const saved = ProjectSnapshotSchema.parse(
         await invoke("get_project", { projectId: project.projectId }),
       );
       expect(saved.plans).toHaveLength(1);
       expect(saved.approvals[0]?.status).toBe("pending");
       expect(saved.jobs.filter(j => !j.analysisAssetId)).toHaveLength(0);
-      expect(saved.plans[0]?.trimOperations[0]?.sourceRange).toEqual({
-        start: { num: "120", den: "1000" },
-        duration: { num: "1280", den: "1000" },
-      });
+      if (silenceCut) {
+        expect(saved.plans[0]?.trimOperations.map(op => op.sourceRange)).toEqual([
+          { start: { num: "0", den: "1000" }, duration: { num: "600", den: "1000" } },
+          { start: { num: "1600", den: "1000" }, duration: { num: "680", den: "1000" } },
+        ]);
+      } else {
+        expect(saved.plans[0]?.trimOperations[0]?.sourceRange).toEqual({
+          start: { num: "120", den: "1000" },
+          duration: { num: "1280", den: "1000" },
+        });
+      }
       if (scenario === "reject preview") {
         await web("eval", `[...document.querySelectorAll('[role="button"],button')].find(n=>n.textContent==='拒绝预览方案')?.scrollIntoView({block:'center'}); true`);
         await web("find", "role", "button", "click", "--name", "拒绝预览方案");
@@ -642,6 +675,18 @@ test
         { codec_name: "h264", width: 160, height: 90, start_pts: 0, nb_read_frames: "32", duration: "1.280000" },
         { codec_name: "aac", start_pts: 0, time_base: "1/48000", duration_ts: 61440 },
       ]);
+      if (silenceCut) {
+        const pcm = (await execute("ffmpeg", [
+          "-v", "error", "-i", downloaded, "-map", "0:a:0", "-ar", "48000", "-ac", "1", "-f", "s16le", "pipe:1",
+        ], { encoding: "buffer" })).stdout;
+        // Each 100 ms window contains 44 or 88 positive-going zero crossings.
+        for (const [offset, expected] of [[9600, 44], [43200, 88]] as const) {
+          let crossings = 0;
+          for (let i = offset; i < offset + 4800; i++)
+            if (pcm.readInt16LE(2*i) <= 0 && pcm.readInt16LE(2*i+2) > 0) crossings++;
+          expect(Math.abs(crossings - expected)).toBeLessThanOrEqual(1);
+        }
+      }
       await clickDesk("准备下载导出清单");
       const manifestLink = 'a[download$=".json"]';
       await web("wait", manifestLink);

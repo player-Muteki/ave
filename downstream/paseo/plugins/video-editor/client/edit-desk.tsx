@@ -687,7 +687,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {button("静音挖洞", async () => {
                 if (!waveform || waveform.assetId !== selected) throw new Error("请先对当前素材运行「分析切点/波形」。");
                 const range = findSilentRange(waveform.doc, cutStart, cutEnd);
-                if (!range) throw new Error("该区间内没有足够长的静音段。");
+                if (!range) throw new Error("所选区间内没有连续至少 0.5 秒、RMS 不高于 −40 dBFS 的静音段。");
                 const draft = proposeCutOut(project, selected, range.start, range.end, totalSec);
                 const token = requestId(JSON.stringify(draft));
                 await submit({

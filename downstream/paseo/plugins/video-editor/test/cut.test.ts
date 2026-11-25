@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { proposeCut } from "../client/cut.js";
+import { findSilentRange, proposeCut, proposeCutOut } from "../client/cut.js";
 import type { ProjectSnapshot } from "../shared/contracts/v1.js";
 
 const project = {
@@ -65,5 +65,31 @@ describe("proposeCut", () => {
     // Surrounding whitespace is trimmed before parsing.
     const padded = proposeCut(project, "asset-1", " 1.5 ", " 4.05 ");
     expect(padded.trimOperations[0]!.sourceRange.start).toEqual({ num: "1500", den: "1000" });
+  });
+});
+
+describe("waveform silence cuts", () => {
+  it("keeps audible material and requires half a second of consecutive low RMS", () => {
+    const find = (buckets: string[], start = "0", end = "3") =>
+      findSilentRange({ bucketMs: 100, buckets }, start, end);
+    expect(find(Array(30).fill("0.8"), "0.550", "1.500")).toBeNull();
+    expect(find(["0", "0", "0", "0", "0.02", "0", "0"])).toBeNull();
+    expect(find(["0", "0", "", "0", "0"])).toBeNull();
+    expect(find(Array(10).fill("0.008"), "0.550", "1.500")).toBeNull();
+    expect(find(["0.8", ...Array(8).fill("0.008"), "0.8"], "0.155", "0.855"))
+      .toEqual({ start: "0.155", end: "0.855" });
+  });
+
+  it("retains exactly the remaining media at either boundary", () => {
+    const cut = (from: string, to: string) => proposeCutOut(project, "asset-1", from, to, "2");
+    const tail = cut("0", "0.5");
+    expect(tail.trimOperations).toHaveLength(1);
+    expect(tail.trimOperations[0]?.sourceRange).toEqual({
+      start: { num: "500", den: "1000" }, duration: { num: "1500", den: "1000" },
+    });
+    const head = cut("1.5", "2");
+    expect(head.trimOperations).toHaveLength(1);
+    expect(head.trimOperations[0]?.sourceRange.duration.num).toBe("1500");
+    expect(() => cut("0", "2")).toThrow();
   });
 });

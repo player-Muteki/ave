@@ -177,11 +177,7 @@ export function proposeCut(
   };
 }
 
-/** Delete the middle range [cutStart, cutEnd) and concatenate the rest: two contiguous trims. */
-/**
- * Find the quietest fixed-length run (RMS buckets) inside [startSec, endSec].
- * Returns seconds strings for a cut-out range, or null when the window is empty.
- */
+/** Longest continuous stretch at or below -40 dBFS (0.01 normalized RMS). */
 export function findSilentRange(
   doc: { bucketMs?: number; buckets: string[] },
   startSec: string,
@@ -189,26 +185,34 @@ export function findSilentRange(
   minSeconds = 0.5,
 ): { start: string; end: string } | null {
   const bucketMs = doc.bucketMs ?? 100;
-  const from = Number(startSec) * 1000;
-  const to = Number(endSec) * 1000;
-  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return null;
-  const i0 = Math.max(0, Math.floor(from / bucketMs));
-  const i1 = Math.min(doc.buckets.length - 1, Math.ceil(to / bucketMs));
-  if (i1 - i0 + 1 < 1) return null;
-  const len = Math.max(1, Math.min(i1 - i0 + 1, Math.round((minSeconds * 1000) / bucketMs)));
-  let best = { sum: Infinity, at: -1 };
-  let sum = 0;
-  for (let i = i0; i <= i1; i++) {
-    sum += Number(doc.buckets[i] ?? "0");
-    if (i - i0 + 1 > len) sum -= Number(doc.buckets[i - len] ?? "0");
-    if (i - i0 + 1 >= len && sum < best.sum) best = { sum, at: i - len + 1 };
+  const from = Number(milliseconds(startSec));
+  const to = Number(milliseconds(endSec));
+  if (!Number.isSafeInteger(bucketMs) || bucketMs <= 0 || to <= from ||
+      !Number.isFinite(minSeconds) || minSeconds <= 0) return null;
+
+  let runStart: number | undefined;
+  let bestStart = 0;
+  let bestLength = 0;
+  const stop = Math.min(doc.buckets.length, Math.ceil(to / bucketMs));
+  for (let i = Math.floor(from / bucketMs); i < stop; i++) {
+    const value = doc.buckets[i]!;
+    const rms = Number(value);
+    if (!value.trim() || !Number.isFinite(rms) || rms < 0 || rms > 0.01) {
+      runStart = undefined;
+      continue;
+    }
+    runStart ??= Math.max(from, i * bucketMs);
+    const length = Math.min(to, (i + 1) * bucketMs) - runStart;
+    if (length > bestLength) {
+      bestStart = runStart;
+      bestLength = length;
+    }
   }
-  if (best.at < 0) return null;
-  const startMs = best.at * bucketMs;
-  const endMs = Math.min(to, startMs + len * bucketMs);
-  return { start: (startMs / 1000).toFixed(3), end: (endMs / 1000).toFixed(3) };
+  if (bestLength < minSeconds * 1000) return null;
+  return { start: (bestStart / 1000).toFixed(3), end: ((bestStart + bestLength) / 1000).toFixed(3) };
 }
 
+/** Remove [cutStart, cutEnd) and concatenate the remaining segments. */
 export function proposeCutOut(
   project: ProjectSnapshot,
   assetId: string,
@@ -223,7 +227,10 @@ export function proposeCutOut(
   const to = milliseconds(cutEnd);
   const total = milliseconds(totalSeconds);
   if (to <= from) throw new Error("删除终点必须晚于删除起点。");
-  if (total <= to) throw new Error("素材总长必须大于删除终点。");
+  if (to > total) throw new Error("删除终点不能超过素材总长。");
+  if (from === 0n && to === total) throw new Error("删除后至少需要保留一段素材。");
+  if (from === 0n) return proposeCut(project, assetId, cutEnd, totalSeconds);
+  if (to === total) return proposeCut(project, assetId, "0", cutStart);
   const ms = (v: bigint) => ({ num: v.toString(), den: "1000" });
   const head = { num: from.toString(), den: "1000" };
   const tailDuration = total - to;
