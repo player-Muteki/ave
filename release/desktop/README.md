@@ -17,7 +17,7 @@
 
 ```bash
 sudo install -d -m 0755 /opt/ave
-sudo install -m 0755 AVE-0.1.0-x64.AppImage /opt/ave/AVE.AppImage
+sudo install -m 0755 AVE-0.1.0-x86_64.AppImage /opt/ave/AVE.AppImage
 sudo install -m 0644 ave-appimage.apparmor /etc/apparmor.d/ave-appimage
 sudo apparmor_parser -r /etc/apparmor.d/ave-appimage
 ```
@@ -27,3 +27,7 @@ sudo apparmor_parser -r /etc/apparmor.d/ave-appimage
 ### 对已产出的安装包复验
 
 「AVE installed desktop demo」接收团队 candidate 工作流的 run ID。它核对每个附件内的 SOURCE_SHA 与 SHA256SUMS，从 Linux 安装包的 FFmpeg 生成同一份带原声和时间偏移的 MKV，向全部平台分发相同字节，再以普通用户在已安装的应用中手动设置区间、拒绝、重新提交、审批、播放和导出。每个系统保存截图、MP4、清单和检查报告。demo.json 的 method 字段区分 manual 与 model。真实模型验收可用同一脚本及样片，设置 AVE_DEMO_SOURCE、PASEO_DESKTOP_SMOKE_ARTIFACT_DIR 和模型配置，使用默认的模型模式。
+
+### 生成候选依赖清单
+
+在已按对应提交恢复、应用身份补丁并完成 npm ci 的 runtime 上运行 `python3 release/desktop/make-sbom.py RUNTIME CANDIDATE_SHA SBOM.cdx.json`。CycloneDX 1.5 清单包含桌面与前端工作区的生产 npm 依赖、Electron、FFmpeg、x264、zlib 及四种 CPython 构建档案的来源与摘要。npm 重复安装路径保存在组件属性中。随包 Python 和 Chromium 的第三方许可继续保存在各自发行包，操作系统提供的共享库版本取决于目标平台。
