@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { build } from "esbuild";
 import { expect, test } from "vitest";
 import { decodeFramedChunk, encodeFramedChunk } from "#video-editor/bytes";
-import { TrackedMaskManifestSchema, MaskAnchorRevisionSchema, ProjectSnapshotSchema, UploadStatusSchema } from "#video-editor/contracts/v1";
+import { EditPlanDraftV1Schema, TrackedMaskManifestSchema, MaskAnchorRevisionSchema, ProjectSnapshotSchema, UploadStatusSchema } from "#video-editor/contracts/v1";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DatabaseSync } from "./sqlite.js";
@@ -341,7 +341,7 @@ test
         expect(decided).toEqual({approval:{...pendingSequence,status:"approved"}});
         const done = ProjectSnapshotSchema.parse(await invoke("get_project",{projectId:job.projectId}));
         expect(done.approvals.filter(a=>a.purpose==="input").map(a=>a.status).sort()).toEqual(["approved","approved","rejected"]);
-        expect(done.jobs.map(j=>j.jobId)).toEqual([job.jobId]);
+        expect(done.jobs.filter(j=>!j.analysisAssetId).map(j=>j.jobId)).toEqual([job.jobId]);
         const ledger = new DatabaseSync(path.join(daemon.paseoHome,"video-editor","editor.sqlite"));
         try {
           const rows = ledger.prepare("SELECT r.decided_by, a.grant FROM tracked_mask_reviews r JOIN approvals a USING(approval_id) WHERE r.job_id = ? ORDER BY r.rowid").all(job.jobId);
@@ -364,8 +364,12 @@ test
           await clickDesk("提交 VACE 预览方案");
           await web("wait","--text","预览审批");
           const proposed=await snapshot();
-          expect(proposed.jobs).toHaveLength(1);
+          expect(proposed.jobs.filter(j=>j.kind!=="analysis")).toHaveLength(0);
           expect(proposed.plans[0]?.generationRequests[0]).toMatchObject({maskApprovalId:pendingSequence.approvalId,referenceManifestHash:artifact.blob.sha256});
+          const moved = EditPlanDraftV1Schema.strip().parse(proposed.plans[0]);
+          moved.trimOperations[0]!.sourceRange.start={num:"1",den:"25"};
+          await expect(invoke("submit_plan",{requestId:"shifted-vace",runId:"shifted-vace",toolCallId:"shifted-vace",draft:moved})).rejects.toThrow();
+          expect((await snapshot()).plans).toHaveLength(1);
           await clickDesk("批准并渲染预览");
           const preview=await waitFor("preview","awaiting_review",300000);
           const qa=JSON.parse((await cas.readBytes(preview.artifacts.find(a=>a.kind==="qa")!.blob)).toString());

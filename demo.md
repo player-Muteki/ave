@@ -2,7 +2,7 @@
 
 > 版本：团队可执行设计基线，2026-11-25（新增 FilmCraft 调研与后端适配决策）。原始需求见 [`research/demo.original.md`](research/demo.original.md)，证据见 [`findings.md`](findings.md)。
 >
-> 本仓库当前交付的是设计、接口契约、团队工作流和可执行校验脚本，**不是已经实现的视频编辑应用**。任何模型效果、安装包、真机、性能或兼容性结论都必须在对应验收阶段提供真实证据。
+> 本页描述跨平台产品的设计目标。已运行的媒体工作流、模型实测和各平台验收范围见[实施与验证记录](implementation-progress.md)。
 
 ## 项目一句话
 
@@ -46,9 +46,9 @@
 
 ## 当前状态与下一阶段
 
-- 已完成：需求重构、一手资料调研、架构与接口设计、分工图及统计生成、文档/链接校验、根 Git 工作流。
-- 未实现：产品源码、Pi/Paseo 探针、桌面/Android UI、daemon、Worker、模型接入、安装包和发布管线。
-- 下一道门：按 [M1 集成探针](demo/08-delivery.md) 验证真实上游 API，再锁定实施版本；不得直接按设计文档大规模并行写代码后才发现上游边界不成立。
+- Paseo 工作台和 daemon 已跑通素材导入、剪辑方案审批、预览、成品复核和视频交付。Linux x86_64 开发版 AppImage 有独立启动与剪辑验收记录。[实施与验证记录](implementation-progress.md)
+- 在 Linux 上的 Chrome 工作台，用户可以点选对象、复核 SAM2 传播的整段掩码、提交提示词并批准本地 VACE 生成。已实播并核对九帧样片与音轨。[模型与工作台验收](research/e08-vace.md)
+- Windows、macOS 安装体验、Android 真机远程操作，以及包含生成工作流的多平台发布包仍需逐平台验收。[交付标准](demo/08-delivery.md)
 
 ## 快速导航
 
