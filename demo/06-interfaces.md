@@ -367,6 +367,8 @@ type ExportManifest = {
 | `get_mutation_result` | 按 projectId + requestId 对账丢失响应 | 原操作角色；返回可重放结果和实体 ID |
 | `list_jobs/get_job/watch_jobs` | 查询/订阅真实任务 | viewer；持久 seq + snapshot；事件流每页上限 500，按 afterSeq 继续拉 |
 | `get_run_events` | 按 runId 订阅单次规划运行的事件（内存过滤 runId，单页 ≤200，带 latestSeq 游标） | viewer；requestId + projectId + runId + afterSeq? |
+| `list_approvals` | 审批列表，可选 status 过滤（pending/approved/rejected/superseded/expired/revoked），最新 256 条 | viewer；requestId + projectId + status? |
+| `list_plans` | 方案摘要分页列表（planId 游标，单页 ≤128，仅摘要不含草稿全文） | viewer；requestId + projectId + afterPlanId? |
 | `cancel_job/pause_job/resume_job` | 控制任务 | operator；独立 Agent abort |
 | `get_qa_report` | 查询 QA | viewer |
 | `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |

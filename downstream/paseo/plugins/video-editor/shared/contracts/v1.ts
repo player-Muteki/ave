@@ -722,6 +722,65 @@ export const getRunEventsRpc = {
   input: GetRunEventsInputSchema,
   output: RunEventsResultSchema,
 };
+
+export const ApprovalStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "rejected",
+  "superseded",
+  "expired",
+  "revoked",
+]);
+export const ListApprovalsInputSchema = z
+  .object({ requestId, projectId: id, status: ApprovalStatusSchema.optional() })
+  .strict();
+export type ListApprovalsInput = z.infer<typeof ListApprovalsInputSchema>;
+export const ListApprovalsResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    status: ApprovalStatusSchema.nullable(),
+    approvalCount: z.number().int().min(0),
+    approvals: z.array(ApprovalRequestSchema).max(256),
+  })
+  .strict();
+export type ListApprovalsResult = z.infer<typeof ListApprovalsResultSchema>;
+export const listApprovalsRpc = {
+  name: "video.v1.list_approvals",
+  input: ListApprovalsInputSchema,
+  output: ListApprovalsResultSchema,
+};
+
+export const PlanSummarySchema = z
+  .object({
+    planId: id,
+    revision: uint,
+    planHash: sha256,
+    intent: z.string().max(200),
+    status: z.literal("proposed"),
+    deterministicBackendId: z.enum(["ffmpeg", "filmcraft"]),
+  })
+  .strict();
+export type PlanSummary = z.infer<typeof PlanSummarySchema>;
+export const ListPlansInputSchema = z
+  .object({ requestId, projectId: id, afterPlanId: id.optional() })
+  .strict();
+export type ListPlansInput = z.infer<typeof ListPlansInputSchema>;
+export const ListPlansResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    planCount: z.number().int().min(0),
+    plans: z.array(PlanSummarySchema).max(128),
+    hasMore: z.boolean(),
+  })
+  .strict();
+export type ListPlansResult = z.infer<typeof ListPlansResultSchema>;
+export const listPlansRpc = {
+  name: "video.v1.list_plans",
+  input: ListPlansInputSchema,
+  output: ListPlansResultSchema,
+};
 export const createUploadRpc = {
   name: "video.v1.create_upload",
   input: CreateUploadRequestSchema,

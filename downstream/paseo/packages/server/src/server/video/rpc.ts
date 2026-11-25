@@ -25,6 +25,8 @@ import {
   GetPlanInputSchema,
   ListArtifactsInputSchema,
   GetRunEventsInputSchema,
+  ListApprovalsInputSchema,
+  ListPlansInputSchema,
   GetExportSummaryInputSchema,
   VerifyExportInputSchema,
   GetAssetMetadataInputSchema,
@@ -64,6 +66,8 @@ export class EditorRpcService {
             "list-artifacts",
             "plan-estimate",
             "run-events",
+            "list-approvals",
+            "list-plans",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
           operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export"],
@@ -153,6 +157,20 @@ export class EditorRpcService {
       case "video.v1.get_events": {
         const request = z.object({ projectId: z.string(), afterSeq: z.string() }).parse(input);
         return this.editor.store.events(request.projectId, request.afterSeq, principal);
+      }
+      case "video.v1.list_approvals": {
+        const request = ListApprovalsInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.listApprovals(request.projectId, principal, request.status),
+        };
+      }
+      case "video.v1.list_plans": {
+        const request = ListPlansInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.listPlans(request.projectId, principal, request.afterPlanId),
+        };
       }
       case "video.v1.get_run_events": {
         const request = GetRunEventsInputSchema.parse(input);

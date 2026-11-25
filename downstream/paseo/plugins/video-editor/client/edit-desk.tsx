@@ -11,7 +11,7 @@ import {
   decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc,
-  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc,
+  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
@@ -67,6 +67,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const stopRun = useRpc(stopPlanningRunRpc);
   const readEvents = useRpc(getEventsRpc);
   const readRunEvents = useRpc(getRunEventsRpc);
+  const listApprovals = useRpc(listApprovalsRpc);
+  const listPlans = useRpc(listPlansRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
   const readQaSummary = useRpc(getQaSummaryRpc);
@@ -813,6 +815,10 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             setRunEvents((prev) => [...prev, ...result.events].slice(-12));
           })}
           <Text style={heading}>已提议的时间线</Text>
+          {button("方案列表", async () => {
+            const r = await listPlans({ requestId: requestId("plans"), projectId: project.projectId });
+            setNotice(`方案 ${r.planCount} 条${r.hasMore ? "（还有更多，游标分页）" : ""} · 最新 ${r.plans.at(-1)?.planId.slice(0, 12) ?? "-"} · ${r.plans.at(-1)?.intent.slice(0, 40) ?? ""}`);
+          })}
           {!project.plans.length && <Text style={muted}>尚无裁剪方案。提交方案不会开始渲染。</Text>}
           {project.plans.map((plan) => (
             <View key={plan.planId} style={styles.clip}>
@@ -878,6 +884,10 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
           ))}
           {project.approvals.filter(a=>a.purpose === "preview" && a.status === "pending").map(approval => <View key={approval.approvalId} style={styles.clip}>
             <Text style={heading}>预览审批</Text>
+            {button("待审批", async () => {
+              const r = await listApprovals({ requestId: requestId("approvals:pending"), projectId: project.projectId, status: "pending" });
+              setNotice(`待审批 ${r.approvalCount} 条${r.approvals.length ? ` · 最新 ${r.approvals.at(-1)?.subjectType}/${r.approvals.at(-1)?.purpose}` : ""}`);
+            })}
             <Text style={ink}>{approval.diffSummary.intent}</Text>
             <Text selectable style={muted}>项目版本 {approval.baseTimelineRevision} · 方案 {approval.subjectHash}</Text>
             <Text style={muted}>{approval.diffSummary.operationCount} 项编辑 · {approval.diffSummary.summary}</Text>

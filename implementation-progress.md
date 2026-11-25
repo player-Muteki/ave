@@ -221,6 +221,8 @@
 
 - 新增 viewer RPC `video.v1.get_run_events`：按 runId 过滤的有界事件页（内存过滤，单页 ≤200，带 latestSeq 游标，viewer 可读），客户端规划面板新增“run 事件”按钮；contracts 新增 GetRunEvents*/RunEventsResult（v1.schema.json 98 defs），fixtures 152 例，rpc-surface 48 case/44 export 一致；smoke 新增 RPC_RUN_EVENTS（游标续接/错误 run 为空）全绿。未跑真模型/e2e。
 
+- 新增 viewer RPC `video.v1.list_approvals`（可选 status 过滤，最新 256 条）与 `video.v1.list_plans`（planId 游标分页，单页 ≤128 摘要）；客户端方案区新增“方案列表”、审批区新增“待审批”按钮；capabilities 新增 list-approvals/list-plans。v1.schema.json 104 defs，fixtures 158 例，rpc-surface 50 case/46 export/22 read 一致；smoke 新增 RPC_LIST_PLANS（游标）/RPC_LIST_APPROVALS（过滤与全量）全绿。未跑真模型/e2e。
+
 ## 环境与错误
 
 | 问题 | 处理 |

@@ -940,6 +940,19 @@
       ],
       "additionalProperties": false
     },
+    "ApprovalStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ApprovalStatus",
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "superseded",
+        "expired",
+        "revoked"
+      ]
+    },
     "ArtifactInfo": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:ArtifactInfo",
@@ -4789,6 +4802,74 @@
         "cancelled"
       ]
     },
+    "ListApprovalsInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListApprovalsInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "status": {
+          "$ref": "urn:video-editor:v1:ApprovalStatus"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "ListApprovalsResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListApprovalsResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "urn:video-editor:v1:ApprovalStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approvalCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "approvals": {
+          "maxItems": 256,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:ApprovalRequest"
+          }
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "status",
+        "approvalCount",
+        "approvals"
+      ],
+      "additionalProperties": false
+    },
     "ListArtifactsInput": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:ListArtifactsInput",
@@ -4869,6 +4950,68 @@
         "revision",
         "artifactCount",
         "artifacts"
+      ],
+      "additionalProperties": false
+    },
+    "ListPlansInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListPlansInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "afterPlanId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "ListPlansResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListPlansResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "planCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "plans": {
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:PlanSummary"
+          }
+        },
+        "hasMore": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "planCount",
+        "plans",
+        "hasMore"
       ],
       "additionalProperties": false
     },
@@ -5125,6 +5268,49 @@
       "required": [
         "plan",
         "approval"
+      ],
+      "additionalProperties": false
+    },
+    "PlanSummary": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:PlanSummary",
+      "type": "object",
+      "properties": {
+        "planId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "planHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "intent": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "status": {
+          "type": "string",
+          "const": "proposed"
+        },
+        "deterministicBackendId": {
+          "type": "string",
+          "enum": [
+            "ffmpeg",
+            "filmcraft"
+          ]
+        }
+      },
+      "required": [
+        "planId",
+        "revision",
+        "planHash",
+        "intent",
+        "status",
+        "deterministicBackendId"
       ],
       "additionalProperties": false
     },

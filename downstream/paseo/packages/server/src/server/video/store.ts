@@ -735,6 +735,51 @@ export class EditorStore {
     return plan;
   }
 
+  /**
+   * Viewer-level approval listing with optional status filter; the page is
+   * bounded (latest 256) and full rows stay available via get_approval.
+   */
+  listApprovals(projectId: string, principal: EditorPrincipal, status?: string) {
+    this.authorize(projectId, principal, "viewer");
+    const approvals = this.rows(
+      "SELECT request FROM approvals WHERE project_id = ? ORDER BY created_at, approval_id",
+      projectId,
+    )
+      .map((document) => ApprovalRequestSchema.parse(JSON.parse(document)))
+      .filter((a) => !status || a.status === status)
+      .slice(-256);
+    return { projectId, status: status ?? null, approvalCount: approvals.length, approvals };
+  }
+
+  /**
+   * Viewer-level plan listing with a planId cursor; summaries only (no draft
+   * bodies), bounded to 128 per page. Full plans stay available via get_plan.
+   */
+  listPlans(projectId: string, principal: EditorPrincipal, afterPlanId?: string) {
+    this.authorize(projectId, principal, "viewer");
+    const plans = this.rows(
+      "SELECT document FROM plans WHERE project_id = ? ORDER BY revision",
+      projectId,
+    )
+      .map((document) => AcceptedEditPlanSchema.parse(JSON.parse(document)))
+      .filter((p) => !afterPlanId || p.planId > afterPlanId)
+      .slice(0, 129);
+    const page = plans.slice(0, 128);
+    return {
+      projectId,
+      planCount: page.length,
+      plans: page.map((p) => ({
+        planId: p.planId,
+        revision: p.revision,
+        planHash: p.planHash,
+        intent: p.intent.slice(0, 200),
+        status: p.status,
+        deterministicBackendId: p.deterministicBackendId,
+      })),
+      hasMore: plans.length > 128,
+    };
+  }
+
   validateProposal(draft: EditPlanDraftV1, principal: EditorPrincipal): void {
     this.authorize(draft.projectId, principal, "operator");
     this.validatePlan(draft);
