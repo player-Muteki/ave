@@ -8,7 +8,7 @@ import { expect, it } from "vitest";
 import { EditorService } from "./service.js";
 import { VideoToolBroker } from "./tool-broker.js";
 import { SourceImport } from "../../../../../plugins/video-editor/client/import-source.js";
-import { PlannerAssetMetadataSchema, commitUploadRpc, createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc } from "#video-editor/contracts/v1";
+import { PlannerAssetMetadataSchema, cancelUploadRpc, getMutationResultRpc, commitUploadRpc, createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc } from "#video-editor/contracts/v1";
 import { decodeChunkMetadata } from "#video-editor/bytes";
 
 it("resumes from confirmed bytes after restart without overwriting acknowledged chunks", async () => {
@@ -177,6 +177,7 @@ it("imports a desk file once when a chunk ack and the commit reply are individua
     let loseChunk = true, loseCommit = true;
     const offsets: string[] = [];
     const channels: Parameters<SourceImport["transfer"]>[0] = {
+      cancel: async input => cancelUploadRpc.output.parse(await invoke(cancelUploadRpc.name,input)),
       declare: async input => createUploadRpc.output.parse(await invoke(createUploadRpc.name,input)),
       status: async input => getUploadStatusRpc.output.parse(await invoke(getUploadStatusRpc.name,input)),
       write: async frame => {
@@ -194,6 +195,10 @@ it("imports a desk file once when a chunk ack and the commit reply are individua
     await expect(send()).rejects.toThrow("lost chunk ack");
     await expect(send()).rejects.toThrow("lost commit reply");
     const afterCommit=editor.store.project(projectId,principal);
+    const recovered = await transfer.cancel({
+      ...channels, lookup: async input => getMutationResultRpc.output.parse(await invoke(getMutationResultRpc.name, input)),
+    });
+    expect(recovered).toEqual(afterCommit.assets[0]);
     const receipt=await send();
     expect(offsets).toEqual(["0", "262144"]);
     expect(confirmed).toEqual([0,262144,bytes.length]);

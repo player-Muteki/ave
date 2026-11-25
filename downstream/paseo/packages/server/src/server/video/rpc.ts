@@ -334,7 +334,7 @@ export class EditorRpcService {
         return this.writeUploadChunk(input, principal);
       }
       case "video.v1.cancel_upload":
-        return this.editor.store.cancelUpload(CancelUploadRequestSchema.parse(input), principal);
+        return this.editor.media.cancelUpload(CancelUploadRequestSchema.parse(input), principal);
       case "video.v1.get_upload_status": {
         const request = z.object({ projectId: z.string(), uploadId: z.string() }).parse(input);
         return this.editor.store.uploadStatus(request.projectId, request.uploadId, principal);

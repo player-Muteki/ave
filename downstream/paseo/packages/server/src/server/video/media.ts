@@ -18,6 +18,7 @@ import {
   SourceAssetSchema,
   StreamDescriptorSchema,
   type AcceptedEditPlan,
+  type CancelUploadRequest,
   type BlobRef,
   type EditorPrincipal,
   type JobSnapshot,
@@ -566,6 +567,14 @@ export class MediaService {
       await this.cas.writeUploadChunk(uploadId, BigInt(offset), payload);
       this.store.confirmChunk({ uploadId, offset, nextOffset: end.toString(), digest });
       return end.toString();
+    });
+  }
+
+  async cancelUpload(input: CancelUploadRequest, principal: EditorPrincipal) {
+    return this.withUpload(input.uploadId, async () => {
+      const result = this.store.cancelUpload(input, principal);
+      await this.cas.removeTemporary(input.uploadId);
+      return result;
     });
   }
 

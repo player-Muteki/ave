@@ -22,7 +22,7 @@ const repo = fileURLToPath(new URL("../../../../../", import.meta.url));
 // Opt-in: requires agent-browser and a local Chrome binary. Never attaches to a user's browser.
 test
   .skipIf(process.env.VIDEO_EDITOR_BROWSER_TEST !== "1")
-  .each(["source import", "preview approval and reviewed delivery", "reject preview", "project creation and discovery", "remove verified silence", "switch run event feeds",
+  .each(["source import", "cancel active upload", "preview approval and reviewed delivery", "reject preview", "project creation and discovery", "remove verified silence", "switch run event feeds",
     ...(process.env.VIDEO_EDITOR_LIVE_PLANNER === "1" ? ["last-second planning approval"] : []),
     ...(process.env.VIDEO_EDITOR_SAM2_TEST === "1" ? ["object mask"] : [])])(
   "edit desk: %s",
@@ -64,9 +64,13 @@ test
       );
       const tailRequest = scenario === "last-second planning approval";
       const silenceCut = scenario === "remove verified silence";
-      const matroska = tailRequest || silenceCut;
+      const cancelUpload = scenario === "cancel active upload";
+      const matroska = tailRequest || silenceCut || cancelUpload;
       const source = path.join(root, matroska ? "offset.mkv" : "clip.mp4");
-      if (tailRequest) {
+      if (cancelUpload) {
+        await execute("ffmpeg", ["-nostdin", "-v", "error", "-f", "lavfi", "-i", "color=size=32x32:rate=5:duration=8",
+          "-f", "lavfi", "-i", "sine=sample_rate=48000:duration=8", "-c:v", "libx264", "-c:a", "pcm_s16le", source]);
+      } else if (tailRequest) {
         // Audio starts at native PTS 2.00 s and video at 2.12 s. Both end at 4.40 s.
         await execute("ffmpeg", [
           "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=64x48:rate=25:duration=2.4",
@@ -103,7 +107,7 @@ test
       }
       const bytes = await readFile(source);
       const digest = createHash("sha256").update(bytes).digest("hex");
-      if (scenario !== "source import" && scenario !== "project creation and discovery") {
+      if (!cancelUpload && scenario !== "source import" && scenario !== "project creation and discovery") {
         const upload = UploadStatusSchema.parse(
           await invoke("create_upload", {
             projectId: project.projectId,
@@ -160,7 +164,19 @@ test
       if (typeof dispose !== 'function') throw Error('Missing plugin cleanup function');
       const daemon=new DaemonClient({url:${JSON.stringify(ws)},clientId:'qa-desk',clientType:'browser'});
       const colors={surface0:'#17222d',foreground:'#f1f6fa',foregroundMuted:'#becbd6',accent:'#3875b4',accentForeground:'#ffffff',statusDanger:'#ffb4af'};
-      daemon.connect().then(()=>createRoot(document.getElementById('root')).render(<PluginRpcProvider invoke={(method,input)=>daemon.invokePluginRpc('video-editor',method,input)}><Screen layout={{compact:false,platform:'web'}} theme={{colors}} host={{id:'local',label:'QA'}} /></PluginRpcProvider>)).catch(e=>document.body.textContent=e.message);
+      let writes = 0;
+      async function invoke(method, input) {
+        const result = await daemon.invokePluginRpc('video-editor', method, input);
+        if (${JSON.stringify(cancelUpload)}) {
+          if (method === 'video.v1.create_upload') window.uploadId = result.uploadId;
+          if (method === 'video.v1.write_upload_chunk') window.ackCount = ++writes;
+          if ((method === 'video.v1.write_upload_chunk' && writes === 2) || method === 'video.v1.commit_upload') {
+            await new Promise(resolve => { window.releaseAck = () => { delete window.releaseAck; resolve(); }; });
+          }
+        }
+        return result;
+      }
+      daemon.connect().then(()=>createRoot(document.getElementById('root')).render(<PluginRpcProvider invoke={invoke}><Screen layout={{compact:false,platform:'web'}} theme={{colors}} host={{id:'local',label:'QA'}} /></PluginRpcProvider>)).catch(e=>document.body.textContent=e.message);
     `,
         },
       });
@@ -278,6 +294,36 @@ test
         expect(await web("snapshot")).toContain(plan.planHash);
         expect(snapshot.jobs.filter(job => job.kind !== "analysis")).toEqual([]);
         expect(createHash("sha256").update(await readFile(source)).digest("hex")).toBe(digest);
+        return;
+      }
+      if (cancelUpload) {
+        const picker = 'input[type="file"][aria-label="选择本机视频"]';
+        const upload = async () => {
+          await web("wait", picker);
+          await web("upload", picker, source);
+          await clickDesk("导入所选视频");
+          await web("wait", "--fn", "typeof window.releaseAck === 'function'");
+        };
+        await upload();
+        expect(await web("snapshot")).toContain("已确认 262144");
+        const id = JSON.parse((await web("eval", "window.uploadId")).trim());
+        const cas = new ContentAddressedStore(path.join(daemon.paseoHome, "video-editor", "cas"));
+        expect((await readFile(cas.temporaryUploadPath(id))).length).toBe(524288);
+        await clickDesk("取消上传");
+        await clickDesk("取消上传");
+        await web("eval", "window.releaseAck(); true");
+        await web("wait", "--text", "已取消未完成的上传。");
+        expect((await web("eval", "window.ackCount")).trim()).toBe("2");
+        expect(ProjectSnapshotSchema.parse(await invoke("get_project", { projectId: project.projectId })).assets).toEqual([]);
+        await expect(invoke("get_upload_status", { projectId: project.projectId, uploadId: id })).rejects.toThrow();
+        await expect(readFile(cas.temporaryUploadPath(id))).rejects.toMatchObject({ code: "ENOENT" });
+        // Re-upload. The daemon has now committed the asset but the desk is still waiting for its receipt.
+        await upload();
+        await clickDesk("取消上传");
+        await web("eval", "window.releaseAck(); true");
+        await web("wait", "--text", "素材已导入。");
+        expect(ProjectSnapshotSchema.parse(await invoke("get_project", { projectId: project.projectId })).assets)
+          .toMatchObject([{ original: { sha256: digest, bytes: String(bytes.length) } }]);
         return;
       }
       if (scenario === "source import") {

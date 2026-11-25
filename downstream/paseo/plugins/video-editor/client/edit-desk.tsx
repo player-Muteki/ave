@@ -10,10 +10,10 @@ import {
   estimateTimelineRpc,
   decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
-  createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc,
+  createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc, getMutationResultRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
-  type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
+  type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
 import { TrackedMaskReview } from "./tracked-mask-review.js";
@@ -61,6 +61,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const status = useRpc(getUploadStatusRpc);
   const write = useRpc(writeUploadChunkRpc);
   const commit = useRpc(commitUploadRpc);
+  const lookup = useRpc(getMutationResultRpc);
   const cancelUp = useRpc(cancelUploadRpc);
   const startRun = useRpc(startPlanningRunRpc);
   const followUpRun = useRpc(followUpPlanningRunRpc);
@@ -83,6 +84,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const frames = useRpc(previewFramesRpc);
   const controlJob = useRpc(controlJobRpc);
   const [sourceImport, setSourceImport] = useState<SourceImport | null>(null);
+  const [activeUpload, setActiveUpload] = useState<AbortController | null>(null);
   const [confirmed, setConfirmed] = useState(0);
   const [project, setProject] = useState<ProjectSnapshot | null>(null);
   const [projects, setProjects] = useState<Array<{ projectId: string; title: string; revision: string }>>([]);
@@ -264,6 +266,15 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
       </DeskControl>
     );
   }
+  async function finishImport(projectId: string, asset?: SourceAsset | void) {
+    if (asset) {
+      show(await read({ projectId }));
+      if (asset.streams.some(stream => stream.kind === "video")) select(asset.assetId);
+    }
+    setNotice(asset ? "素材已导入。" : "已取消未完成的上传。");
+    setConfirmed(0);
+    setSourceImport(null);
+  }
   async function approveJob(approval: ApprovalRequest, purpose: "preview" | "final" | "export") {
     if (!project || project.projectId !== approval.projectId || project.revision !== approval.baseTimelineRevision || approval.purpose !== purpose)
       throw new Error("审批与当前项目版本不匹配，请刷新项目。");
@@ -395,16 +406,28 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             {sourceImport?.projectId === project.projectId ? <>
               <Text style={muted}>{sourceImport.file.name} · 已确认 {confirmed} / {sourceImport.file.size} 字节</Text>
               {button("导入所选视频", async () => {
-                const asset = await sourceImport.transfer({declare, status, write, commit, cancel: cancelUp}, digestSource, setConfirmed);
-                show(await read({projectId: project.projectId}));
-                if (asset.streams.some(stream => stream.kind === "video")) select(asset.assetId);
-                setSourceImport(null);
+                const controller = new AbortController();
+                setActiveUpload(controller);
+                setNotice("");
+                try {
+                  let asset;
+                  try {
+                    asset = await sourceImport.transfer({ declare, status, write, commit, cancel: cancelUp }, digestSource, setConfirmed, controller.signal);
+                  } catch (error) {
+                    if (!controller.signal.aborted) throw error;
+                    asset = await sourceImport.cancel({ declare, cancel: cancelUp, lookup });
+                  }
+                  await finishImport(project.projectId, asset);
+                } finally {
+                  setActiveUpload(null);
+                }
               })}
-              {button("取消上传", async () => {
-                await sourceImport.cancel({ cancel: cancelUp });
-                setSourceImport(null);
-                setConfirmed(0);
-                setNotice("已取消未完成的上传。");
+              {activeUpload ? <DeskControl accessibilityRole="button" style={styles.button}
+                value={activeUpload} action={controller => controller.abort()}>
+                <Text style={styles.actionText}>取消上传</Text>
+              </DeskControl> : button("取消上传", async () => {
+                const asset = await sourceImport.cancel({ declare, cancel: cancelUp, lookup });
+                await finishImport(project.projectId, asset);
               })}
             </> : <Text style={muted}>单个视频不超过 64 MiB。</Text>}
           </View>}
