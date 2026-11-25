@@ -104,6 +104,17 @@ def main() -> int:
         else:
             fail(errors, f"缺少 {name}")
     check_team(errors)
+    rpc_surface = ROOT / "downstream" / "paseo" / "plugins" / "video-editor" / "test" / "test_rpc_surface.py"
+    if rpc_surface.exists():
+        surface = subprocess.run(
+            [sys.executable, str(rpc_surface)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if surface.returncode:
+            fail(errors, surface.stdout.strip() or surface.stderr.strip())
     repository = subprocess.run(
         ["git", "-C", str(ROOT), "rev-parse", "--is-inside-work-tree"],
         check=False,
