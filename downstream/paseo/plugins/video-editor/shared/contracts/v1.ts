@@ -643,6 +643,26 @@ export const InspectFrameHeaderSchema = InspectFrameRequestSchema.extend({
   }).strict().optional(),
 });
 export type InspectFrameHeader = z.infer<typeof InspectFrameHeaderSchema>;
+export const CreateMaskRevisionRequestSchema = z.object({
+  requestId, expectedRevision: uint, anchor: InspectFrameRequestSchema,
+  expectedLabelSha256: sha256, expectedPreviewSha256: sha256,
+}).strict();
+export type CreateMaskRevisionRequest = z.infer<typeof CreateMaskRevisionRequestSchema>;
+export const MaskAnchorRevisionSchema = z.object({
+  schemaVersion: z.literal("video.mask-anchor/v1"), maskRevisionId: id, projectId: id,
+  baseTimelineRevision: uint, anchor: InspectFrameHeaderSchema.required({ mask: true }),
+  rotation: z.string(), sampleAspectRatio: z.string(),
+  rawLabelMask: BlobRefSchema, reviewImage: BlobRefSchema,
+}).strict();
+export type MaskAnchorRevision = z.infer<typeof MaskAnchorRevisionSchema>;
+export const MaskRevisionReviewRequestSchema = z.object({ projectId: id, maskRevisionId: id }).strict();
+export const createMaskRevisionRpc = {
+  name: "video.v1.create_mask_revision", input: CreateMaskRevisionRequestSchema, output: ApprovalRequestSchema,
+};
+export const getMaskRevisionRpc = {
+  name: "video.v1.get_mask_revision", input: MaskRevisionReviewRequestSchema, output: z.instanceof(Uint8Array),
+};
+
 export const inspectFrameRpc = {
   name: "video.v1.inspect_frame", input: InspectFrameRequestSchema, output: z.instanceof(Uint8Array),
 };

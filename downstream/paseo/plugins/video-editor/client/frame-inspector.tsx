@@ -12,12 +12,15 @@ import { useRpc, type PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { decodeFramedChunk } from "../shared/bytes.js";
 import {
   inspectFrameRpc,
+  createMaskRevisionRpc,
+  type ProjectSnapshot,
   InspectFrameHeaderSchema,
   type InspectFrameHeader,
   type InspectFrameRequest,
   type SourceAsset,
 } from "../shared/contracts/v1.js";
-import { digestSource } from "./web.js";
+import { digestSource, imageUri } from "./web.js";
+import { MaskReview } from "./mask-review.js";
 
 type Points = InspectFrameRequest["points"];
 interface Picture {
@@ -30,24 +33,25 @@ const fill = { width: "100%", height: "100%" } as const;
 const actionStyle = { padding: 8 };
 const disabledStyle = { padding: 8, opacity: 0.5 };
 
-function imageUri(bytes: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-  }
-  return "data:image/jpeg;base64," + btoa(binary);
+function validFrameNumber(value: string) {
+  return /^(0|[1-9]\d*)$/.test(value) && Number(value) <= 2147483647;
 }
 
 export function FrameInspector({
-  projectId,
+  project,
+  refresh,
   asset,
   theme,
 }: {
-  projectId: string;
+  project: ProjectSnapshot;
+  refresh: () => Promise<void>;
   asset: SourceAsset;
   theme: PluginSurfaceProps["theme"];
 }) {
   const inspect = useRpc(inspectFrameRpc);
+  const saveRevision = useRpc(createMaskRevisionRpc);
+  const projectId = project.projectId;
+  const pendingSave = useRef({ key: "", id: "" });
   const streams = asset.streams.filter((stream) => stream.kind === "video");
   const [streamUid, setStream] = useState(streams[0]?.streamUid ?? "");
   const [ordinal, setOrdinal] = useState("0");
@@ -130,7 +134,47 @@ export function FrameInspector({
   );
   const h = picture?.header;
   const sameFrame = String(h?.frame) === ordinal;
-  const valid = /^(0|[1-9]\d*)$/.test(ordinal) && Number(ordinal) <= 2147483647;
+  async function save() {
+    if (!h?.mask || !sameFrame) return;
+    const key = [
+      project.revision,
+      h.previewSha256,
+      h.mask.labelSha256,
+      JSON.stringify(h.points),
+      h.frame,
+      h.streamUid,
+    ].join("|");
+    if (pendingSave.current.key !== key)
+      pendingSave.current = {
+        key,
+        id: `mask-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+      };
+    setBusy(true);
+    setError("");
+    try {
+      await saveRevision({
+        requestId: pendingSave.current.id,
+        expectedRevision: project.revision,
+        expectedLabelSha256: h.mask.labelSha256,
+        expectedPreviewSha256: h.previewSha256,
+        anchor: {
+          projectId,
+          assetId: h.assetId,
+          streamUid: h.streamUid,
+          frame: h.frame,
+          points: h.points,
+          sourcePresentationIndexHash: h.sourcePresentationIndexHash,
+        },
+      });
+      await refresh();
+      pendingSave.current = { key: "", id: "" };
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存掩码失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const valid = validFrameNumber(ordinal);
   return (
     <View style={group}>
       <Text style={styles.ink}>源帧与对象点选</Text>
@@ -207,12 +251,36 @@ export function FrameInspector({
             disabled={!sameFrame || busy}
           />
           {h.mask && (
-            <Text
-              style={styles.ink}
-            >{`SAM2 掩码 · ${h.points.length} 个点 · ${h.mask.foregroundPixels} 个前景像素`}</Text>
+            <>
+              <Text
+                style={styles.ink}
+              >{`SAM2 掩码 · ${h.points.length} 个点 · ${h.mask.foregroundPixels} 个前景像素`}</Text>
+              {button(
+                "保存掩码供审批",
+                () => {
+                  void save();
+                },
+                busy || !sameFrame,
+              )}
+            </>
           )}
         </View>
       )}
+      {project.approvals
+        .filter(
+          (a) =>
+            a.subjectType === "mask_revision" &&
+            a.requiredInputs.some((i) => i.type === "asset" && i.id === asset.assetId),
+        )
+        .map((a) => (
+          <MaskReview
+            key={a.approvalId}
+            approval={a}
+            timeline={project.revision}
+            refresh={refresh}
+            theme={theme}
+          />
+        ))}
     </View>
   );
 }

@@ -60,6 +60,8 @@ def main():
     overlay[mask] = rgb[mask] // 2 + np.array([0, 115, 85], np.uint8)
     Image.fromarray(overlay).save("overlay.png")
     label = mask.astype(np.uint8) * 255
+    if sys.argv[1:] == ["--save-label"]:
+        Path("label.raw").write_bytes(label.tobytes())
     print(json.dumps({"engine": "sam2.1-tiny", "weightsSha256": TINY,
                       "labelSha256": hashlib.sha256(label.tobytes()).hexdigest(),
                       "foregroundPixels": int(mask.sum())}))

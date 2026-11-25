@@ -122,6 +122,12 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
         "",
     );
   }
+  const openProjectId = project?.projectId;
+  const refreshMaskApprovals = useCallback(async () => {
+    if (!openProjectId) return;
+    const snapshot = await read({ projectId: openProjectId });
+    setProject(current => current?.projectId === openProjectId ? snapshot : current);
+  }, [openProjectId, read]);
   const colors = theme.colors;
   const styles = useMemo(
     () => ({
@@ -305,7 +311,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             <>
               {mediaControl("查看源素材代理（无声）", selected, project.revision, project.assets.find(a => a.assetId === selected)?.proxy)}
               {project.assets.filter(a => a.assetId === selected && a.streams.some(s => s.kind === "video")).map(asset =>
-                <FrameInspector key={project.projectId + asset.assetId} projectId={project.projectId} asset={asset} theme={theme} />)}
+                <FrameInspector key={project.projectId + asset.assetId} project={project} refresh={refreshMaskApprovals} asset={asset} theme={theme} />)}
               <Text style={heading}>单段裁剪</Text>
               <View style={row}>
                 {field("入点（秒，含）", start, setStart)}
