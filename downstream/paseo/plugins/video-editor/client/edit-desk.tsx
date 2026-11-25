@@ -636,10 +636,12 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                         requestId: requestId(`est:${JSON.stringify(draft)}`),
                         draft,
                       });
+                      const warnings = est.warnings ?? [];
+                      const warn = warnings.length ? ` · 警告：${warnings[0]}${warnings.length > 1 ? ` 等 ${warnings.length} 条` : ""}` : "";
                       setEstimateInfo(
                         est.valid
-                          ? `预估输出 ${est.effectiveMainDurationSeconds}s（主轨 ${est.mainDurationSeconds}s · ${est.mainTrackSegments} 段 · 转场重叠 ${est.transitionOverlapSeconds}s · 音频 ${est.audioOperationCount} · 字幕 ${est.subtitleCueCount}）`
-                          : `方案有问题：${est.issue ?? "未知错误"}`,
+                          ? `预估输出 ${est.effectiveMainDurationSeconds}s（主轨 ${est.mainDurationSeconds}s · ${est.mainTrackSegments} 段 · 转场重叠 ${est.transitionOverlapSeconds}s · 音频 ${est.audioOperationCount} · 字幕 ${est.subtitleCueCount}）${warn}`
+                          : `方案有问题：${est.issue ?? "未知错误"}${warn}`,
                       );
                     })}
                     {button("提交裁剪方案", async () => {
