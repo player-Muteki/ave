@@ -449,6 +449,8 @@ test.each([
     await expect(invoke("read_asset_chunk", {...readPreview, revision: (BigInt(previewArtifact.revision) + 1n).toString()})).rejects.toThrow();
     const final = await advance("final", job.jobId, candidate.blob.sha256);
     const reviewed = final.artifacts.find((a) => a.kind === "candidate")!;
+    const reviewProxy = final.artifacts.find((artifact) => artifact.kind === "proxy")!;
+    await expectTrimClock(cas.pathFor(reviewProxy.blob));
     await expect(invoke("read_asset_chunk", {...readPreview, assetId: reviewed.artifactId, revision: reviewed.revision})).rejects.toThrow();
     const delivery = await advance("export", final.jobId, reviewed.blob.sha256);
     const published = delivery.artifacts.find((a) => a.kind === "export")!;

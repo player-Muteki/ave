@@ -78,13 +78,15 @@ def check_preview_clock(root):
            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2",
            "-c:v", "libx264", "-c:a", "aac", source)
     before = sha256(source.read_bytes()).digest()
+    source_clock = run("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                       "stream=time_base", "-of", "default=nw=1:nk=1", source).decode().strip()
     trim = "start=0.120:duration=1.280"
     scale = "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2"
     for forced in (True, False):
         out = root / ("forced.mp4" if forced else "source-clock.mp4")
         vf = f"trim={trim},setpts=PTS-STARTPTS,{scale}," + ("fps=30," if forced else "") + "setsar=1"
         ffmpeg("-i", source, "-map", "0:v:0", "-vf", vf, "-fps_mode", "vfr",
-               *([] if forced else ["-enc_time_base:v", "filter"]), "-c:v", "libx264",
+               *([] if forced else ["-enc_time_base:v", source_clock]), "-c:v", "libx264",
                "-pix_fmt", "yuv420p", "-map", "0:a:0", "-af", f"atrim={trim},asetpts=PTS-STARTPTS",
                "-c:a", "aac", "-ar", "48000", out)
         ffmpeg("-i", out, "-map", "0", "-f", "null", "-")
