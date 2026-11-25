@@ -11,7 +11,7 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, getAnalysisRpc, contactSheetRpc, previewFramesRpc, readAssetChunkRpc, controlJobRpc,
+  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, contactSheetRpc, previewFramesRpc, readAssetChunkRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
@@ -65,6 +65,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readEvents = useRpc(getEventsRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
+  const readQaSummary = useRpc(getQaSummaryRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
   const controlJob = useRpc(controlJobRpc);
@@ -869,6 +870,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {job.artifacts
                 .filter((a) => a.kind === "qa")
                 .map((a) => mediaControl("查看 QA 报告", a.artifactId, a.revision, a.blob, "qa"))}
+              {job.artifacts.some((a) => a.kind === "qa") && button("QA 摘要", async () => {
+                const q = await readQaSummary({
+                  requestId: requestId(`qa:${job.jobId}`),
+                  projectId: project.projectId,
+                  jobId: job.jobId,
+                });
+                const gates = q.gates.map((g) => `${g.gate}=${g.status}`).join(",") || "无门禁";
+                const loud = q.audioLoudness ? ` · 响度 ${q.audioLoudness.meanVolumeDb}/${q.audioLoudness.maxVolumeDb} dB` : "";
+                setNotice(`QA ${q.state} · ${q.durationSeconds ?? "?"}s · ${q.streams.map((st) => st.codecName ?? st.codecType).join("/") || "无流"}${loud} · recipe ${q.renderRecipeHash?.slice(0, 12) ?? "-"} · ${gates}`);
+              })}
               {proxy && delivery && <View>
                 <Text style={heading}>成品交付审批</Text>
                 <Text selectable style={muted}>成品版本 {delivery.subjectRevision} · SHA-256 {delivery.subjectHash}</Text>

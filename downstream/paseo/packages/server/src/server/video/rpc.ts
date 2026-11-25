@@ -15,6 +15,7 @@ import {
   SteerPlanningRunInputSchema,
   AnalyzeAssetInputSchema,
   GetAnalysisInputSchema,
+  GetQaSummaryInputSchema,
   ContactSheetRequestSchema,
   InspectFrameRequestSchema,
   PreviewFramesRequestSchema,
@@ -150,6 +151,14 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...this.editor.store.analysisSummary(request.projectId, request.assetId, principal),
+        };
+      }
+      case "video.v1.get_qa_summary": {
+        const request = GetQaSummaryInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          ...(await this.editor.store.qaSummary(request.projectId, request.jobId, principal)),
         };
       }
       case "video.v1.request_tracked_mask_review":

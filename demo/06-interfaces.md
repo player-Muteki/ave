@@ -365,6 +365,7 @@ type ExportManifest = {
 | `list_jobs/get_job/watch_jobs` | 查询/订阅真实任务 | viewer；持久 seq + snapshot |
 | `cancel_job/pause_job/resume_job` | 控制任务 | operator；独立 Agent abort |
 | `get_qa_report` | 查询 QA | viewer |
+| `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |
 | `get_artifact` | 读取产物元数据 | viewer 仅 proxy/QA；最终 export 需 operator |
 | `read_asset_chunk` | 分块读取 proxy、mask、QA 或 export | 按 asset 类型鉴权；最终 export 需 operator |
 | `revoke_device/configure_worker` | 设备/后端管理 | owner only |
