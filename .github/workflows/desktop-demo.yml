@@ -113,6 +113,8 @@ jobs:
           cp downstream/paseo/packages/desktop/e2e/{packaged-app-smoke,video-release-demo,verify-linux-image}.js runtime/packages/desktop/e2e/
       - name: Prepare the desktop test client
         working-directory: runtime
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm ci --no-audit --no-fund && npm run build:server:clean
       - name: Prepare Linux desktop sandbox
         if: runner.os == 'Linux'
