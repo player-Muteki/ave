@@ -321,3 +321,9 @@
 在 macOS arm64 临时检出 Paseo `c626bf37071491981fc8e11c3e2f4df093381d37`，叠加 AVE `7033c2673fa82bfe7bec4865909b71c16bd55d1b`。Node 22.23.2、npm 10.9.8 从 lockfile 安装 2,862 个包并运行 postinstall 和 prepare，server 与 CLI 的 clean build 通过。插件的 10 个测试文件共 220 项通过，服务端的 27 个文件共 108 项通过，其中包含真实 Chrome 工作台。另有两个需要模型服务的测试在该次回归中跳过。媒体验证使用自编译 FFmpeg/ffprobe，源提交为 `38b88335f99e76ed89ff3c93f877fdefce736c13`，Worker 解释器为 CPython 3.12.16。
 
 首次原生构建中，Linux 包内的 FFmpeg、ffprobe、Python、CLI 冷启动、Electron 窗口与 daemon 成功启动；规划 Worker 的回环探测返回 failed。Windows 的原生 FFmpeg 构建目标已修正。安装包生成、安装后启动和真实模型演示分别记录结果。[原生构建日志](https://github.com/player-Muteki/ave/actions/runs/45655778803)
+
+### 安装回归与非零起点素材
+
+在 macOS arm64 挂载 0.1.0 候选 DMG，复制至临时 Applications 目录后启动。包内媒体工具、CLI 冷启动、桌面管理的 daemon、规划子进程、侧栏「剪辑工作台」与终端钩子均通过。首次回环探测缺少严格工具调用能力声明；给测试 provider 明确配置该能力后，同一安装包通过。macOS 中文首次启动页的「跳过设置」亦已走通。此验证使用测试 provider。
+
+真实本地模型测试另外发现，带 2 秒偏移的 MKV 被展示为 4.4 秒。现在，存在非零起点时，以各音视频流的结束 PTS 和输入起点计算播放时长，报告精度为微秒。对应的实测回归使用另一份偏移 2 秒、实际时长 2 秒的 VFR 样片，ffprobe 容器字段为 4.000000，修复后桌面 RPC 和规划工具均返回 2.000000。若缺少完整流范围，结果为未知。上传、broker 和规划专项共 9 项通过。

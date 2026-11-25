@@ -24,6 +24,28 @@ export function probeStartTime(seconds?: string): Rational | undefined {
   };
 }
 
+/** Some demuxers report an absolute end as format.duration when playback starts away from zero. */
+export function playbackDurationSeconds(
+  header: string | undefined,
+  origin: Rational | undefined,
+  streams: { kind: string; timeBase: Rational; startPts?: string; durationTicks?: string }[],
+): string | null {
+  if (!origin || BigInt(origin.num) === 0n) return header ?? null;
+  const media = streams.filter(stream => stream.kind === "audio" || stream.kind === "video");
+  if (!media.length) return null;
+  let latest = 0n;
+  for (const stream of media) {
+    if (stream.startPts === undefined || stream.durationTicks === undefined) return null;
+    const endTicks = BigInt(stream.startPts) + BigInt(stream.durationTicks);
+    const denominator = BigInt(stream.timeBase.den) * BigInt(origin.den);
+    const elapsed = endTicks * BigInt(stream.timeBase.num) * BigInt(origin.den)
+      - BigInt(origin.num) * BigInt(stream.timeBase.den);
+    const micros = (elapsed * 1_000_000n + denominator / 2n) / denominator;
+    if (micros > latest) latest = micros;
+  }
+  return `${latest / 1_000_000n}.${(latest % 1_000_000n).toString().padStart(6, "0")}`;
+}
+
 /** Extent of indexed decoded frames, in the bound stream's own ticks. */
 export function presentationSpans(
   index: FrameIndex,

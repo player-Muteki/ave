@@ -102,7 +102,10 @@ it("measures a nonzero-start Matroska stream from its decoded frame index", asyn
       protocolVersion: "1", toolCallId: "metadata", tool: "get_asset_metadata",
       args: { assetId, contentHash: sha256 },
     });
+    expect(probe.format.duration).toBe("4.000000");
+    expect((await service.store.assetMetadata(projectId, asset.assetId, principal)).durationSeconds).toBe("2.000000");
     expect(await metadata(asset.assetId)).toMatchObject({
+      durationSeconds: "2.000000",
       inputStartTime: { num: "2000000", den: "1000000" },
       streams: [
         { kind: "video", timeBase: { num: "1", den: "1000" }, startPts: "2120", durationTicks: "1880" },
@@ -118,6 +121,7 @@ it("measures a nonzero-start Matroska stream from its decoded frame index", asyn
     };
     service.store.addAsset(projectId, alternate, "add-incomplete", principal);
     const result = PlannerAssetMetadataSchema.parse(await metadata(alternate.assetId));
+    expect(result.durationSeconds).toBeNull();
     expect(result.streams[0]!.durationTicks).toBeUndefined();
     expect(result.streams[1]!.durationTicks).toBe("2000");
   } finally {

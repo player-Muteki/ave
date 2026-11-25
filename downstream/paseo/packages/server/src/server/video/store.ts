@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { presentationSpans, probeStartTime, type FrameIndex } from "./presentation-duration.js";
+import { playbackDurationSeconds, presentationSpans, probeStartTime, type FrameIndex } from "./presentation-duration.js";
 import type { ProbeDocument } from "./media.js";
 import type { SqliteDatabase } from "./sqlite-types.js";
 import { DatabaseSync } from "./sqlite.js";
@@ -426,36 +426,37 @@ export class EditorStore {
     const primaryVideo = asset.streams.find(stream => stream.kind === "video");
     if (primaryVideo && !Array.isArray(index.frames)) editorFailure("SCHEMA_UNSUPPORTED", "Missing presentation index frames");
     const frameCount = primaryVideo ? index.frames.reduce((n, f) => n + Number(f.stream_index === primaryVideo.streamIndex), 0) : null;
-    return { asset, probe, index, frameCount, durationSeconds: probe.format?.duration ?? null };
-  }
-
-  async plannerAssetMetadata(projectId: string, assetId: string, contentHash: string, principal: EditorPrincipal) {
-    const { asset, probe, index, frameCount, durationSeconds } = await this.readAssetMetadata(projectId, assetId, principal, contentHash);
     const byIndex = new Map(probe.streams.map(stream => [stream.index, stream]));
     const withoutDuration = asset.streams.filter(({ streamIndex, kind }) =>
       (kind === "audio" || kind === "video") && byIndex.get(streamIndex)?.duration_ts === undefined,
     );
     const spans = presentationSpans(index, asset, withoutDuration);
-    return PlannerAssetMetadataSchema.parse({
-      assetId, contentHash, frameCount, durationSeconds, inputStartTime: probeStartTime(probe.format?.start_time),
-      streams: asset.streams.map(({ streamIndex, streamUid, kind, codec, timeBase, averageRate, width, height, sampleRate }) => {
-        const stream = byIndex.get(streamIndex);
-        const sameClock = stream?.codec_type === kind && stream.time_base === `${timeBase.num}/${timeBase.den}`;
-        const start = sameClock ? stream.start_pts : undefined;
-        const duration = sameClock ? stream.duration_ts : undefined;
-        const span = sameClock ? spans.get(streamIndex) : undefined;
-        // A header can include preroll or an edit list outside the decoded frame span.
-        const measured = span && (start === undefined || (Number.isSafeInteger(start) && BigInt(start) === span.first))
-          ? span : undefined;
-        // The saved probe uses JSON numbers. Publish only ticks that survived parsing exactly.
-        return {
-          streamUid, kind, codec, timeBase, averageRate, width, height, sampleRate,
-          startPts: Number.isSafeInteger(start) ? String(start) : measured?.first.toString(),
-          durationTicks: duration !== undefined && duration >= 0 && Number.isSafeInteger(duration)
-            ? String(duration) : measured && (measured.end - measured.first).toString(),
-        };
-      }),
+    const streams = asset.streams.map(({ streamIndex, streamUid, kind, codec, timeBase, averageRate, width, height, sampleRate }) => {
+      const stream = byIndex.get(streamIndex);
+      const sameClock = stream?.codec_type === kind && stream.time_base === `${timeBase.num}/${timeBase.den}`;
+      const start = sameClock ? stream.start_pts : undefined;
+      const duration = sameClock ? stream.duration_ts : undefined;
+      const span = sameClock ? spans.get(streamIndex) : undefined;
+      // A header can include preroll or an edit list outside the decoded frame span.
+      const measured = span && (start === undefined || (Number.isSafeInteger(start) && BigInt(start) === span.first))
+        ? span : undefined;
+      // The saved probe uses JSON numbers. Publish only ticks that survived parsing exactly.
+      return {
+        streamUid, kind, codec, timeBase, averageRate, width, height, sampleRate,
+        startPts: Number.isSafeInteger(start) ? String(start) : measured?.first.toString(),
+        durationTicks: duration !== undefined && duration >= 0 && Number.isSafeInteger(duration)
+          ? String(duration) : measured && (measured.end - measured.first).toString(),
+      };
     });
+    const inputStartTime = probeStartTime(probe.format?.start_time);
+    const durationSeconds = playbackDurationSeconds(probe.format?.duration, inputStartTime, streams);
+    return { asset, frameCount, durationSeconds, inputStartTime, streams };
+  }
+
+  async plannerAssetMetadata(projectId: string, assetId: string, contentHash: string, principal: EditorPrincipal) {
+    const { frameCount, durationSeconds, inputStartTime, streams } =
+      await this.readAssetMetadata(projectId, assetId, principal, contentHash);
+    return PlannerAssetMetadataSchema.parse({ assetId, contentHash, frameCount, durationSeconds, inputStartTime, streams });
   }
 
   recordConstantRateStream(indexSha: string, streamUid: string): void {
