@@ -4,6 +4,7 @@ import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it, vi } from "vitest";
+import { EventsResultSchema } from "#video-editor/contracts/v1";
 import { EditorService } from "../service.js";
 
 interface ProviderRequest {
@@ -151,7 +152,7 @@ it("passes project context to the configured provider and persists a strict tool
     );
     vi.stubEnv("VIDEO_EDITOR_PLANNER_MODEL", "fixture/fixture");
     vi.stubEnv("VIDEO_EDITOR_PLANNER_MODELS", modelsPath);
-    const { runId } = await editor.agents.startRun(
+    const { runId, sessionId } = await editor.agents.startRun(
       { projectId, requestId: "plan", prompt: draft.intent },
       principal,
     );
@@ -190,6 +191,17 @@ it("passes project context to the configured provider and persists a strict tool
       { subjectId: result.plans[0].planId, status: "pending" },
     ]);
     expect(result.jobs).toEqual([]);
+    const replay = async (afterSeq: string) => EventsResultSchema.parse(await editor.rpc.invoke(
+      "video.v1.get_events", { projectId, afterSeq },
+      { principalId: principal.principalId, editorPrincipal: principal, permissions: [] },
+    )).events;
+    const toolEvents = (await replay("0")).filter(e => e.runId === runId && e.type === "agent.tool_execution_start");
+    expect(toolEvents.map(e => e.sessionId)).toEqual([sessionId, sessionId]);
+    const submit = toolEvents[1];
+    expect(submit.causationId).toBeTruthy();
+    const resumed = (await replay(submit.seq)).filter(e => e.runId === runId && e.causationId === submit.causationId);
+    expect(resumed.map(e => e.type)).toEqual(["plan.proposed", "approval.requested"]);
+    expect(resumed[1].payload).toMatchObject({ approvalId: result.approvals[0].approvalId });
     expect(editor.store.runLifecycle(projectId, principal)).toContainEqual({
       runId,
       state: "settled",
