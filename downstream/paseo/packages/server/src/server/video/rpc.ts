@@ -234,7 +234,7 @@ export class EditorRpcService {
     const ref = (() => {
       if (assetId.endsWith(":review-proxy")) return this.editor.store.finalReviewProxy(projectId, assetId, revision, principal).blob;
       if (assetId.endsWith(":candidate")) return this.previewForReview(input, principal);
-      if (assetId.endsWith(":export") || assetId.endsWith(":manifest")) return this.editor.store.artifact(projectId, assetId, revision, principal).blob;
+      if (assetId.endsWith(":export") || assetId.endsWith(":manifest") || assetId.endsWith(":qa")) return this.editor.store.artifact(projectId, assetId, revision, principal).blob;
       return this.editor.store.asset(projectId, assetId, revision, principal).proxy;
     })();
     if (!ref) editorFailure("ASSET_NOT_FOUND", "No preview proxy is available");

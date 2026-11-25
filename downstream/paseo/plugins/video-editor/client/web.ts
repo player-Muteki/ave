@@ -47,10 +47,10 @@ export function mountReviewVideo(parent: unknown, bytes: ArrayBuffer, label: str
   };
 }
 
-export function mountDeliveryLink(parent: unknown, bytes: ArrayBuffer, purpose: "export" | "manifest", sha256: string) {
+export function mountDeliveryLink(parent: unknown, bytes: ArrayBuffer, purpose: "export" | "manifest" | "qa", sha256: string) {
   if (Platform.OS !== "web" || !(parent instanceof HTMLElement) || !/^[a-f0-9]{64}$/.test(sha256))
     throw new Error("当前工作台无法保存交付文件。");
-  const manifest = purpose === "manifest";
+  const manifest = purpose === "manifest" || purpose === "qa";
   const link = document.createElement("a");
   const url = URL.createObjectURL(new Blob([bytes], { type: manifest ? "application/json" : "video/mp4" }));
   link.href = url;

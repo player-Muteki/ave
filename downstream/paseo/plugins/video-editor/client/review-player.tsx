@@ -12,7 +12,7 @@ interface ReviewProps {
   blob: BlobRef;
   label: string;
   theme: PluginSurfaceProps["theme"];
-  purpose?: "play" | "export" | "manifest";
+  purpose?: "play" | "export" | "manifest" | "qa";
 }
 
 export function ReviewPlayer({projectId, assetId, revision, blob, label, theme, purpose = "play"}: ReviewProps) {

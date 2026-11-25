@@ -203,7 +203,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
     await runJob({ projectId: approval.projectId, approvalId, grantId: grant.grantId, expectedRevision, requestId: `${purpose}-${approvalId}` });
     show(await read({ projectId: approval.projectId }));
   }
-  function mediaControl(label: string, assetId: string, revision: string, blob?: BlobRef, purpose: "play" | "export" | "manifest" = "play") {
+  function mediaControl(label: string, assetId: string, revision: string, blob?: BlobRef, purpose: "play" | "export" | "manifest" | "qa" = "play") {
     if (layout.platform !== "web" || !project || !blob) return null;
     const key = `${project.projectId}:${assetId}:${revision}:${blob.sha256}:${purpose}`;
     const opened = openMedia === key;
@@ -576,6 +576,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   : null,
               )}
               {preview && mediaControl("观看预览候选", preview.artifactId, preview.revision, preview.blob)}
+              {job.artifacts
+                .filter((a) => a.kind === "qa")
+                .map((a) => mediaControl("查看 QA 报告", a.artifactId, a.revision, a.blob, "qa"))}
               {proxy && delivery && layout.platform === "web" && <View>
                 <Text style={heading}>成品交付审批</Text>
                 <Text selectable style={muted}>成品版本 {delivery.subjectRevision} · SHA-256 {delivery.subjectHash}</Text>
