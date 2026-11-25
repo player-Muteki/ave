@@ -1259,9 +1259,10 @@ export class EditorStore {
     const project = this.project(projectId, principal);
     const asset = project.assets.find((a) => a.assetId === assetId);
     if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
-    const latest = project.jobs
+    const jobs = project.jobs
       .filter((j) => j.analysisAssetId === assetId)
-      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1));
+    const latest = jobs.find((j) => j.artifacts.some((a) => a.kind === "scenecuts")) ?? jobs[0];
     if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
     const artifact = latest.artifacts.find((a) => a.kind === "scenecuts");
     if (!artifact) editorFailure("ASSET_NOT_FOUND", "The analysis job has no scene-cut artifact yet");
@@ -1306,9 +1307,10 @@ export class EditorStore {
     const project = this.project(projectId, principal);
     const asset = project.assets.find((a) => a.assetId === assetId);
     if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
-    const latest = project.jobs
+    const jobs = project.jobs
       .filter((j) => j.analysisAssetId === assetId)
-      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1));
+    const latest = jobs.find((j) => j.artifacts.some((a) => a.kind === "waveform")) ?? jobs[0];
     if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
     const artifact = latest.artifacts.find((a) => a.kind === "waveform");
     if (!artifact) editorFailure("ASSET_NOT_FOUND", "The analysis job has no waveform artifact yet");
@@ -1354,9 +1356,10 @@ export class EditorStore {
     const asset = project.assets.find((a) => a.assetId === assetId);
     if (!asset || (expectedHash !== undefined && asset.original.sha256 !== expectedHash))
       editorFailure("ASSET_NOT_FOUND", "Asset identity is not in the bound project");
-    const latest = project.jobs
+    const jobs = project.jobs
       .filter((j) => j.analysisAssetId === assetId)
-      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1));
+    const latest = jobs.find((j) => j.state === "completed" && j.artifacts.length > 0) ?? jobs[0];
     if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
     return {
       projectId,
