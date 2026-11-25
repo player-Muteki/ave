@@ -17,7 +17,10 @@ def run(*args):
 
 
 def check(root):
-    assert run("git", "--no-lazy-fetch", "-C", REFERENCE, "rev-parse", "HEAD").decode().strip() == PIN
+    # `--no-lazy-fetch` needs git >= 2.36; on older git the flag is a usage error.
+    # The pinned HEAD commit is present in the checkout, so `rev-parse HEAD` reads
+    # it without any blob fetch; the clean-tree assertion below still guards drift.
+    assert run("git", "-C", REFERENCE, "rev-parse", "HEAD").decode().strip() == PIN
     assert not run("git", "-C", REFERENCE, "status", "--porcelain")
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(REFERENCE))
