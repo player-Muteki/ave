@@ -45,6 +45,16 @@ import { describeEditorError, EditorError, editorFailure } from "./errors.js";
 /** Server-side cap for a single chunked upload (clients cap at 64 MiB). */
 const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
+/** Clamp the optional analysis sampling rate to a sane fps range. */
+function clampAnalysisRate(rate?: string): string {
+  if (!rate) return "25/1";
+  const [num, den] = rate.split("/");
+  const value = Number(num) / Number(den);
+  if (!Number.isFinite(value) || value <= 0) editorFailure("INVALID_ARGUMENT", "Analysis rate must be a positive rational");
+  const clamped = Math.min(1000, Math.max(1, Math.round(value)));
+  return `${clamped}/1`;
+}
+
 interface ProjectRow {
   project_id: string;
   title: string;
@@ -1332,7 +1342,7 @@ export class EditorStore {
         });
         const asset = project.assets.find((a) => a.assetId === input.assetId);
         if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
-        const rate = input.rate ?? "25/1";
+        const rate = clampAnalysisRate(input.rate);
         const track = input.tracking;
         const planHash = track ? sha256Json(["track", track.anchorApprovalId, track.anchorHash, track.expectedRevision, track.firstFrame, track.frameCount])
           : sha256Json(["analysis", input.assetId, asset.original.sha256, rate]);
