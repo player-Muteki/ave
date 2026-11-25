@@ -89,6 +89,7 @@
 - 已实现待验收（2026-11-25）：export manifest 片段/音频记录补充 fadeIn/fadeOut/overlayX/overlayY 字段。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：客户端 job 列表可查看/下载 QA 报告（:qa artifact，rpc readAssetChunk 放行，viewer 可读）。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：客户端生成后可在页内直接查看联系表图（contact:<sha256> 经rpc CAS 直读，cas.sizeOf，viewer 可读）。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：字幕 cue clipId 必须对应 trim clip（修复 TDZ），profile 实测 18 项全 PASS；客户端 拼接/画中画 可选“主素材”。未跑真模型/e2e。
 
 ## 环境与错误
 

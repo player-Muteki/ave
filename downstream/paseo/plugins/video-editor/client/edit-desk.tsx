@@ -79,6 +79,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [sheetBlob, setSheetBlob] = useState<BlobRef | null>(null);
+  const [mainAsset, setMainAsset] = useState("");
   const [planPrompt, setPlanPrompt] = useState("");
   const [run, setRun] = useState<PlanningRunStatus | null>(null);
   const [runEvents, setRunEvents] = useState<EditorEvent[]>([]);
@@ -416,9 +417,15 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 });
                 show(await read({ projectId: project.projectId }));
               })}
+              {project && project.assets.some((a) => a.streams.some((s) => s.kind === "video")) &&
+                button(mainAsset && project.assets.some((a) => a.assetId === mainAsset) ? `主素材：${mainAsset}` : "主素材：首个视频素材", () => {
+                  const vids = project.assets.filter((a) => a.streams.some((s) => s.kind === "video")).map((a) => a.assetId);
+                  const cur = vids.includes(mainAsset) ? mainAsset : vids[0]!;
+                  setMainAsset(vids[(vids.indexOf(cur) + 1) % vids.length]!);
+                })}
               {project.assets.filter((a) => a.streams.some((s) => s.kind === "video")).length > 1 &&
                 button("拼接：选中片段 + 首个素材全程", async () => {
-                  const first = project.assets.find((a) => a.streams.some((s) => s.kind === "video"))!;
+                  const first = project.assets.find((a) => a.assetId === mainAsset) ?? project.assets.find((a) => a.streams.some((s) => s.kind === "video"))!;
                   const draft = proposeConcat(
                     project,
                     [
@@ -439,7 +446,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 })}
               {project.assets.filter((a) => a.streams.some((s) => s.kind === "video")).length > 1 &&
                 button("画中画：选中片段叠加到首素材全程", async () => {
-                  const first = project.assets.find((a) => a.streams.some((s) => s.kind === "video"))!;
+                  const first = project.assets.find((a) => a.assetId === mainAsset) ?? project.assets.find((a) => a.streams.some((s) => s.kind === "video"))!;
                   const draft = proposeOverlay(project, first.assetId, "0", totalSec, selected, start, end, ovX.trim() || "0", ovY.trim() || "0");
                   const token = requestId(JSON.stringify(draft));
                   await submit({

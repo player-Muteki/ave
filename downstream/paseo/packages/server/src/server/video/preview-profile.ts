@@ -108,6 +108,8 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
   }
   // Subtitle cues are expressed in output time and must fit the main track.
   for (const cue of draft.subtitleOperations) {
+    if (!ops.some((op) => op.clipId === cue.clipId))
+      editorFailure("CAPABILITY_UNAVAILABLE", "Subtitle cues must target trim clips");
     if (cue.range.start.num.startsWith("-") || cue.range.duration.num.startsWith("-"))
       editorFailure("CAPABILITY_UNAVAILABLE", "Subtitle ranges must be non-negative");
     const end = rationalAdd(cue.range.start, cue.range.duration);
