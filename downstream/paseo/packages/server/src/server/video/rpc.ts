@@ -57,7 +57,7 @@ export class EditorRpcService {
             "timeline-estimate",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
-          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline"],
+          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "upload", "cancel-upload"],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
             {
