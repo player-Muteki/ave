@@ -32,6 +32,7 @@ export class EditorService {
     const root = path.join(options.paseoHome, "video-editor");
     this.store = options.store;
     this.cas = new ContentAddressedStore(path.join(root, "cas"));
+    this.store.bindCas(this.cas);
     this.access = new EditorAccessStore(root);
     this.media = new MediaService(this.store, this.cas, {
       ffmpeg: options.ffmpeg ?? "ffmpeg",

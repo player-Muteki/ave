@@ -288,7 +288,7 @@ export const ArtifactRefSchema = z
     projectId: id,
     jobId: id,
     revision: uint,
-    kind: z.enum(["probe", "proxy", "mask", "candidate", "export", "qa", "manifest", "contact"]),
+    kind: z.enum(["probe", "proxy", "mask", "candidate", "export", "qa", "manifest", "contact", "scenecuts"]),
     blob: BlobRefSchema,
   })
   .strict();
@@ -412,6 +412,10 @@ export const VideoToolCallSchema = z.discriminatedUnion("tool", [
     args: z.object({ assetId: id, contentHash: sha256 }).strict(),
   }),
   toolEnvelope.extend({ tool: z.literal("get_plan"), args: z.object({ planId: id }).strict() }),
+  toolEnvelope.extend({
+    tool: z.literal("get_scene_cuts"),
+    args: z.object({ assetId: id, contentHash: sha256 }).strict(),
+  }),
 ]);
 export const PlanReviewRequestSchema = z
   .object({

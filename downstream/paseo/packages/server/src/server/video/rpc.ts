@@ -241,7 +241,7 @@ export class EditorRpcService {
         this.editor.store.authorizeProject(projectId, principal, "viewer");
         return { sha256: sha, bytes: await this.editor.cas.sizeOf(sha), mediaType: "image/jpeg" };
       }
-      if (assetId.endsWith(":export") || assetId.endsWith(":manifest") || assetId.endsWith(":qa")) return this.editor.store.artifact(projectId, assetId, revision, principal).blob;
+      if (assetId.endsWith(":export") || assetId.endsWith(":manifest") || assetId.endsWith(":qa") || assetId.endsWith(":scenecuts")) return this.editor.store.artifact(projectId, assetId, revision, principal).blob;
       return this.editor.store.asset(projectId, assetId, revision, principal).proxy;
     })();
     if (!ref) editorFailure("ASSET_NOT_FOUND", "No preview proxy is available");

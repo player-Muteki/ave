@@ -14,12 +14,12 @@ export async function readReviewBytes(
   read: (input: ReadAssetChunkRequest) => Promise<Uint8Array>,
   hash: (input: ArrayBuffer) => Promise<string>,
   signal: AbortSignal,
-  purpose: "play" | "export" | "manifest" | "qa" | "contact" = "play",
+  purpose: "play" | "export" | "manifest" | "qa" | "contact" | "scenecuts" = "play",
 ): Promise<ArrayBuffer> {
   const { blob, projectId, assetId, revision } = selected;
   const size = BigInt(blob.bytes);
   const expectedType =
-    purpose === "manifest" || purpose === "qa"
+    purpose === "manifest" || purpose === "qa" || purpose === "scenecuts"
       ? "application/json"
       : purpose === "contact"
         ? "image/jpeg"

@@ -9,10 +9,11 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, steerPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, contactSheetRpc,
+  analyzeAssetRpc, contactSheetRpc, readAssetChunkRpc,
   type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { ReviewPlayer } from "./review-player.js";
+import { readReviewBytes } from "./review-bytes.js";
 import { proposeCut, proposeCutOut, proposeConcat, proposeOverlay } from "./cut.js";
 import { SourceImport } from "./import-source.js";
 import { mountSourcePicker, digestSource } from "./web.js";
@@ -28,6 +29,12 @@ function DeskControl<T>({
 
 const SELECTED = { selected: true };
 const NOT_SELECTED = { selected: false };
+
+interface SceneCutDoc {
+  threshold?: string;
+  truncated?: boolean;
+  cuts: Array<{ frameIndex: number; ptsTime: string; score: string; aligned: { num: string; den: string } }>;
+}
 
 export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const create = useRpc(createProjectRpc);
@@ -46,6 +53,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readEvents = useRpc(getEventsRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const sheet = useRpc(contactSheetRpc);
+  const readChunk = useRpc(readAssetChunkRpc);
   const [sourceImport, setSourceImport] = useState<SourceImport | null>(null);
   const [confirmed, setConfirmed] = useState(0);
   const [project, setProject] = useState<ProjectSnapshot | null>(null);
@@ -79,6 +87,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [sheetBlob, setSheetBlob] = useState<BlobRef | null>(null);
+  const [sceneCuts, setSceneCuts] = useState<{ assetId: string; doc: SceneCutDoc } | null>(null);
   const [mainAsset, setMainAsset] = useState("");
   const [planPrompt, setPlanPrompt] = useState("");
   const [run, setRun] = useState<PlanningRunStatus | null>(null);
@@ -326,6 +335,57 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   setSheetBlob(result.blob);
                 })}
               {sheetBlob && project && mediaControl("查看联系表", `contact:${sheetBlob.sha256}`, project.revision, sheetBlob, "contact")}
+              {asset.streams.some((s) => s.kind === "video") &&
+                button("场景切点", async () => {
+                  await analyze({
+                    requestId: requestId(`analyze:${asset.assetId}`),
+                    projectId: project.projectId,
+                    assetId: asset.assetId,
+                  });
+                  let doc: SceneCutDoc | null = null;
+                  for (let attempt = 0; attempt < 20 && !doc; attempt++) {
+                    const snap = await read({ projectId: project.projectId });
+                    show(snap);
+                    const job = snap.jobs
+                      .filter((j) => j.analysisAssetId === asset.assetId)
+                      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+                    const artifact = job?.artifacts.find((a) => a.kind === "scenecuts");
+                    if (job && artifact && job.state === "completed") {
+                      const data = await readReviewBytes(
+                        { projectId: snap.projectId, assetId: artifact.artifactId, revision: artifact.revision, blob: artifact.blob },
+                        readChunk,
+                        digestSource,
+                        new AbortController().signal,
+                        "scenecuts",
+                      );
+                      doc = JSON.parse(new TextDecoder().decode(data)) as SceneCutDoc;
+                    } else if (job && (job.state === "failed" || job.state === "cancelled")) {
+                      throw new Error(`分析失败：${job.error?.sanitizedDetail ?? job.state}`);
+                    } else if (attempt < 19) {
+                      await new Promise((resolve) => setTimeout(resolve, 500));
+                    }
+                  }
+                  if (!doc) throw new Error("分析尚未生成切点报告，请稍后再试。");
+                  setSceneCuts({ assetId: asset.assetId, doc });
+                  setNotice(`场景切点 ${doc.cuts.length} 个${doc.truncated ? "（已截断）" : ""} · 阈值 ${doc.threshold ?? "0.3"}`);
+                })}
+              {sceneCuts && sceneCuts.assetId === asset.assetId && (
+                <View style={row}>
+                  <Text style={muted}>切点（点击设为入点）:</Text>
+                  {sceneCuts.doc.cuts.map((c, i) => (
+                    <DeskControl
+                      key={`${c.frameIndex}-${i}`}
+                      accessibilityRole="button"
+                      disabled={busy}
+                      action={(v: string) => setStart(v)}
+                      value={String(Number(c.aligned.num) / Number(c.aligned.den) / 1000)}
+                      style={styles.button}
+                    >
+                      <Text style={styles.actionText}>{`${c.ptsTime}s · ${c.score}`}</Text>
+                    </DeskControl>
+                  ))}
+                </View>
+              )}
             </DeskControl>
           ))}
           {selected !== "" && (

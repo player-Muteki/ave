@@ -43,6 +43,8 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
     "Latest analysis job metadata for one asset: state, sampling rate and QA artifact reference. Never returns pixels.",
   get_plan:
     "Read a previously accepted edit plan by planId (full operation list) to build on it. Read-only.",
+  get_scene_cuts:
+    "Frame-aligned scene-cut suggestions for one asset from the deterministic FFmpeg scene-score pass (bounded list, no pixels).",
 };
 
 /**

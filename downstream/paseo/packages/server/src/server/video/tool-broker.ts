@@ -133,6 +133,7 @@ export class VideoToolBroker {
           .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
         if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
         const qa = latest.artifacts.find((a) => a.kind === "qa");
+        const scene = latest.artifacts.find((a) => a.kind === "scenecuts");
         return {
           assetId: asset.assetId,
           contentHash: asset.original.sha256,
@@ -142,9 +143,13 @@ export class VideoToolBroker {
           analysisRate: latest.analysisRate ?? null,
           qaArtifactId: qa?.artifactId ?? null,
           qaSha256: qa?.blob.sha256 ?? null,
-          note: "Metadata only; the sampling map stays in CAS and is never sent to the model.",
+          scenecutsArtifactId: scene?.artifactId ?? null,
+          scenecutsSha256: scene?.blob.sha256 ?? null,
+          note: "Metadata only; the sampling map stays in CAS and is never sent to the model. Use get_scene_cuts for the cut list.",
         };
       }
+      case "get_scene_cuts":
+        return this.store.sceneCuts(projectId, call.args.assetId, principal);
       case "get_plan": {
         const plan = this.store
           .project(projectId, principal)

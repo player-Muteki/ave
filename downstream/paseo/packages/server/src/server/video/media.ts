@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -57,6 +57,33 @@ interface ProcessResult {
   stderr: string;
 }
 
+interface SceneCutDocument {
+  schemaVersion: "video.scene-cuts/v1";
+  reportId: string;
+  assetId: string;
+  sourceSha256: string;
+  indexSha256: string;
+  ffmpegBuildHash: string;
+  streamUid: string;
+  rate: Rational | null;
+  threshold: string;
+  minGapSeconds: string;
+  frameCount: number;
+  truncated: boolean;
+  cuts: Array<{ frameIndex: number; ptsTime: string; score: string; aligned: Rational }>;
+  stats: { maxScore: string; meanScore: string };
+}
+
+/** Snap a detected cut to the whole-frame grid of the source average rate (milliseconds). */
+function alignToFrameMs(stream: StreamDescriptor, frameIndex: number, ptsTime: string): Rational {
+  const rate = stream.averageRate;
+  if (!rate) return { num: String(Math.round(Number(ptsTime) * 1000)), den: "1" };
+  const frameMs = (Number(rate.den) * 1000) / Number(rate.num);
+  if (frameIndex >= 0 && Number.isFinite(frameMs) && frameMs > 0)
+    return { num: String(Math.round(frameIndex * frameMs)), den: "1" };
+  return { num: String(Math.round(Number(ptsTime) * 1000)), den: "1" };
+}
+
 export interface MediaTools {
   ffmpeg: string;
   ffprobe: string;
@@ -68,6 +95,11 @@ export class MediaService {
 
   /** Working sample rate for analysis jobs (CFR grid); VFR sources keep their index ticks. */
   private static readonly ANALYSIS_RATE = "25/1";
+
+  /** Deterministic FFmpeg scene-cut detection (select/metadata=print, no model). */
+  private static readonly SCENE_CUT_THRESHOLD = 0.3;
+  private static readonly SCENE_CUT_MIN_GAP_SECONDS = 0.5;
+  private static readonly SCENE_CUT_MAX_CUTS = 64;
 
   private async withUpload<T>(id: string, task: () => Promise<T>): Promise<T> {
     const previous = this.uploadsInFlight.get(id) ?? Promise.resolve();
@@ -539,6 +571,13 @@ export class MediaService {
       streams: Array<{ streamIndex: number; streamUid: string; timeBase: { num: string; den: string } }>;
       frames: Array<{ stream_index: number; media_type: string; pts?: string; duration?: string }>;
     };
+    this.store.updateJob(projectId, jobId, (current) => ({
+      ...current,
+      phaseDetail: "running deterministic scene-cut pass",
+    }));
+    const scene = await this.sceneCutReport(asset, jobId, signal);
+    this.throwIfCancelled(signal);
+
     const support = await this.py
       .support(signal)
       .then((s) => s)
@@ -549,27 +588,34 @@ export class MediaService {
       phaseDetail: "running sampling kernel",
     }));
     const streams: unknown[] = [];
+    let samplingError: string | undefined;
     for (const stream of indexDoc.streams) {
       const frames = indexDoc.frames.filter(
         (f) => f.stream_index === stream.streamIndex && f.media_type === "video",
       );
       if (!frames.length) continue;
       this.throwIfCancelled(signal);
-      const map = await this.py.samplingMap(
-        {
-          indexPath: this.cas.pathFor(indexRef),
-          indexSha256: indexRef.sha256,
-          sourceSha256: asset.original.sha256,
-          streamUid: stream.streamUid,
-          first: 0,
-          stop: frames.length,
-          rate,
-        },
-        signal,
-      );
-      streams.push({ streamUid: stream.streamUid, timeBase: stream.timeBase, frames: frames.length, map });
+      try {
+        const map = await this.py.samplingMap(
+          {
+            indexPath: this.cas.pathFor(indexRef),
+            indexSha256: indexRef.sha256,
+            sourceSha256: asset.original.sha256,
+            streamUid: stream.streamUid,
+            first: 0,
+            stop: frames.length,
+            rate,
+          },
+          signal,
+        );
+        streams.push({ streamUid: stream.streamUid, timeBase: stream.timeBase, frames: frames.length, map });
+      } catch (error) {
+        samplingError = String(error);
+        break;
+      }
     }
-    if (!streams.length) editorFailure("CAPABILITY_UNAVAILABLE", "The asset has no video stream");
+    if (!streams.length && !scene.doc.cuts.length && samplingError === undefined)
+      editorFailure("CAPABILITY_UNAVAILABLE", "The asset has no video stream");
 
     const report = await this.cas.writeJson({
       schemaVersion: "video.analysis/v1",
@@ -579,7 +625,15 @@ export class MediaService {
       indexSha256: indexRef.sha256,
       rate,
       workerSupport: support,
+      samplingError,
       streams,
+      sceneCuts: {
+        artifactId: `${jobId}:scenecuts`,
+        sha256: scene.blob.sha256,
+        threshold: scene.doc.threshold,
+        cutCount: scene.doc.cuts.length,
+        truncated: scene.doc.truncated,
+      },
     });
     this.throwIfCancelled(signal);
     const artifact = {
@@ -590,15 +644,107 @@ export class MediaService {
       kind: "qa" as const,
       blob: report,
     };
+    const sceneArtifact = {
+      artifactId: `${jobId}:scenecuts`,
+      projectId,
+      jobId,
+      revision: job.revision,
+      kind: "scenecuts" as const,
+      blob: scene.blob,
+    };
+    const units = streams.length + 1;
     this.store.updateJob(projectId, jobId, (current) => ({
       ...current,
       state: "completed",
       phaseDetail: "analysis complete",
-      progress: { completedUnits: String(streams.length), totalUnits: String(streams.length) },
-      artifacts: [...current.artifacts, artifact],
+      progress: { completedUnits: String(units), totalUnits: String(units) },
+      artifacts: [...current.artifacts, artifact, sceneArtifact],
       error: undefined,
     }));
     return this.store.job(projectId, jobId, worker);
+  }
+
+  /**
+   * Deterministic scene-cut detection: one FFmpeg pass computing lavfi.scene_score
+   * for every frame (select passes all frames, metadata=print dumps pts+score).
+   * Cuts are snapped to whole frames of the source average rate, so they can be
+   * used directly as frame-aligned trim boundaries.
+   */
+  private async sceneCutReport(
+    asset: SourceAsset,
+    jobId: string,
+    signal: AbortSignal,
+  ): Promise<{ blob: BlobRef; doc: SceneCutDocument }> {
+    const video = asset.streams.find((s) => s.kind === "video");
+    if (!video) editorFailure("CAPABILITY_UNAVAILABLE", "The asset has no video stream");
+    const threshold = MediaService.SCENE_CUT_THRESHOLD;
+    const minGap = MediaService.SCENE_CUT_MIN_GAP_SECONDS;
+    const directory = await mkdtemp(path.join(tmpdir(), "video-scene-"));
+    try {
+      const metadataPath = path.join(directory, "scene.txt");
+      await this.spawnChecked(
+        this.tools.ffmpeg,
+        [
+          "-nostdin", "-v", "error", "-xerror",
+          "-i", this.cas.pathFor(asset.original),
+          "-map", "0:v:0",
+          "-vf", `select='gte(scene,0)',metadata=print:file=${metadataPath}`,
+          "-f", "null", "-",
+        ],
+        signal,
+      );
+      const text = await readFile(metadataPath, "utf8");
+      this.throwIfCancelled(signal);
+      const cuts: SceneCutDocument["cuts"] = [];
+      let candidateCount = 0;
+      let frameIndex = -1;
+      let ptsTime = "0";
+      let lastCut = -Infinity;
+      let count = 0;
+      let sum = 0;
+      let max = 0;
+      for (const line of text.split("\n")) {
+        if (line.startsWith("frame:")) {
+          frameIndex = Number(/frame:(\d+)/.exec(line)?.[1] ?? "-1");
+          ptsTime = /pts_time:([0-9.]+)/.exec(line)?.[1] ?? "0";
+          continue;
+        }
+        if (!line.startsWith("lavfi.scene_score=")) continue;
+        const scoreText = line.slice("lavfi.scene_score=".length).trim();
+        const score = Number(scoreText);
+        if (!Number.isFinite(score)) continue;
+        count += 1;
+        sum += score;
+        if (score > max) max = score;
+        if (score >= threshold && Number(ptsTime) - lastCut >= minGap) {
+          candidateCount += 1;
+          if (cuts.length < MediaService.SCENE_CUT_MAX_CUTS) {
+            cuts.push({ frameIndex, ptsTime, score: scoreText, aligned: alignToFrameMs(video, frameIndex, ptsTime) });
+            lastCut = Number(ptsTime);
+          }
+        }
+      }
+      const build = await this.run(this.tools.ffmpeg, ["-version"]);
+      const doc: SceneCutDocument = {
+        schemaVersion: "video.scene-cuts/v1",
+        reportId: jobId,
+        assetId: asset.assetId,
+        sourceSha256: asset.original.sha256,
+        indexSha256: asset.presentationIndex.sha256,
+        ffmpegBuildHash: createHash("sha256").update(build.stdout).digest("hex"),
+        streamUid: video.streamUid,
+        rate: video.averageRate ?? null,
+        threshold: String(threshold),
+        minGapSeconds: String(minGap),
+        frameCount: count,
+        truncated: candidateCount > cuts.length,
+        cuts,
+        stats: { maxScore: max.toFixed(6), meanScore: count ? (sum / count).toFixed(6) : "0.000000" },
+      };
+      return { blob: await this.cas.writeJson(doc), doc };
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 
   private async presentationIndex(

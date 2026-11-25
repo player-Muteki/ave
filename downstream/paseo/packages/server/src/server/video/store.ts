@@ -4,7 +4,7 @@ import path from "node:path";
 import type { SqliteDatabase } from "./sqlite-types.js";
 import { DatabaseSync } from "./sqlite.js";
 import { assertRenderablePreview } from "./preview-profile.js";
-import { sha256Json } from "./cas.js";
+import { sha256Json, type ContentAddressedStore } from "./cas.js";
 import {
   AcceptedEditPlanSchema,
   ApprovalGrantSchema,
@@ -137,6 +137,13 @@ export class EditorStore {
   static async create(root: string): Promise<EditorStore> {
     await mkdir(root, { recursive: true, mode: 0o700 });
     return new EditorStore(root);
+  }
+
+  private cas?: ContentAddressedStore;
+
+  /** Bind the daemon-owned CAS so read-only artifact readers (e.g. the planner broker) can parse blobs. */
+  bindCas(cas: ContentAddressedStore): void {
+    this.cas = cas;
   }
 
   private constructor(root: string) {
@@ -725,6 +732,52 @@ export class EditorStore {
         return { job, deduplicated: false };
       },
     });
+  }
+
+  /**
+   * Read the deterministic scene-cut artifact of the latest analysis job for an
+   * asset. Bounded: at most 64 cuts, frame-aligned, hashes included. Viewer-level.
+   */
+  async sceneCuts(projectId: string, assetId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
+    const project = this.project(projectId, principal);
+    const asset = project.assets.find((a) => a.assetId === assetId);
+    if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset is not in this project");
+    const latest = project.jobs
+      .filter((j) => j.analysisAssetId === assetId)
+      .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+    if (!latest) editorFailure("ASSET_NOT_FOUND", "No analysis job exists for this asset");
+    const artifact = latest.artifacts.find((a) => a.kind === "scenecuts");
+    if (!artifact) editorFailure("ASSET_NOT_FOUND", "The analysis job has no scene-cut artifact yet");
+    const doc = JSON.parse((await this.cas.readBytes(artifact.blob)).toString("utf8")) as {
+      schemaVersion?: string;
+      threshold?: string;
+      minGapSeconds?: string;
+      rate?: { num: string; den: string } | null;
+      frameCount?: number;
+      truncated?: boolean;
+      cuts?: Array<{ frameIndex: number; ptsTime: string; score: string; aligned: { num: string; den: string } }>;
+    };
+    if (doc.schemaVersion !== "video.scene-cuts/v1")
+      editorFailure("ARTIFACT_HASH_MISMATCH", "Unexpected scene-cut schema version");
+    return {
+      assetId,
+      contentHash: asset.original.sha256,
+      jobId: latest.jobId,
+      state: latest.state,
+      revision: latest.revision,
+      scenecutsArtifactId: artifact.artifactId,
+      scenecutsSha256: artifact.blob.sha256,
+      threshold: doc.threshold ?? null,
+      minGapSeconds: doc.minGapSeconds ?? null,
+      rate: doc.rate ?? null,
+      frameCount: doc.frameCount ?? null,
+      truncated: doc.truncated ?? false,
+      cutCount: doc.cuts?.length ?? 0,
+      cuts: (doc.cuts ?? []).slice(0, 64),
+      note: "Frame-aligned cut suggestions from the deterministic FFmpeg scene-score pass; never pixels.",
+    };
   }
 
   job(projectId: string, jobId: string, principal: EditorPrincipal): JobSnapshot {
