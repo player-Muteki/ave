@@ -486,6 +486,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   ? mediaControl(a.kind === "export" ? "准备下载成品视频" : "准备下载导出清单", a.artifactId, a.revision, a.blob, a.kind)
                   : null,
               )}
+              {job.kind === "analysis" && job.state === "completed" && job.artifacts.map(a =>
+                a.kind === "proxy" && a.jobId === job.jobId && a.artifactId === job.jobId + ":tracking-preview"
+                  ? mediaControl("播放掩码传播审片（9 帧/秒）", a.artifactId, a.revision, a.blob) : null)}
               {preview && mediaControl("观看预览候选", preview.artifactId, preview.revision, preview.blob)}
               {proxy && delivery && layout.platform === "web" && <View>
                 <Text style={heading}>成品交付审批</Text>

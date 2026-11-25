@@ -9,6 +9,7 @@ import { ContentAddressedStore, sha256File } from "./cas.js";
 import { EditorError, editorFailure } from "./errors.js";
 import { assertRenderablePreview } from "./preview-profile.js";
 import { encodeFramedChunk } from "#video-editor/bytes";
+import { trackMaskJob } from "./mask-tracking.js";
 import { FrameInspector } from "./frame-inspector.js";
 import { PyWorker } from "./py-worker.js";
 import { EditorStore } from "./store.js";
@@ -160,7 +161,11 @@ export class MediaService {
       role: "owner",
       projectIds: null,
     });
-    if (job.kind === "analysis") return this.executeAnalysisJob(projectId, jobId, signal);
+    if (job.kind === "analysis") {
+      const tracking = this.store.trackingRequest(projectId, jobId);
+      if (tracking) return trackMaskJob(this.store, this.cas, this.tools, job, tracking, signal);
+      return this.executeAnalysisJob(projectId, jobId, signal);
+    }
     this.store.updateJob(projectId, jobId, (current) => ({
       ...current,
       phaseDetail: "reading approved plan",

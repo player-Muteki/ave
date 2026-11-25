@@ -17,6 +17,7 @@ import {
   InspectFrameRequestSchema,
   CreateMaskRevisionRequestSchema,
   MaskRevisionReviewRequestSchema,
+  TrackMaskRequestSchema,
   type EditorPrincipal,
 } from "#video-editor/contracts/v1";
 import { decodeFramedChunk } from "#video-editor/bytes";
@@ -119,6 +120,12 @@ export class EditorRpcService {
       case "video.v1.analyze_asset": {
         const request = AnalyzeAssetInputSchema.parse(input);
         const result = this.editor.store.createAnalysisJob({ ...request, principal });
+        this.editor.jobs.enqueue(request.projectId, result.job.jobId);
+        return result;
+      }
+      case "video.v1.track_mask": {
+        const request = TrackMaskRequestSchema.parse(input);
+        const result = this.editor.store.createTrackingJob(request, principal);
         this.editor.jobs.enqueue(request.projectId, result.job.jobId);
         return result;
       }
@@ -241,6 +248,7 @@ export class EditorRpcService {
       editorFailure("INVALID_ARGUMENT", "A single media chunk cannot exceed 256 KiB");
     const { projectId, assetId, revision } = input;
     const ref = (() => {
+      if (assetId.endsWith(":tracking-preview")) return this.editor.store.artifact(projectId, assetId, revision, principal).blob;
       if (assetId.endsWith(":review-proxy")) return this.editor.store.finalReviewProxy(projectId, assetId, revision, principal).blob;
       if (assetId.endsWith(":candidate")) return this.previewForReview(input, principal);
       if (assetId.endsWith(":export") || assetId.endsWith(":manifest")) return this.editor.store.artifact(projectId, assetId, revision, principal).blob;
