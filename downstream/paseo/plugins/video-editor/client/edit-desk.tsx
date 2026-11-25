@@ -286,6 +286,17 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               <Text style={muted}>
                 {asset.streams.map((s) => s.codec).join(" / ")} · {asset.original.bytes} 字节
               </Text>
+              {(() => {
+                const job = project.jobs
+                  .filter((j) => j.analysisAssetId === asset.assetId)
+                  .sort((a, b) => (a.jobId < b.jobId ? 1 : -1))[0];
+                return job ? (
+                  <Text style={muted}>
+                    分析 {job.state}
+                    {job.artifacts.some((a) => a.kind === "qa") ? " · qa 已生成" : ""}
+                  </Text>
+                ) : null;
+              })()}
               {asset.streams.some((s) => s.kind === "video") &&
                 button("分析采样", async () => {
                   await analyze({
