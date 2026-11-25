@@ -11,7 +11,7 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, getAnalysisRpc, contactSheetRpc, previewFramesRpc, readAssetChunkRpc, controlJobRpc,
+  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, contactSheetRpc, previewFramesRpc, readAssetChunkRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
@@ -65,6 +65,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readEvents = useRpc(getEventsRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
+  const readQaSummary = useRpc(getQaSummaryRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
   const controlJob = useRpc(controlJobRpc);
@@ -488,18 +489,31 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {sceneCuts && sceneCuts.assetId === asset.assetId && (
                 <View style={row}>
                   <Text style={muted}>切点（点击设为入点）:</Text>
-                  {sceneCuts.doc.cuts.map((c, i) => (
-                    <DeskControl
-                      key={`${c.frameIndex}-${i}`}
-                      accessibilityRole="button"
-                      disabled={busy}
-                      action={(v: string) => setStart(v)}
-                      value={String(Number(c.aligned.num) / Number(c.aligned.den) / 1000)}
-                      style={styles.button}
-                    >
-                      <Text style={styles.actionText}>{`${c.ptsTime}s · ${c.score}`}</Text>
-                    </DeskControl>
-                  ))}
+                  {sceneCuts.doc.cuts.map((c, i) => {
+                    const t = String(Number(c.aligned.num) / Number(c.aligned.den) / 1000);
+                    return (
+                      <View key={`${c.frameIndex}-${i}`} style={row}>
+                        <DeskControl
+                          accessibilityRole="button"
+                          disabled={busy}
+                          action={(v: string) => setStart(v)}
+                          value={t}
+                          style={styles.button}
+                        >
+                          <Text style={styles.actionText}>{`入 ${c.ptsTime}s · ${c.score}`}</Text>
+                        </DeskControl>
+                        <DeskControl
+                          accessibilityRole="button"
+                          disabled={busy}
+                          action={(v: string) => setEnd(v)}
+                          value={t}
+                          style={styles.button}
+                        >
+                          <Text style={styles.actionText}>{`出 ${c.ptsTime}s · ${c.score}`}</Text>
+                        </DeskControl>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
               {waveform && waveform.assetId === asset.assetId && (
@@ -869,6 +883,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {job.artifacts
                 .filter((a) => a.kind === "qa")
                 .map((a) => mediaControl("查看 QA 报告", a.artifactId, a.revision, a.blob, "qa"))}
+              {job.artifacts.some((a) => a.kind === "qa") && button("QA 摘要", async () => {
+                const q = await readQaSummary({
+                  requestId: requestId(`qa:${job.jobId}`),
+                  projectId: project.projectId,
+                  jobId: job.jobId,
+                });
+                const gates = q.gates.map((g) => `${g.gate}=${g.status}`).join(",") || "无门禁";
+                const loud = q.audioLoudness ? ` · 响度 ${q.audioLoudness.meanVolumeDb}/${q.audioLoudness.maxVolumeDb} dB` : "";
+                setNotice(`QA ${q.state} · ${q.durationSeconds ?? "?"}s · ${q.streams.map((st) => st.codecName ?? st.codecType).join("/") || "无流"}${loud} · recipe ${q.renderRecipeHash?.slice(0, 12) ?? "-"} · ${gates}`);
+              })}
               {proxy && delivery && <View>
                 <Text style={heading}>成品交付审批</Text>
                 <Text selectable style={muted}>成品版本 {delivery.subjectRevision} · SHA-256 {delivery.subjectHash}</Text>

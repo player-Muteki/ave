@@ -840,6 +840,58 @@ export const getAnalysisRpc = {
   output: GetAnalysisResultSchema,
 };
 
+export const GetQaSummaryInputSchema = z
+  .object({ requestId, projectId: id, jobId: id })
+  .strict();
+export type GetQaSummaryInput = z.infer<typeof GetQaSummaryInputSchema>;
+export const QaSummarySchema = z
+  .object({
+    jobId: id,
+    kind: z.enum(["analysis", "preview", "final", "export"]),
+    state: JobStateSchema,
+    revision: uint,
+    qaArtifactId: id,
+    qaSha256: sha256,
+    subjectHash: sha256.nullable(),
+    planHash: sha256.nullable(),
+    ffmpegBuildHash: z.string().nullable(),
+    renderRecipeHash: sha256.nullable(),
+    audioLoudness: z
+      .object({ meanVolumeDb: z.string(), maxVolumeDb: z.string() })
+      .strict()
+      .nullable(),
+    durationSeconds: z.string().nullable(),
+    streams: z.array(
+      z
+        .object({
+          codecType: z.string().optional(),
+          codecName: z.string().optional(),
+          width: z.number().optional(),
+          height: z.number().optional(),
+          sampleRate: z.union([z.string(), z.number()]).optional(),
+          channels: z.number().optional(),
+        })
+        .loose(),
+    ),
+    gates: z.array(
+      z
+        .object({
+          gate: z.string(),
+          status: z.string(),
+          checks: z.array(z.object({ name: z.string(), status: z.string() }).strict()),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type QaSummary = z.infer<typeof QaSummarySchema>;
+export const GetQaSummaryResultSchema = QaSummarySchema.extend({ requestId, projectId: id }).strict();
+export const getQaSummaryRpc = {
+  name: "video.v1.get_qa_summary",
+  input: GetQaSummaryInputSchema,
+  output: GetQaSummaryResultSchema,
+};
+
 export const contactSheetRpc = {
   name: "video.v1.contact_sheet",
   input: ContactSheetRequestSchema,
