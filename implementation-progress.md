@@ -63,6 +63,7 @@
 - 已实现待验收（2026-11-25）：客户端 edit-desk 补充计划操作摘要行（片段/转场/变换/音频/字幕计数）与转场类型切换（叠化/黑场，透传 proposeConcat 的 transitionKind）。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：get_project_snapshot 新增 job 摘要（jobId/kind/state/revision/analysisAssetId，限 64 条），planner 可直接 get_job_status/get_analysis 跟踪；prompt 同步说明。未跑真模型/e2e。
 - 已实现待验收（2026-11-25，软字幕 sidecar 已用本机 FFmpeg 实跑验证）：subtitleOperations 支持 mode=metadata（mov_text 软字幕 sidecar 轨），burn-in 仍走录；render 写 SRT 作为额外 -i 映射，checkCandidate 增校 mov_text 流校验（字幕轨自带时钟，不参与时长校验）；prompt 同步。本机实测 2s 视频+aac+mov_text 三轨，软字幕可回转 srt，音视频全解码无错。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：客户端 proposeCut 支持 bgmAssetId（BGM 跘过素材音频，UI 点击循环选择音频素材）。未跑真模型/e2e。
 
 ## 环境与错误
 

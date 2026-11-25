@@ -27,6 +27,7 @@ export function proposeCut(
   caption?: CaptionCue,
   audioGainMilli?: string,
   transform?: TransformSpec,
+  bgmAssetId?: string,
 ): EditPlanDraftV1 {
   const asset = project.assets.find((a) => a.assetId === assetId);
   const stream = asset?.streams.find((s) => s.kind === "video");
@@ -92,8 +93,34 @@ export function proposeCut(
           },
         ]
       : [],
-    audioOperations:
-      audioGainMilli && /^\d{1,6}$/.test(audioGainMilli.trim())
+    audioOperations: bgmAssetId
+      ? (() => {
+          const bgm = project.assets.find((a) => a.assetId === bgmAssetId);
+          const astream = bgm?.streams.find((s) => s.kind === "audio");
+          if (!bgm || !astream) throw new Error("BGM 素材缺少音频流");
+          return [
+            {
+              opId: "audio-1",
+              order: "1",
+              trackId: "a1",
+              clipId: "clip-1",
+              source: {
+                assetId: bgm.assetId,
+                assetContentHash: bgm.original.sha256,
+                streamUid: astream.streamUid,
+                probeRevision: "1",
+              },
+              sourceRange: { start: { num: "0", den: "1" }, duration },
+              recordRange: { start: { num: "0", den: "1" }, duration },
+              gainMilli:
+                audioGainMilli && /^-?\d{1,6}$/.test(audioGainMilli.trim())
+                  ? audioGainMilli.trim()
+                  : "0",
+              mute: false,
+            },
+          ];
+        })()
+      : audioGainMilli && /^\d{1,6}$/.test(audioGainMilli.trim())
         ? [
             {
               opId: "audio-1",

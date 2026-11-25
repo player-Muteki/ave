@@ -67,6 +67,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [scaleW, setScaleW] = useState("");
   const [scaleH, setScaleH] = useState("");
   const [rot, setRot] = useState("0");
+  const [bgm, setBgm] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -321,6 +322,14 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {field("缩放宽（可空）", scaleW, setScaleW)}
                 {field("缩放高（可空）", scaleH, setScaleH)}
                 {field("旋转（0/90/180/270）", rot, setRot)}
+                {button(bgm ? `BGM：${bgm}` : "BGM：无", () => {
+                  const withAudio = project
+                    ? project.assets.filter((a) => a.streams.some((s) => s.kind === "audio")).map((a) => a.assetId)
+                    : [];
+                  const options = ["", ...withAudio];
+                  const next = options[(options.indexOf(bgm) + 1) % options.length]!;
+                  setBgm(next);
+                })}
               </View>
               {button("提交裁剪方案", async () => {
                 const draft = proposeCut(
@@ -341,6 +350,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                           : "0") as "0" | "90" | "180" | "270",
                       }
                     : undefined,
+                  bgm || undefined,
                 );
                 const token = requestId(JSON.stringify(draft));
                 await submit({
