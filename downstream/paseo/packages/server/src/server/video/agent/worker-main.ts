@@ -86,7 +86,7 @@ async function main(): Promise<void> {
       case "prompt":
         if (!session || !init) editorFailure("INVALID_ARGUMENT", "Worker not initialized");
         send({ kind: "run_state", state: "running" });
-        await session.prompt(message.text);
+        await session.prompt(`当前项目 ID（用于 get_project_snapshot）：${init.projectId}\n\n用户的剪辑意图：\n${message.text}`);
         send({ kind: "run_state", state: "settled" });
         break;
       case "steer":
