@@ -15,6 +15,9 @@ import {
   SteerPlanningRunInputSchema,
   AnalyzeAssetInputSchema,
   GetAnalysisInputSchema,
+  GetQaSummaryInputSchema,
+  GetSceneCutsInputSchema,
+  GetWaveformInputSchema,
   ContactSheetRequestSchema,
   InspectFrameRequestSchema,
   PreviewFramesRequestSchema,
@@ -45,6 +48,9 @@ export class EditorRpcService {
             "chunked-media",
             "device-channel",
             "deterministic-analysis",
+            "analysis-summary",
+            "qa-summary",
+            "timeline-estimate",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
           operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline"],
@@ -150,6 +156,28 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...this.editor.store.analysisSummary(request.projectId, request.assetId, principal),
+        };
+      }
+      case "video.v1.get_qa_summary": {
+        const request = GetQaSummaryInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          ...(await this.editor.store.qaSummary(request.projectId, request.jobId, principal)),
+        };
+      }
+      case "video.v1.get_scene_cuts": {
+        const request = GetSceneCutsInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...(await this.editor.store.sceneCuts(request.projectId, request.assetId, principal)),
+        };
+      }
+      case "video.v1.get_waveform": {
+        const request = GetWaveformInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...(await this.editor.store.waveform(request.projectId, request.assetId, principal)),
         };
       }
       case "video.v1.request_tracked_mask_review":

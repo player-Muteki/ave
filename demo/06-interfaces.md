@@ -349,6 +349,7 @@ type ExportManifest = {
 | `get_upload_status/commit_upload/cancel_upload` | 查询 nextOffset、完成或取消 | operator；最终长度和 SHA-256，重复 commit 返回同 Asset |
 | `get_asset_metadata` | 流、PTS、色彩、镜头 | viewer |
 | `get_analysis` | 最新 analysis job 的有界元数据：state/速率/artifact 引用（含 hash）/error，字节不出 CAS | viewer；requestId + projectId + assetId |
+| `get_scene_cuts` / `get_waveform` | 确定性切点（整帧对齐、≤64 条、含 score/aligned）与首音轨 RMS 波形桶（100ms、≤1200 桶），有界只读，无像素 | viewer；requestId + projectId + assetId |
 | `inspect_frame` | 按素材、流、索引摘要和显示序号取帧，可附编码像素坐标的正负点 | operator；返回二进制 JPEG、源 PTS、时基、尺寸与掩码摘要。v1 增量接口；旧客户端可继续读取代理。原帧检查仅需 FFmpeg，点选预览需配置 SAM2。 |
 | `propose_vace_preview` | 为已批准的连续 9 帧掩码提出本地 VACE 预览方案 | operator 传审批 ID、清单摘要、提示词、负面提示和种子。返回标准 EditPlan 和独立 preview 审批；模型、20 步采样、工作画幅和保护区由固定 Worker profile 决定。 |
 | `request_tracked_mask_review` | 为已完成的传播范围建立独立输入审批 | operator 提交项目、任务、时间线版本、标签清单与审片视频 SHA-256。沿用 `mask_revision` 和 `purpose=input`，subjectId 为传播清单产物 ID。批准时核验视频与全部标签，记录审批设备。 |
@@ -365,6 +366,7 @@ type ExportManifest = {
 | `list_jobs/get_job/watch_jobs` | 查询/订阅真实任务 | viewer；持久 seq + snapshot |
 | `cancel_job/pause_job/resume_job` | 控制任务 | operator；独立 Agent abort |
 | `get_qa_report` | 查询 QA | viewer |
+| `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |
 | `get_artifact` | 读取产物元数据 | viewer 仅 proxy/QA；最终 export 需 operator |
 | `read_asset_chunk` | 分块读取 proxy、mask、QA 或 export | 按 asset 类型鉴权；最终 export 需 operator |
 | `revoke_device/configure_worker` | 设备/后端管理 | owner only |
