@@ -100,6 +100,7 @@
 - 已实现 diff_plans planner 工具（2026-11-25，第 12 个）：按 opId 对已采纳 plan 与候选草稿做新增/删除/字段级变更对比（每类上限 64 条、字段上限 12 个），提交前可迭代修改；本地算法单测（t1 变更 sourceRange、t2 新增、x1 删除）符合预期，wire 14/14、esbuild 全绿。未跑真模型/e2e。
 - 已实现预览候选帧故事板（2026-11-25）：新增 video.v1.preview_frames（PreviewFramesRequest，≤36 格），media.previewFrames 对 candidate 定时采样（fps=tiles/duration）经 scale/pad/tile 生成 JPEG 入 CAS 并做几何校验，哈希引用；客户端预览审批卡新增“预览帧”按钮复用联系表查看器。本地 3s 视频 fps=4→4x3=1280x540 几何校验通过，wire 14/14（48 defs）、esbuild 全绿。未跑真模型/e2e。
 - 已跑通真实服务冒烟（2026-11-25，本地 FFmpeg 8.0.1，真实 EditorService+SQLite+CAS）：上传 3s 三色+正弦音源→asset(h264+aac)；analysis job 产出 qa+scenecuts+waveform，切点恰为 1.000s/2.000s（整帧对齐）、波形 30 桶与独立计算一致；broker get_scene_cuts 返回 2 条；submit_edit_plan→proposed→approve→preview job 至 awaiting_review（candidate+qa），QA 含 renderRecipeHash(64hex) 且 planHash 匹配、输出时长精确 2.000000s；preview_frames 2x1 JPEG 且重复生成 SHA-256 一致（确定性）。顺手修复 rpc.ts 中 contact: 分支在非 async IIFE 里 await 的语法错误。wire 14/14（48 defs）、profile 20/20、esbuild 全绿。仍未跑真模型/e2e。
+- 修复两个真实渲染 bug（2026-11-25，真实服务冒烟发现）：① 多段带转场的 xfade/acrossfade 链中累积标签被双重方括号包裹（[[vs0]] 解析失败），现累积标签保持裸名；② verifyCandidateDecode 用 -map 0 全映射导致 mov_text 字幕进 null muxer 报 Encoder not found，改为 -map 0:v? -map 0:a?（字幕由 probe 校验）。另外 spawnChecked 现在保留 ffmpeg stderr 尾部 800 字计入 QA_FAILED 诊断。复杂方案冒烟通过：双素材 crossfade(480ms 整帧) 拼接 + v2 overlay + 音频 -6dB + mov_text 字幕，输出精确 2.520000s、h264+aac+mov_text。burn-in 仍受沙箱无 fontconfig 限制。wire 14/14、profile 20/20。仍未跑真模型/e2e。
 ## 环境与错误
 
 | 问题 | 处理 |

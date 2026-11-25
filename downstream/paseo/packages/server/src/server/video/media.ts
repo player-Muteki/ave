@@ -1203,7 +1203,7 @@ export class MediaService {
         trackOut.push(`[vcat_${tag}]`);
         continue;
       }
-      let vAcc = `[vs${indices[0]!}]`;
+      let vAcc = `vs${indices[0]!}`;
       let vAccDur = segDur(indices[0]!);
       for (let k = 1; k < indices.length; k++) {
         const i = indices[k]!;
@@ -1211,7 +1211,7 @@ export class MediaService {
         const tr = transitions.get(ops[prev]!.clipId);
         if (!tr) {
           filters.push(`[${vAcc}][vs${i}]concat=n=2:v=1:a=0[vacc_${tag}_${k}]`);
-          vAcc = `[vacc_${tag}_${k}]`;
+          vAcc = `vacc_${tag}_${k}`;
           vAccDur += segDur(i);
           continue;
         }
@@ -1238,10 +1238,10 @@ export class MediaService {
         filters.push(
           `[${vAcc}][vs${i}]xfade=transition=${tr.kind === "crossfade" ? "fade" : "fadeblack"}:duration=${trDur.toFixed(6)}:offset=${offset.toFixed(6)}[vacc_${tag}_${k}]`,
         );
-        vAcc = `[vacc_${tag}_${k}]`;
+        vAcc = `vacc_${tag}_${k}`;
         vAccDur = offset + segDur(i);
       }
-      filters.push(`${vAcc}null[vcat_${tag}]`);
+      filters.push(`[${vAcc}]null[vcat_${tag}]`);
       trackOut.push(`[vcat_${tag}]`);
     }
     if (trackOut.length === 1) filters.push(`${trackOut[0]}null[vcat]`);
@@ -1263,14 +1263,14 @@ export class MediaService {
             : `${aLabels}concat=n=${audioSegments.length}:v=0:a=1[acat]`,
         );
       } else {
-        let aAcc = `[as${audioSegments[0]!}]`;
+        let aAcc = `as${audioSegments[0]!}`;
         let aAccDur = segDur(audioSegments[0]!);
         for (let k = 1; k < audioSegments.length; k++) {
           const i = audioSegments[k]!;
           const tr = transitions.get(ops[audioSegments[k - 1]!]!.clipId);
           if (!tr) {
             filters.push(`[${aAcc}][as${i}]concat=n=2:v=0:a=1[aacc${k}]`);
-            aAcc = `[aacc${k}]`;
+            aAcc = `aacc${k}`;
             aAccDur += segDur(i);
             continue;
           }
@@ -1279,10 +1279,10 @@ export class MediaService {
           filters.push(
             `[${aAcc}][as${i}]acrossfade=d=${trDur.toFixed(6)}:c1=tri:c2=tri[aacc${k}]`,
           );
-          aAcc = `[aacc${k}]`;
+          aAcc = `aacc${k}`;
           aAccDur = offset + segDur(i);
         }
-        filters.push(`${aAcc}anull[acat]`);
+        filters.push(`[${aAcc}]anull[acat]`);
       }
     }
     filters.push(
@@ -1366,9 +1366,11 @@ export class MediaService {
   }
 
   async verifyCandidateDecode(candidate: BlobRef, signal: AbortSignal): Promise<void> {
+    // Full decode of the decodable streams; mov_text subtitle sidecars are
+    // verified by probe (checkCandidate), the null muxer cannot encode them.
     await this.spawnChecked(
       this.tools.ffmpeg,
-      ["-v", "error", "-xerror", "-nostdin", "-i", this.cas.pathFor(candidate), "-map", "0", "-f", "null", "-"],
+      ["-v", "error", "-xerror", "-nostdin", "-i", this.cas.pathFor(candidate), "-map", "0:v?", "-map", "0:a?", "-f", "null", "-"],
       signal,
     );
   }
@@ -1398,7 +1400,10 @@ export class MediaService {
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
       });
-      child.stderr.resume();
+      let stderrTail = "";
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderrTail = (stderrTail + chunk.toString("utf8")).slice(-800);
+      });
       const cancel = () => child.kill("SIGTERM");
       signal.addEventListener("abort", cancel, { once: true });
       child.once("error", () => {
@@ -1411,7 +1416,10 @@ export class MediaService {
           return reject(new EditorError("CANCELLED", "The media job was cancelled"));
         if (code !== 0)
           return reject(
-            new EditorError("QA_FAILED", "FFmpeg rejected the edit or produced an invalid output"),
+            new EditorError(
+              "QA_FAILED",
+              `FFmpeg rejected the edit (exit ${code}): ${stderrTail.trim().slice(0, 500) || "no stderr"}`,
+            ),
           );
         resolve();
       });
