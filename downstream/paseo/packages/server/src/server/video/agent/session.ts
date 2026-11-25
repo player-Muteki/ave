@@ -41,6 +41,8 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
     "Read the daemon QA artifact reference for a job: state, revision and qa hash. Never infers pass/fail.",
   get_analysis:
     "Latest analysis job metadata for one asset: state, sampling rate and QA artifact reference. Never returns pixels.",
+  get_plan:
+    "Read a previously accepted edit plan by planId (full operation list) to build on it. Read-only.",
 };
 
 /**

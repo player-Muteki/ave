@@ -145,6 +145,13 @@ export class VideoToolBroker {
           note: "Metadata only; the sampling map stays in CAS and is never sent to the model.",
         };
       }
+      case "get_plan": {
+        const plan = this.store
+          .project(projectId, principal)
+          .plans.find((p) => p.planId === call.args.planId);
+        if (!plan) editorFailure("ASSET_NOT_FOUND", "No such plan in the bound project");
+        return plan;
+      }
       case "validate_edit_plan":
         this.store.validateProposal(call.args, principal);
         return { valid: true };

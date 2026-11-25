@@ -2988,6 +2988,43 @@
             "args"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "type": "string",
+              "const": "1"
+            },
+            "toolCallId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "tool": {
+              "type": "string",
+              "const": "get_plan"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "planId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                }
+              },
+              "required": [
+                "planId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "toolCallId",
+            "tool",
+            "args"
+          ],
+          "additionalProperties": false
         }
       ]
     },

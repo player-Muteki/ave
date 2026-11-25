@@ -406,6 +406,7 @@ export const VideoToolCallSchema = z.discriminatedUnion("tool", [
     tool: z.literal("get_analysis"),
     args: z.object({ assetId: id, contentHash: sha256 }).strict(),
   }),
+  toolEnvelope.extend({ tool: z.literal("get_plan"), args: z.object({ planId: id }).strict() }),
 ]);
 export const PlanReviewRequestSchema = z
   .object({
