@@ -111,6 +111,9 @@ CREATE TABLE IF NOT EXISTS events (
   project_id TEXT NOT NULL, seq TEXT NOT NULL, document TEXT NOT NULL,
   PRIMARY KEY(project_id, seq)
 );
+-- Write-only event outbox: emit() mirrors every event here, but no drain/reader is
+-- wired yet (get_events serves the events table). Retention/drain policy is an open
+-- design decision; rows currently accumulate unbounded. Do not rely on it for delivery.
 CREATE TABLE IF NOT EXISTS outbox (
   event_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, seq TEXT NOT NULL, document TEXT NOT NULL
 );
