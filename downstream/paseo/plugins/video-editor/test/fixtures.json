@@ -145,5 +145,10 @@
   {"name": "estimate timeline request rejects empty union", "schema": "EstimateTimelineRequest", "valid": false, "value": {"requestId": "req-est-3"}},
   {"name": "estimate timeline request with neither draft nor planId is rejected", "schema": "EstimateTimelineRequest", "valid": false, "value": {"requestId": "req-est-3"}},
   {"name": "planner list_artifacts tool call is accepted", "schema": "VideoToolCall", "valid": true, "value": {"protocolVersion": "1", "toolCallId": "tc-la-1", "tool": "list_artifacts", "args": {"jobId": "job-1"}}},
-  {"name": "planner list_artifacts without jobId is rejected", "schema": "VideoToolCall", "valid": false, "value": {"protocolVersion": "1", "toolCallId": "tc-la-2", "tool": "list_artifacts", "args": {}}}
+  {"name": "planner list_artifacts without jobId is rejected", "schema": "VideoToolCall", "valid": false, "value": {"protocolVersion": "1", "toolCallId": "tc-la-2", "tool": "list_artifacts", "args": {}}},
+  {"name": "get run events input is accepted", "schema": "GetRunEventsInput", "valid": true, "value": {"requestId": "req-re-1", "projectId": "proj", "runId": "run-1", "afterSeq": "5"}},
+  {"name": "get run events input without afterSeq is accepted", "schema": "GetRunEventsInput", "valid": true, "value": {"requestId": "req-re-2", "projectId": "proj", "runId": "run-1"}},
+  {"name": "get run events input rejects missing runId", "schema": "GetRunEventsInput", "valid": false, "value": {"requestId": "req-re-3", "projectId": "proj"}},
+  {"name": "run events result is accepted", "schema": "RunEventsResult", "valid": true, "value": {"requestId": "req-re-1", "projectId": "proj", "runId": "run-1", "events": [{"protocolVersion": "1", "projectId": "proj", "runId": "run-1", "eventId": "evt-1", "seq": "6", "occurredAt": "2026-11-25T10:00:00.000Z", "type": "run.started", "payload": {"runId": "run-1"}}], "latestSeq": "9", "snapshotRequired": false}},
+  {"name": "run events result rejects event of another run shape", "schema": "RunEventsResult", "valid": false, "value": {"requestId": "req-re-1", "projectId": "proj", "runId": "run-1", "events": [{"protocolVersion": "1", "projectId": "proj", "runId": "run-1", "eventId": "evt-1", "seq": "x", "occurredAt": "2026-11-25T10:00:00.000Z", "type": "run.started", "payload": {}}], "latestSeq": "9", "snapshotRequired": false}}
 ]

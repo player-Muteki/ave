@@ -24,6 +24,7 @@ import {
   GetWaveformInputSchema,
   GetPlanInputSchema,
   ListArtifactsInputSchema,
+  GetRunEventsInputSchema,
   GetExportSummaryInputSchema,
   VerifyExportInputSchema,
   GetAssetMetadataInputSchema,
@@ -62,6 +63,7 @@ export class EditorRpcService {
             "timeline-estimate",
             "list-artifacts",
             "plan-estimate",
+            "run-events",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
           operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export"],
@@ -151,6 +153,15 @@ export class EditorRpcService {
       case "video.v1.get_events": {
         const request = z.object({ projectId: z.string(), afterSeq: z.string() }).parse(input);
         return this.editor.store.events(request.projectId, request.afterSeq, principal);
+      }
+      case "video.v1.get_run_events": {
+        const request = GetRunEventsInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          runId: request.runId,
+          ...this.editor.store.runEvents(request.projectId, request.runId, request.afterSeq ?? "0", principal),
+        };
       }
       case "video.v1.start_planning_run": {
         const request = StartPlanningRunInputSchema.parse(input);

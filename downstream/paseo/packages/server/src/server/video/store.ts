@@ -1985,6 +1985,25 @@ export class EditorStore {
     };
   }
 
+  /**
+   * Run-scoped bounded event page for live monitoring of one planning run.
+   * runId is filtered in memory after a wider read so interleaved project
+   * events do not starve the run's page; the page itself stays <= 200.
+   */
+  runEvents(projectId: string, runId: string, afterSeq: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    const documents = this.rows(
+      "SELECT document FROM events WHERE project_id = ? AND CAST(seq AS INTEGER) > ? ORDER BY CAST(seq AS INTEGER) LIMIT 2000",
+      projectId,
+      afterSeq,
+    );
+    const events = documents
+      .map((document) => EditorEventSchema.parse(JSON.parse(document)))
+      .filter((event) => event.runId === runId)
+      .slice(0, 200);
+    return { events, snapshotRequired: false, latestSeq: this.latestSeq(projectId) };
+  }
+
   registerPrincipal(projectId: string, principal: EditorPrincipal): void {
     this.authorize(projectId, { principalId: "owner", role: "owner", projectIds: null }, "owner");
     this.grant(projectId, principal.principalId, principal.role);

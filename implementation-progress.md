@@ -219,6 +219,8 @@
 - 新增 planner 工具 get_qa_summary（2026-11-25，第 13 个）：store.qaSummary 经 bindCas 解析 QA artifact，返回有界摘要（流≤8、时长、audioLoudness、renderRecipeHash/planHash/ffmpegBuildHash、门禁状态），完整 probe 不出 CAS；冒烟验证 preview job 摘要 dur=2.000000、h264+aac、响度 -21.1/-17.8dB、G4=passed/G5=manual_required。wire 14/14（48 defs）、profile 24/24、esbuild 全绿。仍未跑真模型/e2e。
 - 已实现 viewer 只读 RPC `video.v1.list_artifacts`（按 jobId 列出产物 kind/大小/SHA-256/mediaType，上限 256 条，不出 CAS 字节），`estimate_timeline` 改为 draft 或 planId 二选一（可直接预估已采纳方案，结果带 planId），capabilities 新增 list-artifacts/plan-estimate；客户端任务行新增“产物”按钮、方案卡片新增“预估时长”按钮。contracts 新增 ListArtifacts*/ArtifactInfo/ArtifactKind（v1.schema.json 96 defs），fixtures 145 例，`test_rpc_surface.py` 47 case/43 export 一致；本地 smoke 新增 RPC_ESTIMATE_PLAN / RPC_LIST_ARTIFACTS / VIEWER_LIST_ARTIFACTS（viewer 可读、不可 estimate）全绿。未跑真模型/e2e。
 
+- 新增 viewer RPC `video.v1.get_run_events`：按 runId 过滤的有界事件页（内存过滤，单页 ≤200，带 latestSeq 游标，viewer 可读），客户端规划面板新增“run 事件”按钮；contracts 新增 GetRunEvents*/RunEventsResult（v1.schema.json 98 defs），fixtures 152 例，rpc-surface 48 case/44 export 一致；smoke 新增 RPC_RUN_EVENTS（游标续接/错误 run 为空）全绿。未跑真模型/e2e。
+
 ## 环境与错误
 
 | 问题 | 处理 |

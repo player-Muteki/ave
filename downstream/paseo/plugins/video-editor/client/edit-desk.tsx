@@ -11,7 +11,7 @@ import {
   decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc,
-  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
+  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
@@ -66,6 +66,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const followUpRun = useRpc(followUpPlanningRunRpc);
   const stopRun = useRpc(stopPlanningRunRpc);
   const readEvents = useRpc(getEventsRpc);
+  const readRunEvents = useRpc(getRunEventsRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
   const readQaSummary = useRpc(getQaSummaryRpc);
@@ -123,6 +124,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [runEvents, setRunEvents] = useState<EditorEvent[]>([]);
   const runActive = run?.state === "running" || run?.state === "awaiting_input";
   const afterSeq = useRef("0");
+  const runSeq = useRef("0");
   const locked = useRef(false);
   const pickerParent = useRef<View>(null);
   const projectId = project?.projectId;
@@ -804,6 +806,11 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             if (update) setRun(update.run);
             const recent = update?.events ?? result.events.filter((event) => event.type.startsWith("run."));
             setRunEvents((prev) => [...prev, ...recent].slice(-12));
+          })}
+          {project && run && button("run 事件", async () => {
+            const result = await readRunEvents({ requestId: requestId(`run-events:${run.runId}:${runSeq.current}`), projectId: project.projectId, runId: run.runId, afterSeq: runSeq.current });
+            runSeq.current = result.latestSeq;
+            setRunEvents((prev) => [...prev, ...result.events].slice(-12));
           })}
           <Text style={heading}>已提议的时间线</Text>
           {!project.plans.length && <Text style={muted}>尚无裁剪方案。提交方案不会开始渲染。</Text>}

@@ -701,6 +701,27 @@ export const getEventsRpc = {
   input: EventsRequestSchema,
   output: EventsResultSchema,
 };
+
+export const GetRunEventsInputSchema = z
+  .object({ requestId, projectId: id, runId: id, afterSeq: uint.optional() })
+  .strict();
+export type GetRunEventsInput = z.infer<typeof GetRunEventsInputSchema>;
+export const RunEventsResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    runId: id,
+    events: z.array(EditorEventSchema).max(200),
+    latestSeq: uint,
+    snapshotRequired: z.boolean(),
+  })
+  .strict();
+export type RunEventsResult = z.infer<typeof RunEventsResultSchema>;
+export const getRunEventsRpc = {
+  name: "video.v1.get_run_events",
+  input: GetRunEventsInputSchema,
+  output: RunEventsResultSchema,
+};
 export const createUploadRpc = {
   name: "video.v1.create_upload",
   input: CreateUploadRequestSchema,

@@ -4076,6 +4076,35 @@
       ],
       "additionalProperties": false
     },
+    "GetRunEventsInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetRunEventsInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "afterSeq": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "runId"
+      ],
+      "additionalProperties": false
+    },
     "GetSceneCutsInput": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:GetSceneCutsInput",
@@ -5947,6 +5976,48 @@
         "status",
         "expiresAt",
         "requestId"
+      ],
+      "additionalProperties": false
+    },
+    "RunEventsResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RunEventsResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "events": {
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:EditorEvent"
+          }
+        },
+        "latestSeq": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "snapshotRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "runId",
+        "events",
+        "latestSeq",
+        "snapshotRequired"
       ],
       "additionalProperties": false
     },
