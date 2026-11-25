@@ -916,6 +916,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   await controlJob({ requestId: requestId(`cancel:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "cancel" });
                   show(await read({ projectId: project.projectId }));
                 })}
+              {["analyzing", "rendering_preview", "rendering_final", "validating", "awaiting_inputs"].includes(job.state) &&
+                button("暂停任务", async () => {
+                  await controlJob({ requestId: requestId(`pause:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "pause" });
+                  show(await read({ projectId: project.projectId }));
+                })}
+              {job.state === "paused" &&
+                button("继续任务", async () => {
+                  await controlJob({ requestId: requestId(`resume:${job.jobId}`), projectId: project.projectId, jobId: job.jobId, action: "resume" });
+                  show(await read({ projectId: project.projectId }));
+                })}
               {button("方案", async () => {
                 const plan = project.plans.find((p) => p.planHash === job.planHash);
                 if (!plan) throw new Error("找不到该任务对应的方案。");
