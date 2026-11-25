@@ -103,6 +103,7 @@
 - 修复两个真实渲染 bug（2026-11-25，真实服务冒烟发现）：① 多段带转场的 xfade/acrossfade 链中累积标签被双重方括号包裹（[[vs0]] 解析失败），现累积标签保持裸名；② verifyCandidateDecode 用 -map 0 全映射导致 mov_text 字幕进 null muxer 报 Encoder not found，改为 -map 0:v? -map 0:a?（字幕由 probe 校验）。另外 spawnChecked 现在保留 ffmpeg stderr 尾部 800 字计入 QA_FAILED 诊断。复杂方案冒烟通过：双素材 crossfade(480ms 整帧) 拼接 + v2 overlay + 音频 -6dB + mov_text 字幕，输出精确 2.520000s、h264+aac+mov_text。burn-in 仍受沙箱无 fontconfig 限制。wire 14/14、profile 20/20。仍未跑真模型/e2e。
 - QA 报告新增音频响度（2026-11-25）：渲染后对候选音轨跑 volumedetect，mean/max volume 写入 QA（audioLoudness）；完整交付链冒烟通过——preview→final（candidate+qa+proxy，awaiting_delivery_approval）→export（completed，export+manifest），manifest 含 renderRecipeHash 且与 planHash 一致、segments 完整；预览 QA 响度 mean -21.1dB / max -17.8dB。wire 14/14、profile 20/20。仍未跑真模型/e2e。
 - 变换/淡入淡出渲染冒烟通过（2026-11-25）：trim 0.5–2.02s（1.52s=38 帧整帧对齐）+ scale 160x90 + rot 90 + fadeIn/Out 0.5s 的方案经真实渲染到 awaiting_review，QA 输出精确 1.520000s、640x360 h264。至此 trim/拼接/crossfade/v2 叠加/transform+旋转/fade/音频增益/mov_text 字幕/完整交付链（含 manifest renderRecipeHash）/场景切点/波形/故事板均已用真实 FFmpeg 冒烟验证。wire 14/14、profile 20/20。仍未跑真模型/e2e。
+- 预览 profile 加固（2026-11-25）：新增 trim clipId 唯一性、片段时长必须为正、起点非负、转场时长必须为正；profile 单测增至 24 项全 PASS。wire 14/14。仍未跑真模型/e2e。
 ## 环境与错误
 
 | 问题 | 处理 |
