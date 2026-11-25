@@ -90,8 +90,6 @@ jobs:
         working-directory: runtime
         env:
           NODE_OPTIONS: --max-old-space-size=6144
-          PASEO_DESKTOP_SMOKE: '1'
-          PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
           CSC_LINK: ${{ inputs.sign && (runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE) || '' }}
           CSC_KEY_PASSWORD: ${{ inputs.sign && (runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE_PASSWORD) || '' }}
           APPLE_ID: ${{ inputs.sign && runner.os == 'macOS' && secrets.APPLE_ID || '' }}
@@ -142,6 +140,24 @@ jobs:
             runtime/packages/desktop/release/SHA256SUMS
             runtime/packages/desktop/release/SOURCE_SHA
           if-no-files-found: error
+      - name: Install and launch the DMG
+        if: runner.os == 'macOS'
+        env:
+          PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
+        run: release/desktop/check-dmg.sh runtime/packages/desktop/release/*.dmg runtime/packages/desktop
+      - name: Install and launch the NSIS package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
+        run: |
+          $installer = Get-ChildItem runtime/packages/desktop/release/*.exe
+          ./release/desktop/check-nsis.ps1 -Installer $installer.FullName -Desktop runtime/packages/desktop
+      - name: Launch the AppImage with its sandbox
+        if: runner.os == 'Linux'
+        env:
+          PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
+        run: node runtime/packages/desktop/e2e/verify-linux-image.js runtime/packages/desktop/release/*.AppImage
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
