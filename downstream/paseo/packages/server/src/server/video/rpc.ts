@@ -18,6 +18,7 @@ import {
   PreviewFramesRequestSchema,
   CreateMaskRevisionRequestSchema,
   MaskRevisionReviewRequestSchema,
+  TrackMaskRequestSchema, RequestTrackedMaskReviewSchema,
   type EditorPrincipal,
 } from "#video-editor/contracts/v1";
 import { decodeFramedChunk } from "#video-editor/bytes";
@@ -63,7 +64,8 @@ export class EditorRpcService {
         const request = ApprovalDecisionSchema.parse(input);
         if (request.decision === "approve") {
           const revision = this.editor.store.pendingMaskForDecision(request.approvalId, principal);
-          if (revision) await this.editor.media.verifyMaskFiles(revision);
+          if (revision?.kind === "anchor") await this.editor.media.verifyMaskFiles(revision.revision);
+          if (revision?.kind === "sequence") await this.editor.media.verifyTrackedMaskFiles(revision);
         }
         const result = this.editor.store.decideApproval(request, principal);
         return DecideApprovalResultSchema.parse(result);
@@ -122,6 +124,14 @@ export class EditorRpcService {
       case "video.v1.analyze_asset": {
         const request = AnalyzeAssetInputSchema.parse(input);
         const result = this.editor.store.createAnalysisJob({ ...request, principal });
+        this.editor.jobs.enqueue(request.projectId, result.job.jobId);
+        return result;
+      }
+      case "video.v1.request_tracked_mask_review":
+        return this.editor.store.requestTrackedMaskReview(RequestTrackedMaskReviewSchema.parse(input), principal);
+      case "video.v1.track_mask": {
+        const request = TrackMaskRequestSchema.parse(input);
+        const result = this.editor.store.createTrackingJob(request, principal);
         this.editor.jobs.enqueue(request.projectId, result.job.jobId);
         return result;
       }
@@ -254,6 +264,7 @@ export class EditorRpcService {
       editorFailure("INVALID_ARGUMENT", "A single media chunk cannot exceed 256 KiB");
     const { projectId, assetId, revision } = input;
     const ref = (() => {
+      if (assetId.endsWith(":tracking-preview")) return this.editor.store.artifact(projectId, assetId, revision, principal).blob;
       if (assetId.endsWith(":review-proxy")) return this.editor.store.finalReviewProxy(projectId, assetId, revision, principal).blob;
       if (assetId.endsWith(":candidate")) return this.editor.store.reviewablePreview(projectId, assetId.slice(0, -":candidate".length), principal, revision).blob;
       if (assetId.startsWith("contact:")) return this.editor.store.contactSheetBlob(projectId, revision, assetId, principal);

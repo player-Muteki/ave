@@ -1,4 +1,6 @@
 [
+  {"name": "request review of the exact tracked labels and proxy", "schema": "RequestTrackedMaskReview", "valid": true, "value": {"projectId": "p", "requestId": "request-1", "jobId": "job-1", "expectedRevision": "2", "manifestHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "reviewHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+  {"name": "tracked review requires a proxy digest", "schema": "RequestTrackedMaskReview", "valid": false, "value": {"projectId": "p", "requestId": "request-1", "jobId": "job-1", "expectedRevision": "2", "manifestHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}},
   {
     "name": "exact signed PTS",
     "schema": "Rational",
@@ -103,6 +105,8 @@
       "mediaType": "video/mp4"
     }
   },
+  {"name": "track approved anchor over nine source frames", "schema": "TrackMaskRequest", "valid": true, "value": {"projectId": "p", "requestId": "submit", "expectedRevision": "1", "anchorApprovalId": "a", "anchorHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "firstFrame": 5, "frameCount": 9}},
+  {"name": "tracking range must be bounded", "schema": "TrackMaskRequest", "valid": false, "value": {"projectId": "p", "requestId": "submit", "expectedRevision": "1", "anchorApprovalId": "a", "anchorHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "firstFrame": 5, "frameCount": 82}},
   {"name": "save reviewed anchor", "schema": "CreateMaskRevisionRequest", "valid": true, "value": {"requestId": "one", "expectedRevision": "1", "anchor": {"projectId": "project", "assetId": "asset", "streamUid": "stream", "sourcePresentationIndexHash": "0000000000000000000000000000000000000000000000000000000000000000", "frame": 0, "points": [{"x": 1, "y": 2, "foreground": true}]}, "expectedLabelSha256": "1111111111111111111111111111111111111111111111111111111111111111", "expectedPreviewSha256": "2222222222222222222222222222222222222222222222222222222222222222"}},
   {"name": "save requires reviewed image digest", "schema": "CreateMaskRevisionRequest", "valid": false, "value": {"requestId": "one", "expectedRevision": "1", "anchor": {"projectId": "project", "assetId": "asset", "streamUid": "stream", "sourcePresentationIndexHash": "0000000000000000000000000000000000000000000000000000000000000000", "frame": 0, "points": [{"x": 1, "y": 2, "foreground": true}]}, "expectedLabelSha256": "1111111111111111111111111111111111111111111111111111111111111111"}},
   {"name": "inspect an exact source frame", "schema": "InspectFrameRequest", "valid": true, "value": {"projectId": "p", "assetId": "a", "streamUid": "v", "sourcePresentationIndexHash": "1111111111111111111111111111111111111111111111111111111111111111", "frame": 2, "points": []}},

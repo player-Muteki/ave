@@ -9,9 +9,10 @@ import { ContentAddressedStore, sha256File } from "./cas.js";
 import { EditorError, editorFailure } from "./errors.js";
 import { assertRenderablePreview } from "./preview-profile.js";
 import { encodeFramedChunk } from "#video-editor/bytes";
+import { trackMaskJob } from "./mask-tracking.js";
 import { FrameInspector } from "./frame-inspector.js";
 import { PyWorker } from "./py-worker.js";
-import { EditorStore } from "./store.js";
+import { EditorStore, type TrackedMaskReviewInputs } from "./store.js";
 import {
   SourceAssetSchema,
   StreamDescriptorSchema,
@@ -25,7 +26,7 @@ import {
   type ContactSheetResult,
   type InspectFrameRequest,
   type CreateMaskRevisionRequest,
-  type MaskAnchorRevision,
+  type MaskAnchorRevision, TrackedMaskManifestSchema,
 } from "#video-editor/contracts/v1";
 
 const execFileAsync = promisify(execFile);
@@ -142,6 +143,51 @@ export class MediaService {
     return this.cas.readBytes(revision.reviewImage);
   }
 
+  async verifyTrackedMaskFiles(input: TrackedMaskReviewInputs) {
+    const { manifest, proxy, tracking, anchor } = input;
+    const doc = TrackedMaskManifestSchema.parse(
+      JSON.parse((await this.cas.readBytes(manifest.blob)).toString("utf8")),
+    );
+    const h = anchor.anchor;
+    if (
+      doc.jobId !== manifest.jobId ||
+      doc.projectId !== manifest.projectId ||
+      doc.maskRevisionId !== anchor.maskRevisionId ||
+      doc.anchorApprovalId !== tracking.anchorApprovalId ||
+      doc.anchorHash !== tracking.anchorHash ||
+      doc.sourceSha256 !== h.sourceSha256 ||
+      doc.sourcePresentationIndexHash !== h.sourcePresentationIndexHash ||
+      doc.streamUid !== h.streamUid ||
+      doc.assetId !== h.assetId ||
+      doc.timeBase.num !== h.timeBase.num ||
+      doc.timeBase.den !== h.timeBase.den ||
+      doc.engine !== h.mask.engine ||
+      doc.weightsSha256 !== h.mask.weightsSha256 ||
+      doc.anchorFrame !== h.frame ||
+      doc.width !== h.width ||
+      doc.height !== h.height ||
+      doc.frames.length !== tracking.frameCount ||
+      doc.reviewVideo.sha256 !== proxy.blob.sha256 ||
+      doc.reviewVideo.bytes !== proxy.blob.bytes ||
+      doc.reviewVideo.mediaType !== proxy.blob.mediaType
+    )
+      editorFailure("ARTIFACT_HASH_MISMATCH", "Tracked sequence does not match the reviewed input");
+    await this.cas.readBytes(proxy.blob);
+    for (const [i, frame] of doc.frames.entries()) {
+      if (
+        frame.sourceFrame !== tracking.firstFrame + i ||
+        BigInt(frame.label.bytes) !== BigInt(h.width) * BigInt(h.height) ||
+        (frame.sourceFrame === h.frame &&
+          (frame.label.sha256 !== anchor.rawLabelMask.sha256 || frame.pts !== h.pts))
+      )
+        editorFailure(
+          "ARTIFACT_HASH_MISMATCH",
+          "Tracked frame does not match its approved sequence",
+        );
+      await this.cas.readBytes(frame.label);
+    }
+  }
+
   async readMaskRevision(projectId: string, maskRevisionId: string, principal: EditorPrincipal) {
     const revision = this.store.maskRevision(projectId, maskRevisionId, principal);
     return encodeFramedChunk(revision, await this.verifyMaskFiles(revision));
@@ -217,7 +263,11 @@ export class MediaService {
       role: "owner",
       projectIds: null,
     });
-    if (job.kind === "analysis") return this.executeAnalysisJob(projectId, jobId, signal);
+    if (job.kind === "analysis") {
+      const tracking = this.store.trackingRequest(projectId, jobId);
+      if (tracking) return trackMaskJob(this.store, this.cas, this.tools, job, tracking, signal);
+      return this.executeAnalysisJob(projectId, jobId, signal);
+    }
     this.store.updateJob(projectId, jobId, (current) => ({
       ...current,
       phaseDetail: "reading approved plan",

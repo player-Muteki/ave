@@ -689,6 +689,30 @@ export const MaskAnchorRevisionSchema = z.object({
 }).strict();
 export type MaskAnchorRevision = z.infer<typeof MaskAnchorRevisionSchema>;
 export const MaskRevisionReviewRequestSchema = z.object({ projectId: id, maskRevisionId: id }).strict();
+export const TrackMaskRequestSchema = z.object({
+  projectId: id, requestId, expectedRevision: uint, anchorApprovalId: id, anchorHash: sha256,
+  firstFrame: z.number().int().nonnegative(), frameCount: z.number().int().min(2).max(81),
+}).strict();
+export type TrackMaskRequest = z.infer<typeof TrackMaskRequestSchema>;
+export const TrackedMaskManifestSchema = z.object({
+  schemaVersion: z.literal("video.tracked-mask/v1"), projectId: id, jobId: id,
+  anchorApprovalId: id, anchorHash: sha256, maskRevisionId: id,
+  sourceSha256: sha256, sourcePresentationIndexHash: sha256, assetId: id, streamUid: id,
+  engine: z.literal("sam2.1-tiny"), weightsSha256: sha256, anchorFrame: z.number().int().nonnegative(),
+  width: z.number().int().positive(), height: z.number().int().positive(), timeBase: RationalSchema,
+  frames: z.array(z.object({ sourceFrame: z.number().int().nonnegative(), pts: z.string().regex(/^-?[0-9]+$/),
+    foregroundPixels: z.number().int().nonnegative(), label: BlobRefSchema }).strict()).min(2).max(81),
+  reviewImageRate: z.literal(9), reviewVideo: BlobRefSchema,
+}).strict();
+export const RequestTrackedMaskReviewSchema = z.object({
+  projectId: id, requestId, jobId: id, expectedRevision: uint, manifestHash: sha256, reviewHash: sha256,
+}).strict();
+export type RequestTrackedMaskReview = z.infer<typeof RequestTrackedMaskReviewSchema>;
+export const requestTrackedMaskReviewRpc = {
+  name: "video.v1.request_tracked_mask_review", input: RequestTrackedMaskReviewSchema, output: ApprovalRequestSchema,
+};
+export const trackMaskRpc = { name: "video.v1.track_mask", input: TrackMaskRequestSchema, output: CreateJobResultSchema };
+
 export const createMaskRevisionRpc = {
   name: "video.v1.create_mask_revision", input: CreateMaskRevisionRequestSchema, output: ApprovalRequestSchema,
 };

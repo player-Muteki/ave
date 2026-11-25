@@ -157,7 +157,7 @@ export class ContentAddressedStore {
     const bytes = await readFile(this.pathFor(ref));
     if (
       bytes.byteLength.toString() !== ref.bytes ||
-      (await sha256File(this.pathFor(ref))) !== ref.sha256
+      createHash("sha256").update(bytes).digest("hex") !== ref.sha256
     ) {
       editorFailure("ARTIFACT_HASH_MISMATCH", "Stored content failed its integrity check");
     }

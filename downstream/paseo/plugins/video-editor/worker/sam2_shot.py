@@ -21,13 +21,13 @@ class FramePrompt:
     points: tuple[Point, ...]
 
 
-def track_shot(predictor, frames: Path, count: int, prompts: list[FramePrompt]):
+def track_shot(predictor, frames: Path, count: int, prompts: list[FramePrompt], *, label_anchor=None):
     """Yield (shot-local frame index, uint8 0/255 mask) in propagation order.
 
     The caller owns the directory and binds its frames to the presentation index.
     Consume the entire iterator before publishing a candidate mask revision.
     """
-    if not prompts or type(count) is not int or count <= 0:
+    if (not prompts and label_anchor is None) or type(count) is not int or count <= 0:
         raise ValueError("a nonempty shot and a prompt are required")
     for prompt in prompts:
         if type(prompt.frame) is not int or not 0 <= prompt.frame < count:
@@ -47,6 +47,12 @@ def track_shot(predictor, frames: Path, count: int, prompts: list[FramePrompt]):
     if len(sizes) != 1:
         raise ValueError("shot frame sizes differ")
     width, height = sizes.pop()
+    if label_anchor is not None:
+        anchor, label = label_anchor
+        if (prompts or type(anchor) is not int or not 0 <= anchor < count or
+                label.shape != (height, width) or label.dtype != np.uint8 or
+                np.any((label != 0) & (label != 255)) or not label.any()):
+            raise ValueError("invalid approved anchor label")
     for prompt in prompts:
         for point in prompt.points:
             if (type(point.foreground) is not bool or not isfinite(point.x) or not isfinite(point.y)
@@ -67,7 +73,10 @@ def track_shot(predictor, frames: Path, count: int, prompts: list[FramePrompt]):
               points=np.array([(p.x, p.y) for p in prompt.points], dtype=np.float32),
               labels=np.array([p.foreground for p in prompt.points], dtype=np.int32),
               clear_old_points=True)
-    anchor = min(p.frame for p in prompts)
+    if label_anchor is None:
+        anchor = min(p.frame for p in prompts)
+    else:
+        infer(predictor.add_new_mask, state, frame_idx=anchor, obj_id=1, mask=label != 0)
     for reverse in (False, True):
         if reverse and anchor == 0:
             break
@@ -83,6 +92,11 @@ def track_shot(predictor, frames: Path, count: int, prompts: list[FramePrompt]):
             if not torch.isfinite(logits).all().item():
                 raise RuntimeError("invalid mask logits")
             if not (reverse and idx == anchor):
-                yield idx, (logits[0, 0] > 0).to(torch.uint8).cpu().numpy() * 255
+                # The predictor resamples its conditioning mask internally. The
+                # reviewed source raster remains authoritative on the anchor.
+                if label_anchor is not None and idx == anchor:
+                    yield idx, label.copy()
+                else:
+                    yield idx, (logits[0, 0] > 0).to(torch.uint8).cpu().numpy() * 255
         if infer(next, result, None) is not None:
             raise RuntimeError("extra tracked frame")
