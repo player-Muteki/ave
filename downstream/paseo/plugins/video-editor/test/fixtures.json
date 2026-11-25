@@ -524,5 +524,29 @@
   {"name": "get plan request is accepted", "schema": "GetPlanInput", "valid": true, "value": {"requestId": "req-plan-1", "projectId": "proj", "planId": "plan"}},
   {"name": "get plan request without planId is rejected", "schema": "GetPlanInput", "valid": false, "value": {"requestId": "req-x", "projectId": "proj"}},
   {"name": "get plan result is accepted", "schema": "GetPlanResult", "valid": true, "value": {"requestId": "req-plan-1", "schemaVersion": "video.edit-plan/v1", "projectId": "proj", "baseTimelineRevision": "1", "baseAssetManifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "intent": "trim the middle", "trimOperations": [{"opId": "op", "order": "1", "trackId": "track", "clipId": "clip", "source": {"assetId": "asset", "assetContentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "streamUid": "stream:0", "probeRevision": "1"}, "sourceRange": {"start": {"num": "0", "den": "1"}, "duration": {"num": "10", "den": "1"}}, "recordRange": {"start": {"num": "0", "den": "1"}, "duration": {"num": "10", "den": "1"}}}], "transformOperations": [], "audioOperations": [], "transitionOperations": [], "subtitleOperations": [], "generationRequests": [], "qaRequirements": [], "externalDestinations": [], "maxCostMicros": "100", "deterministicBackendId": "ffmpeg", "planId": "plan", "revision": "1", "runId": "run", "idempotencyKey": "key", "planHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "status": "proposed"}},
-  {"name": "get plan result with extra field is rejected", "schema": "GetPlanResult", "valid": false, "value": {"requestId": "req-plan-1", "schemaVersion": "video.edit-plan/v1", "projectId": "proj", "baseTimelineRevision": "1", "baseAssetManifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "intent": "trim the middle", "trimOperations": [{"opId": "op", "order": "1", "trackId": "track", "clipId": "clip", "source": {"assetId": "asset", "assetContentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "streamUid": "stream:0", "probeRevision": "1"}, "sourceRange": {"start": {"num": "0", "den": "1"}, "duration": {"num": "10", "den": "1"}}, "recordRange": {"start": {"num": "0", "den": "1"}, "duration": {"num": "10", "den": "1"}}}], "transformOperations": [], "audioOperations": [], "transitionOperations": [], "subtitleOperations": [], "generationRequests": [], "qaRequirements": [], "externalDestinations": [], "maxCostMicros": "100", "deterministicBackendId": "ffmpeg", "planId": "plan", "revision": "1", "runId": "run", "idempotencyKey": "key", "planHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "status": "proposed", "extra": 1}}
+  {"name": "get plan result with extra field is rejected", "schema": "GetPlanResult", "valid": false, "value": {"requestId": "req-plan-1", "schemaVersion": "video.edit-plan/v1", "projectId": "proj", "baseTimelineRevision": "1", "baseAssetManifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "intent": "trim the middle", "trimOperations": [{"opId": "op", "order": "1", "trackId": "track", "clipId": "clip", "source": {"assetId": "asset", "assetContentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "streamUid": "stream:0", "probeRevision": "1"}, "sourceRange": {"start": {"num": "0", "den": "1"}, "duration": {"num": "10", "den": "1"}}, "recordRange": {"start": {"num": "0", "den": "1"}, "duration": {"num": "10", "den": "1"}}}], "transformOperations": [], "audioOperations": [], "transitionOperations": [], "subtitleOperations": [], "generationRequests": [], "qaRequirements": [], "externalDestinations": [], "maxCostMicros": "100", "deterministicBackendId": "ffmpeg", "planId": "plan", "revision": "1", "runId": "run", "idempotencyKey": "key", "planHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "status": "proposed", "extra": 1}},
+  {
+    "name": "upload declaration size must be a uint string",
+    "schema": "CreateUploadRequest",
+    "valid": false,
+    "value": { "requestId": "r", "projectId": "p", "displayName": "clip.mp4", "expectedSize": 100, "expectedSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "mediaType": "video/mp4" }
+  },
+  {
+    "name": "upload declaration sha256 must be lowercase hex",
+    "schema": "CreateUploadRequest",
+    "valid": false,
+    "value": { "requestId": "r", "projectId": "p", "displayName": "clip.mp4", "expectedSize": "100", "expectedSha256": "0123456789ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef", "mediaType": "video/mp4" }
+  },
+  {
+    "name": "job snapshot kind must be a known enum",
+    "schema": "JobSnapshot",
+    "valid": false,
+    "value": { "jobId": "j", "projectId": "p", "revision": "0", "planHash": "0000000000000000000000000000000000000000000000000000000000000000", "kind": "render", "state": "awaiting_review", "artifacts": [] }
+  },
+  {
+    "name": "job snapshot revision must be a uint string",
+    "schema": "JobSnapshot",
+    "valid": false,
+    "value": { "jobId": "j", "projectId": "p", "revision": 1, "planHash": "0000000000000000000000000000000000000000000000000000000000000000", "kind": "preview", "state": "awaiting_review", "artifacts": [] }
+  }
 ]
