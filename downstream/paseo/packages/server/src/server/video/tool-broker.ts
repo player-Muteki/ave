@@ -35,6 +35,16 @@ export class VideoToolBroker {
             .slice(0, 64)
             .map((a) => ({ assetId: a.assetId, contentHash: a.original.sha256 })),
           hasMoreAssets: p.assets.length > 64,
+          planCount: p.plans.length,
+          plans: p.plans
+            .slice(0, 32)
+            .map((plan) => ({
+              planId: plan.planId,
+              revision: plan.revision,
+              planHash: plan.planHash,
+              intent: plan.intent.slice(0, 200),
+            })),
+          hasMorePlans: p.plans.length > 32,
           jobCount: p.jobs.length,
           jobs: p.jobs
             .slice(0, 64)
