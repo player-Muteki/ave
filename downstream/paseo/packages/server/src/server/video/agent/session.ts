@@ -45,6 +45,8 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
     "Read a previously accepted edit plan by planId (full operation list) to build on it. Read-only.",
   get_scene_cuts:
     "Frame-aligned scene-cut suggestions for one asset from the deterministic FFmpeg scene-score pass (bounded list, no pixels).",
+  get_planning_run:
+    "Read-only lifecycle state and recent persisted events of this planning run (no worker internals).",
 };
 
 /**

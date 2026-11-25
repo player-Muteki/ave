@@ -176,9 +176,10 @@ export class MediaService {
     const firstAsset = assets.get(plan.trimOperations[0]!.source.assetId)!;
     const directory = await mkdtemp(path.join(tmpdir(), "video-render-"));
     let outputBlob: BlobRef;
+    let recipeSha256 = "";
     try {
       const output = path.join(directory, "candidate.mp4");
-      await this.render(assets, firstAsset, plan, job.kind, output, signal);
+      recipeSha256 = await this.render(assets, firstAsset, plan, job.kind, output, signal);
       this.throwIfCancelled(signal);
       outputBlob = await this.cas.importFile(output, "video/mp4");
     } finally {
@@ -196,6 +197,8 @@ export class MediaService {
     const build = await this.run(this.tools.ffmpeg, ["-version"]);
     const qa = await this.cas.writeJson({
       ffmpegBuildHash: createHash("sha256").update(build.stdout).digest("hex"),
+      renderRecipeHash: recipeSha256,
+      planHash: plan.planHash,
       reportId: job.jobId,
       subjectHash: outputBlob.sha256,
       reviewProxyHash: reviewProxy?.sha256,
@@ -263,6 +266,7 @@ export class MediaService {
       revision: candidate.revision,
       planHash: plan.planHash,
       ffmpegBuildHash: report.ffmpegBuildHash,
+      renderRecipeHash: report.renderRecipeHash ?? null,
       modelRuns: [],
       maskLineageRoots: [],
       encoding: report.probe.streams,
@@ -835,7 +839,7 @@ export class MediaService {
     kind: "preview" | "final",
     output: string,
     signal: AbortSignal,
-  ): Promise<void> {
+  ): Promise<string> {
     assertRenderablePreview(plan);
     if (plan.deterministicBackendId !== "ffmpeg")
       editorFailure("CAPABILITY_UNAVAILABLE", "The approved backend is unavailable");
@@ -1135,11 +1139,18 @@ export class MediaService {
     if (metaSrtIndex >= 0)
       args.push("-map", `${metaSrtIndex}:0`, "-c:s", "mov_text");
     args.push("-movflags", "+faststart", output);
+    // Deterministic recipe hash: the exact FFmpeg argv with temp/output paths
+    // masked, so the same plan + assets always produce the same recipe hash.
+    const normalized = args.map((a) =>
+      a === output ? "<output>" : subDir ? a.split(subDir).join("<tmp>") : a,
+    );
+    const recipeSha256 = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
     try {
       await this.spawnChecked(this.tools.ffmpeg, args, signal);
     } finally {
       if (subDir) await rm(subDir, { recursive: true, force: true });
     }
+    return recipeSha256;
   }
 
   async verifyCandidateDecode(candidate: BlobRef, signal: AbortSignal): Promise<void> {

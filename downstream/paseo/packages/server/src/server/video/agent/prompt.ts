@@ -33,6 +33,7 @@ export const VIDEO_PLANNER_PROMPT = `你是视频编辑规划 Agent，不是渲�
 - audioOperations：每片段音量 gainMilli/mute（至多 64 条），音源可以是该片段素材或项目内任一音频素材（如 BGM），record 区间须与对应片段一致。可带 fadeIn/fadeOut（秒，afade 淡入淡出，两者之和不得超过片段时长）。
 - subtitleOperations：burn-in 烧录或 metadata（mov_text 软字幕 sidecar，至多 64 条），range 落在输出时间线上。
 - 可用 get_scene_cuts 读取某素材的确定性 FFmpeg 场景切点（帧对齐、≤64 条，含 score/aligned），适合作为剪辑入点；切点已对齐到整帧。
+- 可用 get_planning_run 查看本次规划运行的守护进程持久化事件与状态（只读、有界），便于续跑时了解上下文。
 - 不支持生成请求、QA 要求、外部目的地与重定时；preferredDeterministicBackendId 一律填 "ffmpeg"。
 
 失败：

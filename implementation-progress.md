@@ -94,6 +94,7 @@
 
 - 已实现预览校验（2026-11-25）：每 clip 至多一个 audio 操作、每条轨道内 order 必须等于位置序号、每段左侧至多一个转场（transitionByLeft），本地 profile 单测 20/20 PASS。未跑真模型/e2e。
 - 已实现确定性场景切点（2026-11-25）：analysis job 新增 FFmpeg 全帧 scene_score 通道（select+metadata=print，阈值 0.3、最小间隔 0.5s、≤64 条、按整帧对齐），产出 scenecuts artifact（video.scene-cuts/v1，含 ffmpegBuildHash/sourceSha256）；Python 采样改为 best-effort（无 python 时仍可完成）；新增 planner 工具 get_scene_cuts（第 10 个）、get_analysis 返回 scenecuts 摘要、rpc 支持 :scenecuts 下载、客户端素材行新增“场景切点”按钮（点击切点写入入点）；本地合成三段视频实测切点 1.000s/2.000s 帧对齐正确，wire 14/14、profile 20/20。未跑真模型/e2e。
+- 已实现渲染配方哈希与规划运行自查（2026-11-25）：render() 返回 renderRecipeHash（完整 ffmpeg argv、临时/输出路径脱敏后的 SHA-256），写入 QA 报告与 export manifest（renderRecipeHash/planHash 可溯源）；新增 planner 工具 get_planning_run（第 11 个，只读查看本 run 的持久化事件与状态，事件有界 16 条/500 字）。wire 14/14、esbuild 全绿。未跑真模型/e2e。
 ## 环境与错误
 
 | 问题 | 处理 |

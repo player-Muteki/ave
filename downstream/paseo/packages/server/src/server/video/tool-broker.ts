@@ -150,6 +150,27 @@ export class VideoToolBroker {
       }
       case "get_scene_cuts":
         return this.store.sceneCuts(projectId, call.args.assetId, principal);
+      case "get_planning_run": {
+        const lifecycle = this.store.runLifecycle(projectId, principal);
+        const current = lifecycle.find((r) => r.runId === runId);
+        const { events } = this.store.events(projectId, "0", principal);
+        const mine = events.filter((e) => e.runId === runId);
+        return {
+          projectId,
+          runId,
+          state: current?.state ?? "unknown",
+          eventCount: mine.length,
+          recentEvents: mine.slice(-16).map((e) => ({
+            seq: e.seq,
+            type: e.type,
+            payload:
+              typeof e.payload === "object" && e.payload !== null
+                ? JSON.stringify(e.payload).slice(0, 500)
+                : String(e.payload).slice(0, 500),
+          })),
+          note: "Read-only view of this planning run's persisted daemon events.",
+        };
+      }
       case "get_plan": {
         const plan = this.store
           .project(projectId, principal)
