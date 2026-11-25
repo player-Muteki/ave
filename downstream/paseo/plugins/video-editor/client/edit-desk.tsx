@@ -62,6 +62,10 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [captionStart, setCaptionStart] = useState("0");
   const [captionEnd, setCaptionEnd] = useState("1");
   const [gainMilli, setGainMilli] = useState("");
+  const [fadeSec, setFadeSec] = useState("");
+  const [scaleW, setScaleW] = useState("");
+  const [scaleH, setScaleH] = useState("");
+  const [rot, setRot] = useState("0");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -313,6 +317,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {field("字幕起点（秒）", captionStart, setCaptionStart)}
                 {field("字幕终点（秒）", captionEnd, setCaptionEnd)}
                 {field("音量增益（毫分贝，可空）", gainMilli, setGainMilli)}
+                {field("缩放宽（可空）", scaleW, setScaleW)}
+                {field("缩放高（可空）", scaleH, setScaleH)}
+                {field("旋转（0/90/180/270）", rot, setRot)}
               </View>
               {button("提交裁剪方案", async () => {
                 const draft = proposeCut(
@@ -324,6 +331,15 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                     ? { text: captionText.trim(), start: captionStart, end: captionEnd }
                     : undefined,
                   gainMilli,
+                  scaleW.trim() || scaleH.trim() || rot.trim() !== "0"
+                    ? {
+                        scaleW,
+                        scaleH,
+                        rotation: (["0", "90", "180", "270"].includes(rot.trim())
+                          ? rot.trim()
+                          : "0") as "0" | "90" | "180" | "270",
+                      }
+                    : undefined,
                 );
                 const token = requestId(JSON.stringify(draft));
                 await submit({
@@ -338,6 +354,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                 {field("删除起点（秒）", cutStart, setCutStart)}
                 {field("删除终点（秒）", cutEnd, setCutEnd)}
                 {field("素材总长（秒）", totalSec, setTotalSec)}
+                {field("转场时长（秒，空则无转场）", fadeSec, setFadeSec)}
               </View>
               {button("删除中段并拼接", async () => {
                 const draft = proposeCutOut(project, selected, cutStart, cutEnd, totalSec);
@@ -353,10 +370,14 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               {project.assets.filter((a) => a.streams.some((s) => s.kind === "video")).length > 1 &&
                 button("拼接：选中片段 + 首个素材全程", async () => {
                   const first = project.assets.find((a) => a.streams.some((s) => s.kind === "video"))!;
-                  const draft = proposeConcat(project, [
-                    { assetId: selected, start, end },
-                    { assetId: first.assetId, start: "0", end: totalSec },
-                  ]);
+                  const draft = proposeConcat(
+                    project,
+                    [
+                      { assetId: selected, start, end },
+                      { assetId: first.assetId, start: "0", end: totalSec },
+                    ],
+                    fadeSec.trim() || undefined,
+                  );
                   const token = requestId(JSON.stringify(draft));
                   await submit({
                     requestId: token,

@@ -39,6 +39,8 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
     "Bounded contact-sheet metadata for one asset (streams, grid budget, index hash). Never returns pixels.",
   get_qa_report:
     "Read the daemon QA artifact reference for a job: state, revision and qa hash. Never infers pass/fail.",
+  get_analysis:
+    "Latest analysis job metadata for one asset: state, sampling rate and QA artifact reference. Never returns pixels.",
 };
 
 /**

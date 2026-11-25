@@ -13,6 +13,12 @@ export interface CaptionCue {
   end: string;
 }
 
+export interface TransformSpec {
+  scaleW?: string;
+  scaleH?: string;
+  rotation?: "0" | "90" | "180" | "270";
+}
+
 export function proposeCut(
   project: ProjectSnapshot,
   assetId: string,
@@ -20,6 +26,7 @@ export function proposeCut(
   end: string,
   caption?: CaptionCue,
   audioGainMilli?: string,
+  transform?: TransformSpec,
 ): EditPlanDraftV1 {
   const asset = project.assets.find((a) => a.assetId === assetId);
   const stream = asset?.streams.find((s) => s.kind === "video");
@@ -28,6 +35,16 @@ export function proposeCut(
   const last = milliseconds(end);
   if (last <= first) throw new Error("出点必须晚于入点。");
   const duration = { num: (last - first).toString(), den: "1000" };
+  if (transform) {
+    for (const v of [transform.scaleW, transform.scaleH])
+      if (v !== undefined && v.trim() !== "" && !/^\d{1,7}$/.test(v.trim()))
+        throw new Error("缩放宽高必须是非负整数");
+    if (
+      transform.rotation !== undefined &&
+      !["0", "90", "180", "270"].includes(transform.rotation)
+    )
+      throw new Error("旋转角度只能是 0/90/180/270");
+  }
   return {
     schemaVersion: "video.edit-plan/v1",
     projectId: project.projectId,
@@ -51,7 +68,30 @@ export function proposeCut(
         recordRange: { start: { num: "0", den: "1" }, duration },
       },
     ],
-    transformOperations: [],
+    transformOperations: transform
+      ? [
+          {
+            opId: "xf-1",
+            order: "1",
+            trackId: "v1",
+            clipId: "clip-1",
+            source: {
+              assetId,
+              assetContentHash: asset.original.sha256,
+              streamUid: stream.streamUid,
+              probeRevision: "1",
+            },
+            sourceRange: { start: { num: first.toString(), den: "1000" }, duration },
+            recordRange: { start: { num: "0", den: "1" }, duration },
+            crop: { x: "0", y: "0", width: "0", height: "0" },
+            scale: {
+              width: transform.scaleW?.trim() || "0",
+              height: transform.scaleH?.trim() || "0",
+            },
+            rotationDegrees: transform.rotation ?? "0",
+          },
+        ]
+      : [],
     audioOperations:
       audioGainMilli && /^\d{1,6}$/.test(audioGainMilli.trim())
         ? [
@@ -152,7 +192,12 @@ export interface ConcatSegment {
 }
 
 /** Concatenate segments from possibly different assets into one contiguous timeline. */
-export function proposeConcat(project: ProjectSnapshot, segments: ConcatSegment[]): EditPlanDraftV1 {
+export function proposeConcat(
+  project: ProjectSnapshot,
+  segments: ConcatSegment[],
+  fadeSeconds?: string,
+  transitionKind: "crossfade" | "fade" = "crossfade",
+): EditPlanDraftV1 {
   if (!segments.length) throw new Error("至少需要一个片段。");
   const ops = segments.map((seg, i) => {
     const asset = project.assets.find((a) => a.assetId === seg.assetId);
@@ -183,9 +228,30 @@ export function proposeConcat(project: ProjectSnapshot, segments: ConcatSegment[
     cursor += to - from;
     return op;
   });
+  const fadeMs = fadeSeconds !== undefined ? milliseconds(fadeSeconds) : 0n;
+  const transitionOperations =
+    fadeMs > 0n && ops.length > 1
+      ? ops.slice(1).map((o, i) => {
+          const leftDur = ops[i]!.to - ops[i]!.from;
+          const rightDur = o.to - o.from;
+          if (fadeMs > leftDur || fadeMs > rightDur)
+            throw new Error("转场时长不能超过相邻任一片段");
+          return {
+            opId: `xfade-${i + 1}`,
+            order: (i + 1).toString(),
+            trackId: "v1",
+            clipId: `clip-${i + 2}`,
+            leftClipId: `clip-${i + 1}`,
+            rightClipId: `clip-${i + 2}`,
+            kind: transitionKind,
+            duration: { num: fadeMs.toString(), den: "1000" },
+          };
+        })
+      : [];
   const base = proposeCut(project, ops[0]!.asset.assetId, segments[0]!.start, segments[0]!.end);
   return {
     ...base,
+    transitionOperations,
     intent: `拼接 ${ops.length} 段：` + ops.map((o, i) => `${o.asset.displayName}[${segments[i]!.start}-${segments[i]!.end}]`).join(" + "),
     trimOperations,
   };

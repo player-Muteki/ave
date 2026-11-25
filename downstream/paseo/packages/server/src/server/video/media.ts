@@ -670,10 +670,21 @@ export class MediaService {
       (s) => s.streamUid === first.source.streamUid && s.kind === "video",
     );
     if (!firstVideo) editorFailure("CAPABILITY_UNAVAILABLE", "The first trim has no video stream");
-    // Multi-asset concat: every segment's video must share the first segment's
-    // geometry; mismatched geometry is normalized per segment before concat.
-    const targetW = firstVideo.width ?? 0;
-    const targetH = firstVideo.height ?? 0;
+    // Multi-asset concat: every segment is normalized to the main track's first
+    // segment's post-transform geometry before concat, so concat/xfade/overlay
+    // all see equal frames.
+    const transformOps = new Map(plan.transformOperations.map((t) => [t.clipId, t]));
+    const segGeo = ops.map((op) => {
+      const asset = assets.get(op.source.assetId)!;
+      const video = asset.streams.find(
+        (s) => s.streamUid === op.source.streamUid && s.kind === "video",
+      );
+      if (!video) editorFailure("CAPABILITY_UNAVAILABLE", "A trim has no video stream");
+      return segmentGeometry(video, transformOps.get(op.clipId));
+    });
+    const v1FirstIdx = Math.max(0, ops.findIndex((op) => op.trackId === "v1"));
+    const targetW = segGeo[v1FirstIdx]!.width;
+    const targetH = segGeo[v1FirstIdx]!.height;
     // One input per segment (each from its own asset); segments are trimmed in
     // source time, rebased to zero, normalized, then concatenated in record
     // order. Source PTS timing is preserved per segment (vfr).
@@ -681,26 +692,59 @@ export class MediaService {
     const filters: string[] = [];
     const audioOps = new Map(plan.audioOperations.map((op) => [op.clipId, op]));
     const audioProfile = [...assets.values()].flatMap(a => a.streams).find(s => s.kind === "audio");
+    // One input per segment for video. Audio operations may instead reference
+    // another project asset (e.g. music); those get dedicated extra inputs.
+    ops.forEach((op) => {
+      args.push("-i", this.cas.pathFor(assets.get(op.source.assetId)!.original));
+    });
+    const audioInput = new Map<string, number>();
+    for (const op of ops) {
+      const audioOp = op.trackId === "v1" ? audioOps.get(op.clipId) : undefined;
+      if (
+        audioOp &&
+        audioOp.source.assetId !== op.source.assetId &&
+        !audioInput.has(audioOp.source.assetId)
+      ) {
+        args.push("-i", this.cas.pathFor(assets.get(audioOp.source.assetId)!.original));
+        audioInput.set(audioOp.source.assetId, ops.length + audioInput.size);
+      }
+    }
+    const audioSegments: number[] = [];
     ops.forEach((op, i) => {
       const asset = assets.get(op.source.assetId)!;
       const video = asset.streams.find(
         (s) => s.streamUid === op.source.streamUid && s.kind === "video",
       );
       if (!video) editorFailure("CAPABILITY_UNAVAILABLE", `Segment ${i} has no video stream`);
-      const audio = asset.streams.filter((s) => s.kind === "audio");
-      if (audio.length > 1) editorFailure("CAPABILITY_UNAVAILABLE", "At most one audio stream per asset");
-      args.push("-i", this.cas.pathFor(asset.original));
       const range = `start=${rationalSeconds(op.sourceRange.start)}:duration=${rationalSeconds(op.sourceRange.duration)}`;
       let vchain = `[${i}:${video.streamIndex}]trim=${range},setpts=PTS-STARTPTS`;
-      if (targetW && targetH && (video.width !== targetW || video.height !== targetH))
+      vchain += transformFilterChain(video, transformOps.get(op.clipId));
+      const geo = segGeo[i]!;
+      if (targetW && targetH && (geo.width !== targetW || geo.height !== targetH))
         vchain += `,scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2`;
       vchain += `,setsar=1[vs${i}]`;
       filters.push(vchain);
-      if (audio[0]) {
-        if (audio[0].channels !== audioProfile?.channels)
+      // Audio rides the main track only, so the mixed audio timeline matches v1.
+      if (op.trackId !== "v1") return;
+      const audioOp = audioOps.get(op.clipId);
+      const audioAsset = audioOp ? assets.get(audioOp.source.assetId)! : asset;
+      const audioIdx =
+        audioOp && audioOp.source.assetId !== op.source.assetId
+          ? audioInput.get(audioOp.source.assetId)!
+          : i;
+      const audioRange = audioOp
+        ? `start=${rationalSeconds(audioOp.sourceRange.start)}:duration=${rationalSeconds(audioOp.sourceRange.duration)}`
+        : range;
+      const audio = audioAsset.streams.filter((s) => s.kind === "audio");
+      if (audio.length > 1) editorFailure("CAPABILITY_UNAVAILABLE", "At most one audio stream per asset");
+      const stream = audioOp
+        ? audio.find((a) => a.streamUid === audioOp.source.streamUid)
+        : audio[0];
+      if (stream) {
+        if (stream.channels !== audioProfile?.channels)
           editorFailure("CAPABILITY_UNAVAILABLE", "Mixed audio channel counts require an explicit mix");
-        let chain = `[${i}:${audio[0].streamIndex}]atrim=${range},asetpts=PTS-STARTPTS`;
-        const audioOp = audioOps.get(op.clipId);
+        audioSegments.push(i);
+        let chain = `[${audioIdx}:${stream.streamIndex}]atrim=${audioRange},asetpts=PTS-STARTPTS`;
         if (audioOp) {
           const gainDb = audioOp.mute ? "-inf" : (Number(audioOp.gainMilli) / 1000).toFixed(3);
           chain += `,volume=${gainDb}dB`;
@@ -709,17 +753,107 @@ export class MediaService {
       } else if (audioProfile) {
         const layout = audioProfile.channels === 1 ? "mono" : audioProfile.channels === 2 ? "stereo" : undefined;
         if (!layout) editorFailure("CAPABILITY_UNAVAILABLE", "Silent segments require a mono or stereo mix");
+        audioSegments.push(i);
         filters.push(`anullsrc=r=48000:cl=${layout},atrim=duration=${rationalSeconds(op.recordRange.duration)},asetpts=PTS-STARTPTS[as${i}]`);
       }
     });
-    const vLabels = ops.map((_, i) => `[vs${i}]`).join("");
-    // Preserve the source clock for a single trim. concat otherwise quantizes to microseconds.
-    const clock = `${firstVideo.timeBase.num}/${firstVideo.timeBase.den}`;
-    filters.push(ops.length === 1 ? `${vLabels}null[vcat]` :
-      `${vLabels}concat=n=${ops.length}:v=1:a=0,settb=${clock}[vcat]`);
-    if (audioProfile) {
-      const labels = ops.map((_, i) => `[as${i}]`).join("");
-      filters.push(`${labels}concat=n=${ops.length}:v=0:a=1[acat]`);
+    // Build one concat/xfade chain per track, then overlay v2 onto v1. A track
+    // without transitions keeps the source clock via a single concat + settb.
+    const transitions = new Map(
+      plan.transitionOperations.map((tr) => [tr.leftClipId, tr]),
+    );
+    const segDur = (i: number) => Number(rationalSeconds(ops[i]!.recordRange.duration));
+    const trackOrder = [...new Set(ops.map((op) => op.trackId))].sort((a, b) =>
+      a === "v1" ? -1 : b === "v1" ? 1 : a.localeCompare(b),
+    );
+    const trackOut: string[] = [];
+    for (const trackId of trackOrder) {
+      const indices = ops
+        .map((op, i) => [op, i] as const)
+        .filter(([op]) => op.trackId === trackId)
+        .map(([, i]) => i);
+      const tag = trackId.replace(/[^A-Za-z0-9]/g, "");
+      const trackTransitions = indices
+        .map((i) => transitions.get(ops[i]!.clipId))
+        .filter((tr) => tr !== undefined);
+      if (!trackTransitions.length) {
+        const vLabels = indices.map((i) => `[vs${i}]`).join("");
+        const clock = `${firstVideo.timeBase.num}/${firstVideo.timeBase.den}`;
+        filters.push(
+          indices.length === 1
+            ? `${vLabels}null[vcat_${tag}]`
+            : `${vLabels}concat=n=${indices.length}:v=1:a=0,settb=${clock}[vcat_${tag}]`,
+        );
+        trackOut.push(`[vcat_${tag}]`);
+        continue;
+      }
+      let vAcc = `[vs${indices[0]!}]`;
+      let vAccDur = segDur(indices[0]!);
+      for (let k = 1; k < indices.length; k++) {
+        const i = indices[k]!;
+        const prev = indices[k - 1]!;
+        const tr = transitions.get(ops[prev]!.clipId);
+        if (!tr) {
+          filters.push(`[${vAcc}][vs${i}]concat=n=2:v=1:a=0[vacc_${tag}_${k}]`);
+          vAcc = `[vacc_${tag}_${k}]`;
+          vAccDur += segDur(i);
+          continue;
+        }
+        const firstOp = ops[indices[0]!]!;
+        const rate0 = assets.get(firstOp.source.assetId)!.streams.find(
+          (s) => s.streamUid === firstOp.source.streamUid,
+        )!.averageRate;
+        const vRate = assets.get(ops[i]!.source.assetId)!.streams.find(
+          (s) => s.streamUid === ops[i]!.source.streamUid,
+        )!.averageRate;
+        if (JSON.stringify(rate0 ?? null) !== JSON.stringify(vRate ?? null))
+          editorFailure("CAPABILITY_UNAVAILABLE", "Crossfade requires equal segment frame rates");
+        const trDur = Number(rationalSeconds(tr.duration));
+        const offset = Math.max(0, vAccDur - trDur);
+        filters.push(
+          `[${vAcc}][vs${i}]xfade=transition=${tr.kind === "crossfade" ? "fade" : "fadeblack"}:duration=${trDur.toFixed(6)}:offset=${offset.toFixed(6)}[vacc_${tag}_${k}]`,
+        );
+        vAcc = `[vacc_${tag}_${k}]`;
+        vAccDur = offset + segDur(i);
+      }
+      filters.push(`${vAcc}null[vcat_${tag}]`);
+      trackOut.push(`[vcat_${tag}]`);
+    }
+    if (trackOut.length === 1) filters.push(`${trackOut[0]}null[vcat]`);
+    else filters.push(`${trackOut[0]}${trackOut[1]}overlay=0:0:eof_action=pass[vcat]`);
+    if (audioSegments.length) {
+      const v1Count = ops.filter((op) => op.trackId === "v1").length;
+      if (plan.transitionOperations.length && audioSegments.length !== v1Count)
+        editorFailure("CAPABILITY_UNAVAILABLE", "Crossfade requires audio on every main-track segment");
+      const aLabels = audioSegments.map((i) => `[as${i}]`).join("");
+      if (!plan.transitionOperations.length) {
+        filters.push(
+          audioSegments.length === 1
+            ? `${aLabels}anull[acat]`
+            : `${aLabels}concat=n=${audioSegments.length}:v=0:a=1[acat]`,
+        );
+      } else {
+        let aAcc = `[as${audioSegments[0]!}]`;
+        let aAccDur = segDur(audioSegments[0]!);
+        for (let k = 1; k < audioSegments.length; k++) {
+          const i = audioSegments[k]!;
+          const tr = transitions.get(ops[audioSegments[k - 1]!]!.clipId);
+          if (!tr) {
+            filters.push(`[${aAcc}][as${i}]concat=n=2:v=0:a=1[aacc${k}]`);
+            aAcc = `[aacc${k}]`;
+            aAccDur += segDur(i);
+            continue;
+          }
+          const trDur = Number(rationalSeconds(tr.duration));
+          const offset = Math.max(0, aAccDur - trDur);
+          filters.push(
+            `[${aAcc}][as${i}]acrossfade=d=${trDur.toFixed(6)}:c1=tri:c2=tri[aacc${k}]`,
+          );
+          aAcc = `[aacc${k}]`;
+          aAccDur = offset + segDur(i);
+        }
+        filters.push(`${aAcc}anull[acat]`);
+      }
     }
     filters.push(
       kind === "preview"
@@ -771,7 +905,7 @@ export class MediaService {
       "-pix_fmt",
       "yuv420p",
     );
-    if (audioProfile)
+    if (audioSegments.length)
       args.push("-map", "[acat]", "-c:a", "aac", "-ar", "48000");
     args.push("-movflags", "+faststart", output);
     try {
@@ -852,6 +986,62 @@ export function assertCandidateAudio(
   })) editorFailure("QA_FAILED", "Candidate audio tracks differ from the approved render profile");
 }
 
+type TransformOp = AcceptedEditPlan["transformOperations"][number];
+
+function segmentGeometry(
+  video: { width?: number; height?: number },
+  tr: TransformOp | undefined,
+): { width: number; height: number } {
+  let w = video.width ?? 0;
+  let h = video.height ?? 0;
+  if (tr) {
+    const cw = Number(tr.crop.width);
+    const ch = Number(tr.crop.height);
+    if (cw > 0 || ch > 0) {
+      w = cw;
+      h = ch;
+    }
+    const sw = Number(tr.scale.width);
+    const sh = Number(tr.scale.height);
+    if (sw > 0 || sh > 0) {
+      w = sw;
+      h = sh;
+    }
+    if (tr.rotationDegrees === "90" || tr.rotationDegrees === "270") {
+      const t = w;
+      w = h;
+      h = t;
+    }
+  }
+  return { width: w, height: h };
+}
+
+function transformFilterChain(
+  video: { width?: number; height?: number },
+  tr: TransformOp | undefined,
+): string {
+  if (!tr) return "";
+  let chain = "";
+  const cw = Number(tr.crop.width);
+  const ch = Number(tr.crop.height);
+  if (cw > 0 || ch > 0) {
+    if (
+      video.width &&
+      video.height &&
+      (Number(tr.crop.x) + cw > video.width || Number(tr.crop.y) + ch > video.height)
+    )
+      editorFailure("CAPABILITY_UNAVAILABLE", "Crop exceeds the source frame");
+    chain += `,crop=${cw}:${ch}:${tr.crop.x}:${tr.crop.y}`;
+  }
+  const sw = Number(tr.scale.width);
+  const sh = Number(tr.scale.height);
+  if (sw > 0 || sh > 0) chain += `,scale=${sw}:${sh}`;
+  if (tr.rotationDegrees === "90") chain += ",transpose=1";
+  else if (tr.rotationDegrees === "180") chain += ",hflip,vflip";
+  else if (tr.rotationDegrees === "270") chain += ",transpose=2";
+  return chain;
+}
+
 function checkCandidate(
   doc: ProbeDocument,
   asset: SourceAsset,
@@ -861,8 +1051,11 @@ function checkCandidate(
 ): void {
   const video = doc.streams.find((s) => s.codec_type === "video");
   const source = asset.streams.find((s) => s.kind === "video");
-  const width = kind === "final" ? source?.width : 640;
-  const height = kind === "final" ? source?.height : 360;
+  const candidateTransforms = new Map(plan.transformOperations.map((t) => [t.clipId, t]));
+  const v1First = plan.trimOperations.find((op) => op.trackId === "v1") ?? plan.trimOperations[0]!;
+  const outGeo = segmentGeometry(source ?? {}, candidateTransforms.get(v1First.clipId));
+  const width = kind === "final" ? outGeo.width || source?.width : 640;
+  const height = kind === "final" ? outGeo.height || source?.height : 360;
   const expectedStreams = 1 + (audioProfile ? 1 : 0);
   if (
     !video ||
@@ -874,10 +1067,19 @@ function checkCandidate(
     editorFailure("QA_FAILED", "Unexpected candidate streams or dimensions");
   assertCandidateAudio(audioProfile ? [audioProfile] : [], doc.streams);
   let total = { num: 0n, den: 1n };
+  const trackByClip = new Map(plan.trimOperations.map((op) => [op.clipId, op.trackId]));
   for (const op of plan.trimOperations) {
+    if (op.trackId !== "v1") continue;
     total = {
       num: total.num * BigInt(op.recordRange.duration.den) + BigInt(op.recordRange.duration.num) * total.den,
       den: total.den * BigInt(op.recordRange.duration.den),
+    };
+  }
+  for (const tr of plan.transitionOperations) {
+    if (trackByClip.get(tr.leftClipId) !== "v1") continue;
+    total = {
+      num: total.num * BigInt(tr.duration.den) - BigInt(tr.duration.num) * total.den,
+      den: total.den * BigInt(tr.duration.den),
     };
   }
   const dur: Rational = { num: total.num.toString(), den: total.den.toString() };

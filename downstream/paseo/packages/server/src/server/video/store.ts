@@ -1112,6 +1112,23 @@ export class EditorStore {
       this.validateRange(operation.sourceRange);
       this.validateRange(operation.recordRange);
     }
+    for (const kind of ["audio", "video"] as const) {
+      const operations =
+        kind === "audio" ? draft.audioOperations : draft.transformOperations;
+      for (const operation of operations) {
+        const asset = assets.get(operation.source.assetId);
+        if (!asset || asset.original.sha256 !== operation.source.assetContentHash)
+          editorFailure("PLAN_SEMANTIC_INVALID", "The operation refers to a missing or changed asset");
+        if (
+          !asset.streams.some(
+            (stream) => stream.streamUid === operation.source.streamUid && stream.kind === kind,
+          )
+        )
+          editorFailure("PLAN_SEMANTIC_INVALID", "The operation must select an existing stream");
+        this.validateRange(operation.sourceRange);
+        this.validateRange(operation.recordRange);
+      }
+    }
   }
 
   private validateRange(range: {
