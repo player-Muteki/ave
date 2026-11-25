@@ -315,3 +315,9 @@
 以 24000/1001 fps、2400 帧的 100.1 秒真实 MP4 做两次分析。24000/1001 和 30000/1001 从任务到 Python 映射及报告均保持精确，分别得到 2400 和 3000 个采样点，最后一个都映射到源帧 2399。实际 FFmpeg 场景切点位于帧 601、1202、1803，三个位置均逐个对照源 PTS，以整数交叉相乘确认零误差。原视频摘要未变。工作台的手输秒数字段维持毫秒精度。
 
 `analysis-rate.test.ts` 同时覆盖默认 25/1、等价分数去重、1 与 1000 fps 两端限幅及非法输入。TS 与 Python 通过 169 个契约样例，另通过 20 项 Python 采样映射检查。
+
+## v0.1.0 · 干净源码集成与候选安装验证
+
+在 macOS arm64 临时检出 Paseo `c626bf37071491981fc8e11c3e2f4df093381d37`，叠加 AVE `7033c2673fa82bfe7bec4865909b71c16bd55d1b`。Node 22.23.2、npm 10.9.8 从 lockfile 安装 2,862 个包并运行 postinstall 和 prepare，server 与 CLI 的 clean build 通过。插件的 10 个测试文件共 220 项通过，服务端的 27 个文件共 108 项通过，其中包含真实 Chrome 工作台。另有两个需要模型服务的测试在该次回归中跳过。媒体验证使用自编译 FFmpeg/ffprobe，源提交为 `38b88335f99e76ed89ff3c93f877fdefce736c13`，Worker 解释器为 CPython 3.12.16。
+
+首次原生构建中，Linux 包内的 FFmpeg、ffprobe、Python、CLI 冷启动、Electron 窗口与 daemon 成功启动；规划 Worker 的回环探测返回 failed。Windows 的原生 FFmpeg 构建目标已修正。安装包生成、安装后启动和真实模型演示分别记录结果。[原生构建日志](https://github.com/player-Muteki/ave/actions/runs/45655778803)
