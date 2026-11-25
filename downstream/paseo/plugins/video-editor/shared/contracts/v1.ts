@@ -962,6 +962,18 @@ export const getWaveformRpc = {
   output: GetWaveformResultSchema,
 };
 
+export const GetPlanInputSchema = z
+  .object({ requestId, projectId: id, planId: id })
+  .strict();
+export type GetPlanInput = z.infer<typeof GetPlanInputSchema>;
+export const GetPlanResultSchema = AcceptedEditPlanSchema.extend({ requestId }).strict();
+export type GetPlanResult = z.infer<typeof GetPlanResultSchema>;
+export const getPlanRpc = {
+  name: "video.v1.get_plan",
+  input: GetPlanInputSchema,
+  output: GetPlanResultSchema,
+};
+
 export const contactSheetRpc = {
   name: "video.v1.contact_sheet",
   input: ContactSheetRequestSchema,
