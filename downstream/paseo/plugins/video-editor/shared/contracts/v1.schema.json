@@ -3595,6 +3595,33 @@
             },
             "tool": {
               "type": "string",
+              "const": "estimate_timeline"
+            },
+            "args": {
+              "$ref": "urn:video-editor:v1:EditPlanDraftV1"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "toolCallId",
+            "tool",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "type": "string",
+              "const": "1"
+            },
+            "toolCallId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "tool": {
+              "type": "string",
               "const": "submit_edit_plan"
             },
             "args": {

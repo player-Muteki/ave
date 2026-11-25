@@ -9,6 +9,7 @@ const pi = new URL("../../../references/pi-sdk-probe/", here);
 const source = new URL("packages/coding-agent/src/core/", pi);
 const expected = [
   "diff_plans",
+  "estimate_timeline",
   "get_analysis",
   "get_asset_metadata",
   "get_contact_sheet",

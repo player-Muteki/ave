@@ -401,6 +401,7 @@ export const VideoToolCallSchema = z.discriminatedUnion("tool", [
     args: z.object({ jobId: id }).strict(),
   }),
   toolEnvelope.extend({ tool: z.literal("validate_edit_plan"), args: EditPlanDraftV1Schema }),
+  toolEnvelope.extend({ tool: z.literal("estimate_timeline"), args: EditPlanDraftV1Schema }),
   toolEnvelope.extend({ tool: z.literal("submit_edit_plan"), args: EditPlanDraftV1Schema }),
   toolEnvelope.extend({
     tool: z.literal("get_contact_sheet"),
