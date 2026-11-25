@@ -1085,6 +1085,31 @@ export const getExportSummaryRpc = {
   output: GetExportSummaryResultSchema,
 };
 
+export const VerifyExportInputSchema = z
+  .object({ requestId, projectId: id, jobId: id })
+  .strict();
+export type VerifyExportInput = z.infer<typeof VerifyExportInputSchema>;
+export const VerifyExportResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    jobId: id,
+    state: JobStateSchema,
+    verified: z.boolean(),
+    outputSha256: sha256.nullable(),
+    manifestSha256: sha256,
+    renderRecipeHash: sha256.nullable(),
+    planHash: sha256.nullable(),
+    detail: z.string(),
+  })
+  .strict();
+export type VerifyExportResult = z.infer<typeof VerifyExportResultSchema>;
+export const verifyExportRpc = {
+  name: "video.v1.verify_export",
+  input: VerifyExportInputSchema,
+  output: VerifyExportResultSchema,
+};
+
 export const AssetMetadataSchema = z
   .object({
     assetId: id,

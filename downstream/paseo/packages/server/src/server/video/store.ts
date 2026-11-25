@@ -6,7 +6,7 @@ import type { ProbeDocument } from "./media.js";
 import type { SqliteDatabase } from "./sqlite-types.js";
 import { DatabaseSync } from "./sqlite.js";
 import { assertRenderablePreview, summarizeDraftTimeline } from "./preview-profile.js";
-import { sha256Json, type ContentAddressedStore } from "./cas.js";
+import { sha256File, sha256Json, type ContentAddressedStore } from "./cas.js";
 import {
   BlobRefSchema,
   type BlobRef,
@@ -1129,6 +1129,41 @@ export class EditorStore {
       fingerprint: row.fingerprint,
       response: JSON.parse(row.response),
       createdAt: row.created_at,
+    };
+  }
+
+  /**
+   * Re-hash the delivered export bytes in CAS and compare with the manifest's
+   * recorded output hash. Operator-level; pure verification, no mutation.
+   */
+  async verifyExport(projectId: string, jobId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "operator");
+    if (!this.cas) editorFailure("CAPABILITY_UNAVAILABLE", "The CAS reader is not bound to the store");
+    const job = this.job(projectId, jobId, principal);
+    if (job.kind !== "export") editorFailure("INVALID_ARGUMENT", "The job is not an export");
+    const manifest = job.artifacts.find((a) => a.kind === "manifest");
+    const output = job.artifacts.find((a) => a.kind === "export");
+    if (!manifest || !output) editorFailure("ASSET_NOT_FOUND", "The export job has no manifest/export artifact yet");
+    const doc = JSON.parse((await this.cas.readBytes(manifest.blob)).toString("utf8")) as {
+      output?: { sha256?: string };
+      renderRecipeHash?: string | null;
+      planHash?: string;
+    };
+    const expected = doc.output?.sha256;
+    if (!expected) editorFailure("ARTIFACT_HASH_MISMATCH", "The manifest does not record an output hash");
+    const actual = await sha256File(this.cas.pathFor(output.blob));
+    const verified = actual === expected && actual === output.blob.sha256;
+    return {
+      jobId,
+      state: job.state,
+      verified,
+      outputSha256: actual,
+      manifestSha256: manifest.blob.sha256,
+      renderRecipeHash: doc.renderRecipeHash ?? null,
+      planHash: doc.planHash ?? null,
+      detail: verified
+        ? "delivered bytes match the manifest output hash"
+        : "delivered bytes differ from the manifest output hash",
     };
   }
 

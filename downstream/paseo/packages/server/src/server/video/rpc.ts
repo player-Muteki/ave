@@ -24,6 +24,7 @@ import {
   GetWaveformInputSchema,
   GetPlanInputSchema,
   GetExportSummaryInputSchema,
+  VerifyExportInputSchema,
   GetAssetMetadataInputSchema,
   ContactSheetRequestSchema,
   InspectFrameRequestSchema,
@@ -221,6 +222,14 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...(await this.editor.store.exportSummary(request.projectId, request.jobId, principal)),
+        };
+      }
+      case "video.v1.verify_export": {
+        const request = VerifyExportInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          ...(await this.editor.store.verifyExport(request.projectId, request.jobId, principal)),
         };
       }
       case "video.v1.get_asset_metadata": {

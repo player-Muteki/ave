@@ -12,7 +12,7 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, getExportSummaryRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
+  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
@@ -73,6 +73,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readWaveform = useRpc(getWaveformRpc);
   const readPlan = useRpc(getPlanRpc);
   const readExportSummary = useRpc(getExportSummaryRpc);
+  const verifyExport = useRpc(verifyExportRpc);
   const readAssetMetadata = useRpc(getAssetMetadataRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
@@ -951,6 +952,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   jobId: job.jobId,
                 });
                 setNotice(`导出 ${ex.exportId ?? job.jobId.slice(0, 12)} · 段 ${ex.segmentCount} · 转场 ${ex.transitionCount} · 音频 ${ex.audioOperationCount} · 字幕 ${ex.subtitleCueCount} · recipe ${ex.renderRecipeHash?.slice(0, 12) ?? "-"} · plan ${ex.planHash?.slice(0, 12) ?? "-"} · 输出 ${ex.output ? `${ex.output.bytes}B ${ex.output.sha256.slice(0, 12)}` : "-"}`);
+              })}
+              {job.kind === "export" && job.state === "completed" && button("校验导出", async () => {
+                const v = await verifyExport({
+                  requestId: requestId(`verify:${job.jobId}`),
+                  projectId: project.projectId,
+                  jobId: job.jobId,
+                });
+                setNotice(v.verified
+                  ? `导出校验通过：输出 SHA-256 ${v.outputSha256?.slice(0, 12)} 与 manifest 一致（recipe ${v.renderRecipeHash?.slice(0, 12) ?? "-"}）`
+                  : `导出校验失败：${v.detail}`);
               })}
               {job.kind === "export" && job.state === "completed" && job.artifacts.map(a =>
                 a.projectId === project.projectId && a.jobId === job.jobId && (a.kind === "export" || a.kind === "manifest")
