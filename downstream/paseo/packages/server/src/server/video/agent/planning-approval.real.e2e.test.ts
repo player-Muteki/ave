@@ -91,7 +91,8 @@ test.skipIf(process.env.VIDEO_EDITOR_LIVE_PLANNER_TEST !== "1")(
         expect(saved.approvals[0]).toMatchObject({
           status: "pending", purpose: "preview", subjectId: plan!.planId, subjectHash: plan!.planHash,
         });
-        expect(saved.jobs).toEqual([]);
+        expect(saved.jobs.map(j => j.jobId)).toEqual(baseline.jobs.map(j => j.jobId));
+        expect(saved.jobs.every(j => j.kind === "analysis")).toBe(true);
         expect(await getEvents()).toEqual(expect.arrayContaining([
           expect.objectContaining({ type: "plan.proposed" }),
           expect.objectContaining({ type: "approval.requested" }),

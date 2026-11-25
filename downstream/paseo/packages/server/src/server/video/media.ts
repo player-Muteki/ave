@@ -494,6 +494,15 @@ export class MediaService {
     finalSha256: string,
     principal: EditorPrincipal,
   ): Promise<SourceAsset> {
+    return (await this.commitUploadWithProject(uploadId, requestId, finalSha256, principal)).asset;
+  }
+
+  async commitUploadWithProject(
+    uploadId: string,
+    requestId: string,
+    finalSha256: string,
+    principal: EditorPrincipal,
+  ): Promise<{ projectId: string; asset: SourceAsset }> {
     return this.withUpload(uploadId, () =>
       this.commitConfirmedUpload(uploadId, requestId, finalSha256, principal),
     );
@@ -504,7 +513,7 @@ export class MediaService {
     requestId: string,
     finalSha256: string,
     principal: EditorPrincipal,
-  ): Promise<SourceAsset> {
+  ): Promise<{ projectId: string; asset: SourceAsset }> {
     const receipt = this.store.committedUpload(uploadId, requestId, finalSha256, principal);
     if (receipt) {
       await this.cas.removeTemporary(uploadId);
@@ -529,7 +538,7 @@ export class MediaService {
     });
     const result = this.store.finishUpload(uploadId, asset, requestId, principal);
     await this.cas.removeTemporary(uploadId);
-    return result;
+    return { projectId: upload.projectId, asset: result };
   }
 
   async readPlan(projectId: string, planHash: string): Promise<AcceptedEditPlan> {

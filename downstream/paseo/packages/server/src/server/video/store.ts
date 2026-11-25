@@ -569,7 +569,7 @@ export class EditorStore {
     requestId: string,
     sha256: string,
     principal: EditorPrincipal,
-  ): SourceAsset | undefined {
+  ): { projectId: string; asset: SourceAsset } | undefined {
     const receipt = this.database
       .prepare(`SELECT r.project_id, r.request_id, r.principal_id, r.sha256, m.response
       FROM upload_receipts r JOIN mutations m USING(project_id, request_id) WHERE r.upload_id = ?`)
@@ -588,7 +588,7 @@ export class EditorStore {
       editorFailure("PERMISSION_DENIED", "This upload receipt belongs to another principal");
     if (receipt.request_id !== requestId || receipt.sha256 !== sha256)
       editorFailure("IDEMPOTENCY_CONFLICT", "The upload was committed with a different request");
-    return SourceAssetSchema.parse(JSON.parse(receipt.response));
+    return { projectId: receipt.project_id, asset: SourceAssetSchema.parse(JSON.parse(receipt.response)) };
   }
 
   finishUpload(

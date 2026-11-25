@@ -190,6 +190,12 @@ test.each([
       expect(BigInt(header.pts) * BigInt(header.timeBase.num) * 25n).toBe(6n * BigInt(header.timeBase.den));
       expect(header.previewSha256).toBe(createHash("sha256").update(payload).digest("hex"));
     }
+    // The import starts an independent analysis job. Compare replay snapshots only
+    // after it finishes, so the equality check still covers every job and event.
+    await expect.poll(async () => {
+      const snap = ProjectSnapshotSchema.parse(await invoke("get_project", { projectId }));
+      return snap.jobs.find(job => job.analysisAssetId === asset.assetId)?.state;
+    }, { timeout: 15000 }).toBe("completed");
     const beforeReplay = await invoke("get_project", { projectId });
     expect(await invoke("commit_upload", commit)).toEqual(asset);
     await expect(

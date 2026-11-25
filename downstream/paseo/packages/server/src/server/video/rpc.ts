@@ -53,13 +53,7 @@ export class EditorRpcService {
               reason: "Full source build and media conformance have not been verified",
             },
           ],
-          workerProfiles: [
-            {
-              id: "ffmpeg-burnin",
-              available: burnIn,
-              reason: burnIn ? undefined : "fontconfig/fonts not available; use metadata subtitles",
-            },
-          ],
+          workerProfiles: [],
         };
       }
       case "video.v1.create_project":
@@ -205,8 +199,7 @@ export class EditorRpcService {
         const request = z
           .object({ requestId: z.string(), uploadId: z.string(), finalSha256: z.string() })
           .parse(input);
-        const upload = this.editor.store.upload(request.uploadId);
-        const asset = await this.editor.media.commitUpload(
+        const { asset, projectId } = await this.editor.media.commitUploadWithProject(
           request.uploadId,
           request.requestId,
           request.finalSha256,
@@ -218,7 +211,7 @@ export class EditorRpcService {
         if (asset.streams.some((s) => s.kind === "video")) {
           const result = this.editor.store.createAnalysisJob({
             requestId: `analysis:auto:${asset.assetId}`,
-            projectId: upload.projectId,
+            projectId,
             assetId: asset.assetId,
             principal,
           });

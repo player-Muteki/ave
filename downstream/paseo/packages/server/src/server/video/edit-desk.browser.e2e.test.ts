@@ -183,7 +183,7 @@ test
         });
         await clickDesk("查看联系表");
         await web("wait", "--fn", `document.querySelector('img[alt^="contact sheet"]')?.naturalWidth > 0`);
-        expect(imported.jobs).toHaveLength(0);
+        expect(imported.jobs).toMatchObject([{ kind: "analysis", analysisAssetId: imported.assets[0]!.assetId }]);
         expect(imported.approvals).toHaveLength(0);
         await web("fill", '[aria-label="源帧序号（从零开始）"]', "4");
         await clickDesk("查看源帧");
@@ -224,7 +224,7 @@ test
         await clickDesk("保存掩码供审批");
         await web("wait", "--text", "输入掩码待审批");
         const saved = ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId}));
-        expect(saved.jobs).toHaveLength(0);
+        expect(saved.jobs.filter(j => !j.analysisAssetId)).toHaveLength(0);
         const [approval] = saved.approvals;
         expect(approval).toMatchObject({status: "pending", purpose: "input", subjectType: "mask_revision"});
         const track = {projectId: saved.projectId, expectedRevision: saved.revision, anchorApprovalId: approval!.approvalId,
@@ -267,19 +267,19 @@ test
         await clickDesk("批准此输入掩码");
         await web("wait", "--text", "输入掩码已批准");
         const approved = ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId}));
-        expect(approved.jobs).toHaveLength(0);
+        expect(approved.jobs.filter(j => !j.analysisAssetId)).toHaveLength(0);
         expect(approved.approvals).toHaveLength(1);
         expect(approved.approvals[0]).toMatchObject({status: "approved", purpose: "input", subjectHash: approval!.subjectHash});
         await expect(invoke("track_mask", {...track, firstFrame: 5, requestId:"outside-anchor"})).rejects.toThrow();
         await clickDesk("传播已批准的掩码");
         await expect.poll(async () => {
           const p = ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId}));
-          if (p.jobs[0]?.state === "failed") throw Error(JSON.stringify(p.jobs[0].error));
-          return p.jobs[0]?.state;
+          if (p.jobs.find(j => !j.analysisAssetId)?.state === "failed") throw Error(JSON.stringify(p.jobs.find(j => !j.analysisAssetId)?.error));
+          return p.jobs.find(j => !j.analysisAssetId)?.state;
         }, {timeout: 45000}).toBe("completed");
         const finished = ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId}));
         expect(finished.approvals).toHaveLength(1);
-        const job = finished.jobs[0]!;
+        const job = finished.jobs.find(j => !j.analysisAssetId)!;
         expect(job.analysisAssetId).toBeUndefined();
         const artifact = job.artifacts.find(a => a.kind === "mask")!;
         const manifest = TrackedMaskManifestSchema.parse(JSON.parse((await cas.readBytes(artifact.blob)).toString("utf8")));
@@ -366,7 +366,7 @@ test
       );
       expect(saved.plans).toHaveLength(1);
       expect(saved.approvals[0]?.status).toBe("pending");
-      expect(saved.jobs).toHaveLength(0);
+      expect(saved.jobs.filter(j => !j.analysisAssetId)).toHaveLength(0);
       expect(saved.plans[0]?.trimOperations[0]?.sourceRange).toEqual({
         start: { num: "120", den: "1000" },
         duration: { num: "1280", den: "1000" },
@@ -378,7 +378,7 @@ test
         const rejected = ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId}));
         expect(rejected.approvals).toHaveLength(1);
         expect(rejected.approvals[0]).toMatchObject({approvalId:saved.approvals[0]?.approvalId, status:"rejected"});
-        expect(rejected.jobs).toHaveLength(0);
+        expect(rejected.jobs.filter(j => !j.analysisAssetId)).toHaveLength(0);
         expect(rejected.revision).toBe(saved.revision);
         return;
       }
@@ -416,7 +416,7 @@ test
           async () =>
             ProjectSnapshotSchema.parse(
               await invoke("get_project", { projectId: project.projectId }),
-            ).jobs[0]?.state,
+            ).jobs.find(j => j.kind === "preview")?.state,
           { timeout: 10000 },
         )
         .toBe("awaiting_review");
@@ -433,7 +433,7 @@ test
       const reviewed = ProjectSnapshotSchema.parse(
         await invoke("get_project", { projectId: project.projectId }),
       );
-      expect(reviewed.jobs).toHaveLength(1);
+      expect(reviewed.jobs.filter(j => !j.analysisAssetId)).toHaveLength(1);
       const finalApproval = reviewed.approvals.find((a) => a.purpose === "final");
       expect(finalApproval?.status).toBe("pending");
       await web("eval", `[...document.querySelectorAll('[role="button"],button')].find(n=>n.textContent==='批准渲染成品候选')?.scrollIntoView({block:'center'}); true`);
@@ -443,7 +443,7 @@ test
         return current.jobs.find(j => j.kind === "final")?.state;
       }, { timeout: 15000 }).toBe("awaiting_delivery_approval");
       const finalReady = ProjectSnapshotSchema.parse(await invoke("get_project", { projectId: project.projectId }));
-      expect(finalReady.jobs).toHaveLength(2);
+      expect(finalReady.jobs.filter(j => !j.analysisAssetId)).toHaveLength(2);
       expect(finalReady.jobs.find(j => j.kind === "final")?.approvalId).toBe(finalApproval?.approvalId);
       const exportApproval = finalReady.approvals.find(a => a.purpose === "export");
       expect(exportApproval?.status).toBe("pending");
@@ -460,7 +460,7 @@ test
       await expect.poll(async () => Number(await web("eval",
         `document.querySelector('${finalVideo}').currentTime`))).toBeGreaterThan(0);
       const beforeExport = ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId}));
-      expect(beforeExport.jobs).toHaveLength(2);
+      expect(beforeExport.jobs.filter(j => !j.analysisAssetId)).toHaveLength(2);
       expect(beforeExport.approvals.find(a => a.purpose === "export")?.status).toBe("pending");
       await clickDesk("确认审片并批准导出");
       await expect.poll(async () => ProjectSnapshotSchema.parse(await invoke("get_project", {projectId: project.projectId})).jobs.find(j => j.kind === "export")?.state, {timeout: 15000}).toBe("completed");
