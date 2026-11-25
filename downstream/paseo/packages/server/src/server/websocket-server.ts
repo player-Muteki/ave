@@ -2831,7 +2831,23 @@ export class VoiceAssistantWebSocketServer {
               try {
                 editor.access.activePrincipal(reader.deviceId);
               } catch {
-                // Revoked while the call ran; the revoke listener already closed the socket.
+                // Revoked while the call ran: suppress the output, deliver a correlated
+                // access-denied error, then kick the device — same contract as the entry
+                // path, so a mid-call revoke never leaves a lingering authorized socket.
+                this.sendVideoReply(ws, {
+                  type: "rpc_error",
+                  payload: {
+                    requestId: request.requestId,
+                    error: "Video device access denied",
+                    code: "access_denied",
+                  },
+                });
+                this.videoReaders.delete(ws);
+                try {
+                  ws.close(1008, "Video device revoked");
+                } catch {
+                  // The transport may already be closed.
+                }
                 return;
               }
               if (output instanceof Uint8Array) {
@@ -2864,6 +2880,18 @@ export class VoiceAssistantWebSocketServer {
                   code: described.code,
                 },
               });
+              // If the device was revoked while the call ran, kick it after the
+              // correlated error is delivered, mirroring the success and entry paths.
+              try {
+                editor.access.activePrincipal(reader.deviceId);
+              } catch {
+                this.videoReaders.delete(ws);
+                try {
+                  ws.close(1008, "Video device revoked");
+                } catch {
+                  // The transport may already be closed.
+                }
+              }
             });
           return;
         }
