@@ -70,6 +70,8 @@ export class VideoToolBroker {
       }
       case "get_asset_metadata":
         return this.store.plannerAssetMetadata(projectId, call.args.assetId, call.args.contentHash, principal);
+      case "list_artifacts":
+        return this.store.listArtifacts(projectId, call.args.jobId, principal);
       case "get_job_status": {
         const job = this.store.job(projectId, call.args.jobId, principal);
         return {

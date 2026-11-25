@@ -52,6 +52,7 @@ FilmCraft 是候选确定性执行后端，**不是新的 Agent 控制面**。�
 | `validate_edit_plan` | 候选 EditPlan | schema + 业务错误；不落库、不执行 |
 | `submit_edit_plan` | `EditPlanDraftV1`（不含持久标识） | daemon 分配 `planId/revision/planHash`，按 runId/toolCallId 幂等持久化 proposed plan 后 terminate |
 | `get_job_status` | `jobId` | daemon 真实快照（含 artifact 有界列表：kind/artifactId/revision/sha256），不根据工具事件推测 |
+| `list_artifacts` | `jobId` | 产物元数据全列表（kind/大小/SHA-256/mediaType，上限 256 条，不出 CAS 字节） |
 | `get_qa_report` | `artifactId/jobId` | 原始检查结果、阈值版本和未确定项 |
 | `get_plan` | `planId` | 已采纳方案的完整操作列表，便于在其上迭代 |
 | `get_analysis` | `assetId + contentHash` | 最新 analysis job 元数据（含 scenecuts/waveform artifact 引用），采样图不出 CAS |

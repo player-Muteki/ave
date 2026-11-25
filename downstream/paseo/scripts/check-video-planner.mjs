@@ -21,6 +21,7 @@ const expected = [
   "get_qa_summary",
   "get_scene_cuts",
   "get_waveform",
+  "list_artifacts",
   "submit_edit_plan",
   "validate_edit_plan",
 ];
