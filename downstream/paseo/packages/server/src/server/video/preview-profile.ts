@@ -128,8 +128,18 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
   }  // At most one transform per clip, and it must target an existing trim clip.
   const transformByClip = new Map<string, (typeof draft.transformOperations)[number]>();
   for (const tr of draft.transformOperations) {
-    if (!byClip.has(tr.clipId))
+    const trim = byClip.get(tr.clipId);
+    if (!trim)
       editorFailure("CAPABILITY_UNAVAILABLE", "Transforms must target trim clips");
+    if (
+      !rationalEquals(tr.recordRange.start, trim.recordRange.start) ||
+      !rationalEquals(tr.recordRange.duration, trim.recordRange.duration) ||
+      !rationalEquals(tr.sourceRange.duration, tr.recordRange.duration)
+    )
+      editorFailure(
+        "CAPABILITY_UNAVAILABLE",
+        "Transform ranges must match its trim clip without retiming",
+      );
     if (transformByClip.has(tr.clipId))
       editorFailure("CAPABILITY_UNAVAILABLE", "At most one transform per clip");
     const cropW = Number(tr.crop.width);
