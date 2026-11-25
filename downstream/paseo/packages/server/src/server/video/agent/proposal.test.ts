@@ -75,16 +75,25 @@ it("routes Responses tool calls through Pi and persists one proposal for human a
         headers: { "content-type": "text/event-stream" },
       });
     });
-    const causes: string[] = [];
+    const run = { projectId, runId: "run", sessionId: "session" };
     session = await createPlannerSession({ projectId, runId: "run", sessionId: "session", workspace: root,
       promptSignature: videoPlannerPromptSignature(), channel: worker, onEvent(event) {
         WorkerToDaemonSchema.parse({ kind: "event", event });
-        if (event.causationId) causes.push(event.causationId);
+        service.store.recordPlannerEvent(run, event, principal);
       } });
     await session.prompt("Keep the first second of the clip.");
     expect(strictSubmit).toBe(true);
     expect(callIds).toEqual([1, 2, 3].map(i => sha256Hex("call_" + i + "|fc_" + i)));
-    expect(causes).toEqual(callIds);
+    const events = service.store.events(projectId, "0", principal).events.filter(e => e.runId === run.runId);
+    const starts = events.filter(e => e.type === "agent.tool_execution_start");
+    expect(starts.map(e => e.causationId)).toEqual(callIds);
+    expect(starts.map(e => e.sessionId)).toEqual(callIds.map(() => run.sessionId));
+    const submitted = service.store.events(projectId, starts[2].seq, principal).events
+      .filter(e => e.causationId === callIds[2]);
+    expect(submitted.map(e => e.type)).toEqual(["plan.proposed", "approval.requested"]);
+    const cursor = events.at(-1)!.seq;
+    service.store.recordPlannerEvent(run, { ...starts[0], runId: "other" }, principal);
+    expect(service.store.events(projectId, cursor, principal).events).toEqual([]);
     const after = service.store.project(projectId, principal);
     expect(after.plans).toHaveLength(1);
     expect(after.plans[0]).toMatchObject({ runId: "run", status: "proposed", trimOperations: draft.trimOperations });

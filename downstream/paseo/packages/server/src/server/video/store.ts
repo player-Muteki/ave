@@ -28,6 +28,7 @@ import {
   type ApprovalRequest,
   type EditPlanDraftV1,
   type EditorPrincipal,
+  type EditorEvent,
   type EditorRole,
   type JobSnapshot,
   type ProjectSnapshot,
@@ -730,11 +731,12 @@ export class EditorStore {
           )
           .run(plan.planId, plan.projectId, planHash, plan.revision, JSON.stringify(plan));
         this.insertApproval(approval);
-        this.emit(draft.projectId, "plan.proposed", { planId: plan.planId, planHash });
+        const cause = { runId: input.runId, causationId: input.toolCallId };
+        this.emit(draft.projectId, "plan.proposed", { planId: plan.planId, planHash }, cause);
         this.emit(draft.projectId, "approval.requested", {
           approvalId: approval.approvalId,
           purpose: approval.purpose,
-        });
+        }, cause);
         return { plan, approval };
       },
     });
@@ -1624,6 +1626,19 @@ export class EditorStore {
     this.emit(projectId, type, payload);
   }
 
+  recordPlannerEvent(
+    run: { projectId: string; runId: string; sessionId: string },
+    event: EditorEvent,
+    principal: EditorPrincipal,
+  ): void {
+    this.authorize(run.projectId, principal, "viewer");
+    if (event.projectId !== run.projectId || event.sessionId !== run.sessionId ||
+        event.runId !== run.runId || !event.type.startsWith("agent.")) return;
+    this.emit(run.projectId, event.type, {
+      ...(event.payload as object), runId: run.runId, workerEventId: event.eventId,
+    }, { runId: run.runId, sessionId: run.sessionId, causationId: event.causationId });
+  }
+
   /** Reserve the persistent receipt and first event atomically, before spawning a worker. */
   reservePlanningRun(projectId: string, requestId: string, prompt: string, principal: EditorPrincipal) {
     this.authorize(projectId, principal, "operator");
@@ -1920,12 +1935,16 @@ export class EditorStore {
     return { plan, approval: ApprovalRequestSchema.parse(JSON.parse(row.request)) };
   }
 
-  private emit(projectId: string, type: string, payload: unknown): void {
+  private emit(
+    projectId: string, type: string, payload: unknown,
+    context?: Pick<EditorEvent, "runId" | "sessionId" | "causationId">,
+  ): void {
     const seq = (BigInt(this.latestSeq(projectId)) + 1n).toString();
     const event = EditorEventSchema.parse({
       protocolVersion: "1",
       projectId,
       eventId: randomUUID(),
+      ...context,
       ...(type.startsWith("run.") && payload && typeof payload === "object" && "runId" in payload
         ? { runId: payload.runId } : {}),
       seq,
