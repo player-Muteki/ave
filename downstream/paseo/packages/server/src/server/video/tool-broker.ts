@@ -82,12 +82,20 @@ export class VideoToolBroker {
         };
       }
       case "get_job_status": {
-        const { jobId, kind, state, revision, progress } = this.store.job(
-          projectId,
-          call.args.jobId,
-          principal,
-        );
-        return { jobId, kind, state, revision, progress };
+        const job = this.store.job(projectId, call.args.jobId, principal);
+        return {
+          jobId: job.jobId,
+          kind: job.kind,
+          state: job.state,
+          revision: job.revision,
+          progress: job.progress,
+          artifacts: job.artifacts.map((a) => ({
+            kind: a.kind,
+            artifactId: a.artifactId,
+            revision: a.revision,
+            sha256: a.blob.sha256,
+          })),
+        };
       }
       case "get_qa_report": {
         const job = this.store.job(projectId, call.args.jobId, principal);
