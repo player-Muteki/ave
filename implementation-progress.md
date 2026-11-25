@@ -72,6 +72,7 @@
 - 已实现待验收（2026-11-25）：preview profile 增加字幕 cue 非负且不超过 v1 输出时长的校验。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：export manifest 血缘补充 trackId/transitions/transforms/跨素材音频完整源信息；preview profile 实测 12 项正/反案用例全 PASS。未跑真模型/e2e。
 - 已实现待验收（2026-11-25）：preview profile 增加片段数上限 64 与 transition clipId==rightClipId 校验；profile 实测 12 项仍运 PASS。未跑真模型/e2e。
+- 已实现待验收（2026-11-25）：客户端新增 proposeOverlay + “画中画”按钮（选中片段作 v2 叠加到首素材全程）。未跑真模型/e2e。
 
 ## 环境与错误
 

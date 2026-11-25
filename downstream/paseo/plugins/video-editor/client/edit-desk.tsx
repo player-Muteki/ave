@@ -13,7 +13,7 @@ import {
   type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { ReviewPlayer } from "./review-player.js";
-import { proposeCut, proposeCutOut, proposeConcat } from "./cut.js";
+import { proposeCut, proposeCutOut, proposeConcat, proposeOverlay } from "./cut.js";
 import { SourceImport } from "./import-source.js";
 import { mountSourcePicker, digestSource } from "./web.js";
 
@@ -407,6 +407,19 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                     fadeSec.trim() || undefined,
                     fadeKind,
                   );
+                  const token = requestId(JSON.stringify(draft));
+                  await submit({
+                    requestId: token,
+                    runId: `manual-${token}`,
+                    toolCallId: token,
+                    draft,
+                  });
+                  show(await read({ projectId: project.projectId }));
+                })}
+              {project.assets.filter((a) => a.streams.some((s) => s.kind === "video")).length > 1 &&
+                button("画中画：选中片段叠加到首素材全程", async () => {
+                  const first = project.assets.find((a) => a.streams.some((s) => s.kind === "video"))!;
+                  const draft = proposeOverlay(project, first.assetId, "0", totalSec, selected, start, end);
                   const token = requestId(JSON.stringify(draft));
                   await submit({
                     requestId: token,

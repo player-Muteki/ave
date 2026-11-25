@@ -213,6 +213,47 @@ export function proposeCutOut(
   };
 }
 
+/** Overlay one clip on track v2 over the main track's full range. */
+export function proposeOverlay(
+  project: ProjectSnapshot,
+  mainAssetId: string,
+  mainStart: string,
+  mainEnd: string,
+  overlayAssetId: string,
+  overlayStart: string,
+  overlayEnd: string,
+): EditPlanDraftV1 {
+  const base = proposeCut(project, mainAssetId, mainStart, mainEnd);
+  const asset = project.assets.find((a) => a.assetId === overlayAssetId);
+  const stream = asset?.streams.find((s) => s.kind === "video");
+  if (!asset || !stream) throw new Error("叠加素材缺少视频流。");
+  const from = milliseconds(overlayStart);
+  const to = milliseconds(overlayEnd);
+  if (to <= from) throw new Error("出点必须大于入点。");
+  const duration = { num: (to - from).toString(), den: "1000" };
+  return {
+    ...base,
+    intent: `主轨 ${mainAssetId}[${mainStart.trim()}-${mainEnd.trim()}] 叠加 v2 ${asset.displayName}[${overlayStart.trim()}-${overlayEnd.trim()}]`,
+    trimOperations: [
+      ...base.trimOperations,
+      {
+        opId: "trim-v2",
+        order: "2",
+        trackId: "v2",
+        clipId: "clip-v2",
+        source: {
+          assetId: asset.assetId,
+          assetContentHash: asset.original.sha256,
+          streamUid: stream.streamUid,
+          probeRevision: "1",
+        },
+        sourceRange: { start: { num: from.toString(), den: "1000" }, duration },
+        recordRange: { start: { num: "0", den: "1" }, duration },
+      },
+    ],
+  };
+}
+
 export interface ConcatSegment {
   assetId: string;
   start: string;
