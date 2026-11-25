@@ -11,13 +11,12 @@ import {
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc,
   startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc,
-  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, contactSheetRpc, previewFramesRpc, readAssetChunkRpc, controlJobRpc,
+  analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type BlobRef, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
 import { TrackedMaskReview } from "./tracked-mask-review.js";
 import { ReviewPlayer } from "./review-player.js";
-import { readReviewBytes } from "./review-bytes.js";
 import { proposeCut, proposeCutOut, proposeConcat, proposeOverlay } from "./cut.js";
 import { SourceImport } from "./import-source.js";
 import { mountSourcePicker, digestSource } from "./web.js";
@@ -66,10 +65,11 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
   const readQaSummary = useRpc(getQaSummaryRpc);
+  const readSceneCuts = useRpc(getSceneCutsRpc);
+  const readWaveform = useRpc(getWaveformRpc);
   const sheet = useRpc(contactSheetRpc);
   const frames = useRpc(previewFramesRpc);
   const controlJob = useRpc(controlJobRpc);
-  const readChunk = useRpc(readAssetChunkRpc);
   const [sourceImport, setSourceImport] = useState<SourceImport | null>(null);
   const [confirmed, setConfirmed] = useState(0);
   const [project, setProject] = useState<ProjectSnapshot | null>(null);
@@ -437,12 +437,10 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                     projectId: project.projectId,
                     assetId: asset.assetId,
                   });
-                  let doc: SceneCutDoc | null = null;
-                  let done: Awaited<ReturnType<typeof readAnalysis>> | undefined;
-                  for (let attempt = 0; attempt < 20 && !doc; attempt++) {
+                  let info: Awaited<ReturnType<typeof readAnalysis>> | null = null;
+                  for (let attempt = 0; attempt < 20 && info?.state !== "completed"; attempt++) {
                     const snap = await read({ projectId: project.projectId });
                     show(snap);
-                    let info: Awaited<ReturnType<typeof readAnalysis>> | null = null;
                     try {
                       info = await readAnalysis({
                         requestId: requestId(`analysis:${asset.assetId}`),
@@ -452,39 +450,41 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                     } catch {
                       info = null;
                     }
-                    if (info?.state === "completed") done = info;
-                    const artifact = info?.artifacts.find((a) => a.kind === "scenecuts");
-                    if (info && artifact && info.state === "completed") {
-                      const data = await readReviewBytes(
-                        { projectId: project.projectId, assetId: artifact.artifactId, revision: artifact.revision, blob: artifact.blob },
-                        readChunk,
-                        digestSource,
-                        new AbortController().signal,
-                        "scenecuts",
-                      );
-                      doc = JSON.parse(new TextDecoder().decode(data)) as SceneCutDoc;
-                    } else if (info && (info.state === "failed" || info.state === "cancelled")) {
+                    if (info && (info.state === "failed" || info.state === "cancelled"))
                       throw new Error(`分析失败：${info.error?.sanitizedDetail ?? info.state}`);
-                    } else if (attempt < 19) {
+                    if (info?.state !== "completed" && attempt < 19)
                       await new Promise((resolve) => setTimeout(resolve, 500));
-                    }
                   }
-                  if (!doc) throw new Error("分析尚未生成切点报告，请稍后再试。");
+                  if (!info || info.state !== "completed") throw new Error("分析尚未完成，请稍后再试。");
+                  const cuts = await readSceneCuts({
+                    requestId: requestId(`cuts:${asset.assetId}`),
+                    projectId: project.projectId,
+                    assetId: asset.assetId,
+                  });
+                  const doc: SceneCutDoc = {
+                    threshold: cuts.threshold ?? undefined,
+                    truncated: cuts.truncated,
+                    cuts: cuts.cuts,
+                  };
                   setSceneCuts({ assetId: asset.assetId, doc });
-                  const waveArtifact = done?.artifacts.find((a) => a.kind === "waveform");
-                  if (waveArtifact) {
-                    const waveData = await readReviewBytes(
-                      { projectId: project.projectId, assetId: waveArtifact.artifactId, revision: waveArtifact.revision, blob: waveArtifact.blob },
-                      readChunk,
-                      digestSource,
-                      new AbortController().signal,
-                      "waveform",
-                    );
-                    setWaveform({ assetId: asset.assetId, doc: JSON.parse(new TextDecoder().decode(waveData)) as WaveformDoc });
-                  } else {
+                  let hasWave = false;
+                  try {
+                    const wave = await readWaveform({
+                      requestId: requestId(`wave:${asset.assetId}`),
+                      projectId: project.projectId,
+                      assetId: asset.assetId,
+                    });
+                    const wdoc: WaveformDoc = {
+                      bucketMs: wave.bucketMs ?? undefined,
+                      truncated: wave.truncated,
+                      buckets: wave.buckets,
+                    };
+                    setWaveform({ assetId: asset.assetId, doc: wdoc });
+                    hasWave = true;
+                  } catch {
                     setWaveform(null);
                   }
-                  setNotice(`场景切点 ${doc.cuts.length} 个${doc.truncated ? "（已截断）" : ""} · 阈值 ${doc.threshold ?? "0.3"}${waveArtifact ? " · 已生成波形" : ""}`);
+                  setNotice(`场景切点 ${doc.cuts.length} 个${doc.truncated ? "（已截断）" : ""} · 阈值 ${doc.threshold ?? "0.3"}${hasWave ? " · 已生成波形" : ""}`);
                 })}
               {sceneCuts && sceneCuts.assetId === asset.assetId && (
                 <View style={row}>

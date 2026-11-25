@@ -19,6 +19,8 @@ const READ_METHODS = new Set([
   "video.v1.get_planning_run",
   "video.v1.get_analysis",
   "video.v1.get_qa_summary",
+  "video.v1.get_scene_cuts",
+  "video.v1.get_waveform",
   // Watching a reviewable proxy/candidate is a read; the store still enforces project scope,
   // candidate revision and the awaiting-review state, and only delivered bytes are exportable.
   "video.v1.read_asset_chunk",
