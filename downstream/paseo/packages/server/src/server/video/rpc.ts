@@ -8,6 +8,7 @@ import {
   ApprovalDecisionSchema,
   ProjectRequestSchema,
   PlanReviewRequestSchema,
+  EstimateTimelineRequestSchema,
   ReadAssetChunkRequestSchema,
   PlanningRunRequestSchema,
   StartPlanningRunInputSchema,
@@ -135,6 +136,10 @@ export class EditorRpcService {
       case "video.v1.get_planning_run": {
         const request = PlanningRunRequestSchema.parse(input);
         return this.editor.agents.status(request.projectId, request.runId, principal);
+      }
+      case "video.v1.estimate_timeline": {
+        const request = EstimateTimelineRequestSchema.parse(input);
+        return this.editor.store.estimateTimeline(request, principal);
       }
       case "video.v1.analyze_asset": {
         const request = AnalyzeAssetInputSchema.parse(input);

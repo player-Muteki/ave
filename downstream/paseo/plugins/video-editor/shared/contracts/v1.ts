@@ -541,6 +541,45 @@ export const submitPlanRpc = {
   input: PlanReviewRequestSchema,
   output: PlanReviewResultSchema,
 };
+
+export const EstimateTimelineRequestSchema = z
+  .object({ requestId, draft: EditPlanDraftV1Schema })
+  .strict();
+export type EstimateTimelineRequest = z.infer<typeof EstimateTimelineRequestSchema>;
+export const TimelineSegmentSummarySchema = z
+  .object({
+    clipId: id,
+    trackId: id,
+    startSeconds: z.string(),
+    durationSeconds: z.string(),
+    sourceAssetId: id,
+  })
+  .strict();
+export const EstimateTimelineResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    valid: z.boolean(),
+    issue: z.string().nullable(),
+    mainTrackSegments: z.number().int().min(0),
+    overlayTrackSegments: z.number().int().min(0),
+    mainDurationSeconds: z.string(),
+    overlayDurationSeconds: z.string(),
+    transitionCount: z.number().int().min(0),
+    transitionOverlapSeconds: z.string(),
+    effectiveMainDurationSeconds: z.string(),
+    audioOperationCount: z.number().int().min(0),
+    transformCount: z.number().int().min(0),
+    subtitleCueCount: z.number().int().min(0),
+    segments: z.array(TimelineSegmentSummarySchema).max(64),
+  })
+  .strict();
+export type EstimateTimelineResult = z.infer<typeof EstimateTimelineResultSchema>;
+export const estimateTimelineRpc = {
+  name: "video.v1.estimate_timeline",
+  input: EstimateTimelineRequestSchema,
+  output: EstimateTimelineResultSchema,
+};
 export const decideApprovalRpc = {
   name: "video.v1.decide_approval",
   input: ApprovalDecisionSchema,
