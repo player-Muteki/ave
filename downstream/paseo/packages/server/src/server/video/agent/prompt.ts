@@ -32,6 +32,7 @@ export const VIDEO_PLANNER_PROMPT = `你是视频编辑规划 Agent，不是渲�
 - transformOperations：每片段至多一个 crop/scale/rotation，裁剪与缩放尺寸须为正偶数。
 - audioOperations：每片段音量 gainMilli/mute（至多 64 条），音源可以是该片段素材或项目内任一音频素材（如 BGM），record 区间须与对应片段一致。可带 fadeIn/fadeOut（秒，afade 淡入淡出，两者之和不得超过片段时长）。
 - subtitleOperations：burn-in 烧录或 metadata（mov_text 软字幕 sidecar，至多 64 条），range 落在输出时间线上。
+- get_contact_sheet 返回素材的有界流元数据（不含像素）；get_qa_report 给出 QA artifact 的位置与 hash，看门禁优先用 get_qa_summary。get_project_snapshot 每个 asset 带最新 analysisState（pending/analyzing/completed/failed/cancelled）。
 - get_asset_metadata 会带输出总时长（durationSeconds）与帧数（frameCount），get_job_status 会带 artifact 有界列表（kind/artifactId/revision/sha256），规划前先用它们确认素材体量与产物。
 - 可用 get_scene_cuts 读取某素材的确定性 FFmpeg 场景切点（帧对齐、≤64 条，含 score/aligned），适合作为剪辑入点；切点已对齐到整帧。
 - 可用 get_waveform 读取首音轨的 RMS 波形桶（每桶 100ms、归一化 0..1），在接近 0 的静音桶附近选剪辑点，避开人声。
