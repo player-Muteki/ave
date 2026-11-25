@@ -496,6 +496,16 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               <Text style={muted}>
                 {plan.trimOperations.length} 段 · {plan.transitionOperations.length} 转场 · {plan.transformOperations.length} 变换 · {plan.audioOperations.length} 音频 · {plan.subtitleOperations.length} 字幕
               </Text>
+              {plan.transitionOperations.map((tr) => (
+                <Text key={tr.opId} style={muted}>
+                  转场 {tr.kind} {tr.leftClipId}→{tr.rightClipId} {tr.duration.num}/{tr.duration.den}s
+                </Text>
+              ))}
+              {plan.transformOperations.map((tr) => (
+                <Text key={tr.opId} style={muted}>
+                  变换 {tr.clipId} scale={tr.scale.width}x{tr.scale.height} rot={tr.rotationDegrees}
+                </Text>
+              ))}
               {plan.trimOperations.map((op) => (
                 <Text key={op.opId} style={muted}>
                   {op.trackId} · 源入点 {op.sourceRange.start.num}/{op.sourceRange.start.den} 秒 ·

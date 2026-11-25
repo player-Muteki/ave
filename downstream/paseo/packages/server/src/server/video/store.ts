@@ -1204,7 +1204,7 @@ export class EditorStore {
           plan.transitionOperations.length +
           plan.subtitleOperations.length +
           plan.generationRequests.length,
-        summary: `${plan.deterministicBackendId} · ${plan.intent}`,
+        summary: `${plan.deterministicBackendId} · ${plan.trimOperations.length}段/${plan.transitionOperations.length}转场/${plan.transformOperations.length}变换/${plan.audioOperations.length}音频/${plan.subtitleOperations.length}字幕 · ${plan.intent.slice(0, 200)}`,
       },
       generationCostCapMicros: plan.maxCostMicros,
       externalDestinations: plan.externalDestinations,
