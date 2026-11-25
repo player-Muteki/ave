@@ -611,6 +611,18 @@ export class EditorStore {
     });
   }
 
+  /**
+   * Read one accepted plan by id. Viewer-level; used by the planner broker's
+   * get_plan tool and the client-facing get_plan RPC.
+   */
+  plan(projectId: string, planId: string, principal: EditorPrincipal): AcceptedEditPlan {
+    this.authorize(projectId, principal, "viewer");
+    const plan = this.project(projectId, principal)
+      .plans.find((p) => p.planId === planId);
+    if (!plan) editorFailure("ASSET_NOT_FOUND", "No such plan in the bound project");
+    return plan;
+  }
+
   validateProposal(draft: EditPlanDraftV1, principal: EditorPrincipal): void {
     this.authorize(draft.projectId, principal, "operator");
     this.validatePlan(draft);

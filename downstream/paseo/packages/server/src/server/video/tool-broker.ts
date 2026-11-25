@@ -199,13 +199,8 @@ export class VideoToolBroker {
           note: "Read-only view of this planning run's persisted daemon events.",
         };
       }
-      case "get_plan": {
-        const plan = this.store
-          .project(projectId, principal)
-          .plans.find((p) => p.planId === call.args.planId);
-        if (!plan) editorFailure("ASSET_NOT_FOUND", "No such plan in the bound project");
-        return plan;
-      }
+      case "get_plan":
+        return this.store.plan(projectId, call.args.planId, principal);
       case "validate_edit_plan":
         this.store.validateProposal(call.args, principal);
         return { valid: true };

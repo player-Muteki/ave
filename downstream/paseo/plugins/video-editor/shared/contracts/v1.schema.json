@@ -2330,6 +2330,613 @@
       ],
       "additionalProperties": false
     },
+    "GetPlanInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetPlanInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "planId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "planId"
+      ],
+      "additionalProperties": false
+    },
+    "GetPlanResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetPlanResult",
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "video.edit-plan/v1"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "baseTimelineRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "baseAssetManifestHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "preferredDeterministicBackendId": {
+          "type": "string",
+          "enum": [
+            "ffmpeg",
+            "filmcraft"
+          ]
+        },
+        "intent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "trimOperations": {
+          "maxItems": 1024,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "opId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "order": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "trackId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "clipId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "source": {
+                "$ref": "urn:video-editor:v1:AssetStreamRef"
+              },
+              "sourceRange": {
+                "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "recordRange": {
+                "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "overlayX": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "overlayY": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
+              }
+            },
+            "required": [
+              "opId",
+              "order",
+              "trackId",
+              "clipId",
+              "source",
+              "sourceRange",
+              "recordRange"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "transformOperations": {
+          "maxItems": 1024,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "opId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "order": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "trackId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "clipId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "source": {
+                "$ref": "urn:video-editor:v1:AssetStreamRef"
+              },
+              "sourceRange": {
+                "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "recordRange": {
+                "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "overlayX": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "overlayY": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "crop": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "y": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "width": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "height": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
+              },
+              "scale": {
+                "type": "object",
+                "properties": {
+                  "width": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "height": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  }
+                },
+                "required": [
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
+              },
+              "rotationDegrees": {
+                "type": "string",
+                "enum": [
+                  "0",
+                  "90",
+                  "180",
+                  "270"
+                ]
+              }
+            },
+            "required": [
+              "opId",
+              "order",
+              "trackId",
+              "clipId",
+              "source",
+              "sourceRange",
+              "recordRange",
+              "crop",
+              "scale",
+              "rotationDegrees"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "audioOperations": {
+          "maxItems": 1024,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "opId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "order": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "trackId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "clipId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "source": {
+                "$ref": "urn:video-editor:v1:AssetStreamRef"
+              },
+              "sourceRange": {
+                "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "recordRange": {
+                "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "overlayX": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "overlayY": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "fadeIn": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "fadeOut": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "gainMilli": {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)$"
+              },
+              "mute": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "opId",
+              "order",
+              "trackId",
+              "clipId",
+              "source",
+              "sourceRange",
+              "recordRange",
+              "gainMilli",
+              "mute"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "transitionOperations": {
+          "maxItems": 1024,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "opId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "order": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "trackId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "clipId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "leftClipId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "rightClipId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "crossfade",
+                  "fade"
+                ]
+              },
+              "duration": {
+                "$ref": "urn:video-editor:v1:Rational"
+              }
+            },
+            "required": [
+              "opId",
+              "order",
+              "trackId",
+              "clipId",
+              "leftClipId",
+              "rightClipId",
+              "kind",
+              "duration"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "subtitleOperations": {
+          "maxItems": 4096,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "opId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "order": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "trackId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "clipId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "cueId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "range": {
+                "$ref": "urn:video-editor:v1:TimeRange"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 16384
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "metadata",
+                  "burn-in"
+                ]
+              }
+            },
+            "required": [
+              "opId",
+              "order",
+              "trackId",
+              "clipId",
+              "cueId",
+              "range",
+              "text",
+              "mode"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "generationRequests": {
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "shotId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "providerProfileId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "modelId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16384
+              },
+              "negativePrompt": {
+                "type": "string",
+                "maxLength": 16384
+              },
+              "maskRevisionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "maskApprovalId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "referenceAssetIds": {
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                }
+              },
+              "referenceManifestHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "samplingMapHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "frameCount": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "sampleFps": {
+                "$ref": "urn:video-editor:v1:Rational"
+              },
+              "seedPolicy": {
+                "type": "string",
+                "enum": [
+                  "fixed",
+                  "random"
+                ]
+              },
+              "seed": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              },
+              "maxCostMicros": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$"
+              }
+            },
+            "required": [
+              "requestId",
+              "shotId",
+              "providerProfileId",
+              "modelId",
+              "prompt",
+              "negativePrompt",
+              "maskRevisionId",
+              "referenceAssetIds",
+              "referenceManifestHash",
+              "samplingMapHash",
+              "frameCount",
+              "sampleFps",
+              "seedPolicy",
+              "seed",
+              "maxCostMicros"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "qaRequirements": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "gate": {
+                "type": "string",
+                "enum": [
+                  "G0",
+                  "G1",
+                  "G2",
+                  "G3",
+                  "G4",
+                  "G5"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "gate",
+              "required"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "externalDestinations": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "maxCostMicros": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "deterministicBackendId": {
+          "type": "string",
+          "enum": [
+            "ffmpeg",
+            "filmcraft"
+          ]
+        },
+        "planId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "planHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "status": {
+          "type": "string",
+          "const": "proposed"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "projectId",
+        "baseTimelineRevision",
+        "baseAssetManifestHash",
+        "intent",
+        "trimOperations",
+        "transformOperations",
+        "audioOperations",
+        "transitionOperations",
+        "subtitleOperations",
+        "generationRequests",
+        "qaRequirements",
+        "externalDestinations",
+        "maxCostMicros",
+        "deterministicBackendId",
+        "planId",
+        "revision",
+        "runId",
+        "idempotencyKey",
+        "planHash",
+        "status",
+        "requestId"
+      ],
+      "additionalProperties": false
+    },
     "GetQaSummaryInput": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:GetQaSummaryInput",
