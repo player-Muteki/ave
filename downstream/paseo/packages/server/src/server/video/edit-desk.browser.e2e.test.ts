@@ -22,7 +22,7 @@ const repo = fileURLToPath(new URL("../../../../../", import.meta.url));
 // Opt-in: requires agent-browser and a local Chrome binary. Never attaches to a user's browser.
 test
   .skipIf(process.env.VIDEO_EDITOR_BROWSER_TEST !== "1")
-  .each(["source import", "preview approval and reviewed delivery", "reject preview",
+  .each(["source import", "preview approval and reviewed delivery", "reject preview", "project creation and discovery",
     ...(process.env.VIDEO_EDITOR_SAM2_TEST === "1" ? ["object mask"] : [])])(
   "edit desk: %s",
   async (scenario) => {
@@ -82,7 +82,7 @@ test
       );
       const bytes = await readFile(source);
       const digest = createHash("sha256").update(bytes).digest("hex");
-      if (scenario !== "source import") {
+      if (scenario !== "source import" && scenario !== "project creation and discovery") {
         const upload = UploadStatusSchema.parse(
           await invoke("create_upload", {
             projectId: project.projectId,
@@ -155,6 +155,30 @@ test
         await web("find", "role", "button", "click", "--name", label);
       };
       await web("wait", '[aria-label="项目 ID"]');
+      if (scenario === "project creation and discovery") {
+        // Create a project from the desk itself (not the RPC fixture) and confirm the
+        // daemon recorded it, then exercise the discovery list button.
+        await web("fill", '[aria-label="新项目名称"]', "界面创建项目");
+        await web("find", "role", "button", "click", "--name", "创建项目");
+        await web("wait", "--text", "版本 0 · 0 份素材");
+        const listed = (await invoke("list_projects", {})) as {
+          projects: Array<{ projectId: string; title: string; revision: string }>;
+        };
+        const created = listed.projects.find((entry) => entry.title === "界面创建项目");
+        expect(created).toBeDefined();
+        expect(created?.revision).toBe("0");
+        expect(
+          ProjectSnapshotSchema.parse(await invoke("get_project", { projectId: created!.projectId })),
+        ).toMatchObject({ title: "界面创建项目", revision: "0", assets: [] });
+        // The discovery button lists both the UI-created project and the RPC fixture.
+        await web("find", "role", "button", "click", "--name", "列出可访问项目");
+        await web("wait", "--text", "镜头测试");
+        const snapshot = await web("snapshot");
+        expect(snapshot).toContain("界面创建项目");
+        expect(snapshot).toContain("镜头测试");
+        expect(snapshot).toContain(created!.projectId);
+        return;
+      }
       await web("fill", '[aria-label="项目 ID"]', project.projectId);
       await web("find", "role", "button", "click", "--name", "打开项目");
       if (scenario === "source import") {
