@@ -1814,8 +1814,9 @@ export class EditorStore {
 
   events(projectId: string, afterSeq: string, principal: EditorPrincipal) {
     this.authorize(projectId, principal, "viewer");
+    // Bounded page: callers continue with afterSeq = last received seq.
     const documents = this.rows(
-      "SELECT document FROM events WHERE project_id = ? AND CAST(seq AS INTEGER) > ? ORDER BY CAST(seq AS INTEGER)",
+      "SELECT document FROM events WHERE project_id = ? AND CAST(seq AS INTEGER) > ? ORDER BY CAST(seq AS INTEGER) LIMIT 500",
       projectId,
       afterSeq,
     );
