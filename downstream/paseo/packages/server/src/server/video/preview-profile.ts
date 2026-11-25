@@ -31,7 +31,11 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
     editorFailure("CAPABILITY_UNAVAILABLE", "This preview profile supports FFmpeg trims only");
   if (draft.audioOperations.length > 64)
     editorFailure("CAPABILITY_UNAVAILABLE", "At most 64 audio operations per plan");
+  const audioByClip = new Map<string, number>();
   for (const op of draft.audioOperations) {
+    if (audioByClip.has(op.clipId))
+      editorFailure("CAPABILITY_UNAVAILABLE", "At most one audio operation per clip");
+    audioByClip.set(op.clipId, 1);
     const trim = draft.trimOperations.find((t) => t.clipId === op.clipId);
     if (!trim)
       editorFailure("CAPABILITY_UNAVAILABLE", "Audio operations must target trim clips");
@@ -78,6 +82,10 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
   let mainTotal: Rational = { num: "0", den: "1" };
   for (const [trackId, list] of tracks) {
     let cursor: Rational = { num: "0", den: "1" };
+    list.forEach((op, k) => {
+      if (op.order !== String(k + 1))
+        editorFailure("CAPABILITY_UNAVAILABLE", "Segment order must match its position per track");
+    });
     for (const op of list) {
       if (op.overlayX !== undefined || op.overlayY !== undefined) {
         if (trackId !== "v2" || op.overlayX === undefined || op.overlayY === undefined)
@@ -119,6 +127,7 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
   // Transitions only between consecutive segments of one track, never longer
   // than either side.
   const byClip = new Map(ops.map((op) => [op.clipId, op]));
+  const transitionByLeft = new Map<string, number>();
   for (const tr of draft.transitionOperations) {
     if (tr.kind !== "crossfade" && tr.kind !== "fade")
       editorFailure("CAPABILITY_UNAVAILABLE", "Only crossfade/fade transitions are supported");
@@ -127,6 +136,9 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
     if (!left || !right)
       editorFailure("CAPABILITY_UNAVAILABLE", "Transition endpoints must match trim clips");
     const track = tracks.get(left.trackId)!;
+    if (transitionByLeft.has(tr.leftClipId))
+      editorFailure("CAPABILITY_UNAVAILABLE", "At most one transition per segment");
+    transitionByLeft.set(tr.leftClipId, 1);
     if (tr.clipId !== right.clipId)
       editorFailure("CAPABILITY_UNAVAILABLE", "Transition clipId must match the right segment");
     if (right.trackId !== left.trackId || track.indexOf(right) !== track.indexOf(left) + 1)
