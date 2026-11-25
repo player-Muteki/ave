@@ -140,6 +140,13 @@ Scheduler 独占 SQLite 状态迁移，Worker 只接收 TaskLease。`WorkerHello
 
 取消先写 `cancel_requested`，发送带 epoch 的取消，grace period 后终止独立进程组。首版 VACE 未完成短镜头从头重跑；“暂停”是释放 Worker 并重新排队，不是冻结 CUDA 上下文。
 
+## 7.1 确定性分析与渲染配方（FFmpeg 路径，已本地实现）
+
+- 导入即自动跑只读 analysis job（按 asset+hash 去重）：全帧 `lavfi.scene_score` 切点（阈值 0.3、最小间隔 0.5s、≥64 条、按源平均帧率整帧对齐，artifact `video.scene-cuts/v1`）+ 首音轨 8kHz mono PCM 每 100ms RMS 波形（≤120s，artifact `video.waveform/v1`）；Python 采样为 best-effort，无 python 也能完成。
+- 渲染时记录 `renderRecipeHash`（完整 ffmpeg argv、临时/输出路径脱敏后 SHA-256），写入 QA 报告与 export manifest；同一方案两次渲染 candidate SHA-256 一致（已实测）。
+- `video.v1.preview_frames` 为候选渲染生成 ≤36 格确定性故事板（定时采样+tile，几何经 ffprobe 校验，CAS 内哈希后引用）。
+- QA 报告含 `audioLoudness`（volumedetect mean/max dB）、ffmpegBuildHash、probe；QA 失败时错误带 ffmpeg stderr 尾部（800 字符）。
+
 ## 8. 色彩与硬件边界
 
 生成 MVP 固定 SDR/BT.709 工作空间。`setparams` 只改标签，真正像素转换用 colorspace 等滤镜。HDR 确定性剪辑、HDR 生成、HDR→SDR tone map 和往返一致性分别验收。

@@ -32,10 +32,18 @@ export class EditorRpcService {
   async invoke(method: string, input: unknown, caller: EditorCaller): Promise<unknown> {
     const principal = authorizeVideoMethod(method, caller);
     switch (method) {
-      case "video.v1.get_capabilities":
+      case "video.v1.get_capabilities": {
+        const burnIn = await this.editor.media.burnInSubtitlesAvailable();
         return {
           protocolVersion: "1",
-          features: ["deterministic-editing", "persistent-jobs", "chunked-media", "device-channel", "deterministic-analysis"],
+          features: [
+            "deterministic-editing",
+            "persistent-jobs",
+            "chunked-media",
+            "device-channel",
+            "deterministic-analysis",
+            ...(burnIn ? ["burn-in-subtitles"] : []),
+          ],
           operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames"],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
@@ -45,8 +53,15 @@ export class EditorRpcService {
               reason: "Full source build and media conformance have not been verified",
             },
           ],
-          workerProfiles: [],
+          workerProfiles: [
+            {
+              id: "ffmpeg-burnin",
+              available: burnIn,
+              reason: burnIn ? undefined : "fontconfig/fonts not available; use metadata subtitles",
+            },
+          ],
         };
+      }
       case "video.v1.create_project":
         return this.editor.store.createProject({
           ...CreateProjectInputSchema.parse(input),
@@ -190,12 +205,26 @@ export class EditorRpcService {
         const request = z
           .object({ requestId: z.string(), uploadId: z.string(), finalSha256: z.string() })
           .parse(input);
-        return this.editor.media.commitUpload(
+        const upload = this.editor.store.upload(request.uploadId);
+        const asset = await this.editor.media.commitUpload(
           request.uploadId,
           request.requestId,
           request.finalSha256,
           principal,
         );
+        // Deterministic analysis (scene cuts + waveform) runs read-only right
+        // after import, deduplicated per asset+hash, so the planner can call
+        // get_scene_cuts without a client-side trigger.
+        if (asset.streams.some((s) => s.kind === "video")) {
+          const result = this.editor.store.createAnalysisJob({
+            requestId: `analysis:auto:${asset.assetId}`,
+            projectId: upload.projectId,
+            assetId: asset.assetId,
+            principal,
+          });
+          this.editor.jobs.enqueue(result.job.projectId, result.job.jobId);
+        }
+        return asset;
       }
       case "video.v1.import_asset":
         editorFailure(

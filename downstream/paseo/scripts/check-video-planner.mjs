@@ -8,11 +8,17 @@ const here = new URL(".", import.meta.url);
 const pi = new URL("../../../references/pi-sdk-probe/", here);
 const source = new URL("packages/coding-agent/src/core/", pi);
 const expected = [
+  "diff_plans",
+  "get_analysis",
   "get_asset_metadata",
   "get_contact_sheet",
   "get_job_status",
+  "get_plan",
+  "get_planning_run",
   "get_project_snapshot",
   "get_qa_report",
+  "get_qa_summary",
+  "get_scene_cuts",
   "submit_edit_plan",
   "validate_edit_plan",
 ];
