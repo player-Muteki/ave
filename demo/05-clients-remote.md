@@ -37,6 +37,19 @@ FilmCraft 支持的手动动作（trim、效果、调色、混音等）与 Agent
 
 WebCodecs/canvas 只作可选预览/标注加速，先验证目标 Chromium/GPU；正确性事实仍来自 FFmpeg presentation index 和 mask 坐标映射。
 
+### 2.4 自然语言规划审批验收
+
+工作台向当前项目发送剪辑意图。「刷新事件」同步本次规划的工具活动、阶段以及项目的方案和审批。首次模型请求由 Worker 补充已授权的项目 ID，因此用户可以直接描述要保留的时间范围。点击「批准并渲染预览」才会创建预览 Job。
+
+在已恢复并构建宿主依赖的 `vendor/paseo/packages/server` 中执行以下命令。需要 `ffmpeg`、`ffprobe` 和当前 Pi 环境可用的 strict tool calling 模型。
+
+```bash
+VIDEO_EDITOR_LIVE_PLANNER_TEST=1 \
+  npx --no-install vitest run src/server/video/agent/planning-approval.real.e2e.test.ts
+```
+
+用例通过 daemon WebSocket 导入两秒的 25 fps 视频，向真实模型请求保留前一秒。它检查模型提交的源范围、关联方案哈希的待审批记录、审批前的 Job 列表，以及源文件哈希。C 本机的规划事件单测 2/2 通过。真模型端到端用例与实际界面待验收，本机缺少锁定依赖、FFmpeg 和可用模型配置。
+
 ## 3. Android 监督端
 
 ### 3.1 功能
