@@ -144,7 +144,7 @@ export class EditorRpcService {
       }
       case "video.v1.estimate_timeline": {
         const request = EstimateTimelineRequestSchema.parse(input);
-        return this.editor.store.estimateTimeline(request, principal);
+        return await this.editor.store.estimateTimeline(request, principal);
       }
       case "video.v1.analyze_asset": {
         const request = AnalyzeAssetInputSchema.parse(input);

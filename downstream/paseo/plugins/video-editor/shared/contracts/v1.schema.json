@@ -2168,6 +2168,13 @@
             }
           ]
         },
+        "warnings": {
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "mainTrackSegments": {
           "type": "integer",
           "minimum": 0,
@@ -2223,6 +2230,7 @@
         "projectId",
         "valid",
         "issue",
+        "warnings",
         "mainTrackSegments",
         "overlayTrackSegments",
         "mainDurationSeconds",
