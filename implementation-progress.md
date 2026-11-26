@@ -368,6 +368,8 @@ macOS Developer ID 签名及公证、Windows Authenticode 签名和 Windows 11 x
 | Windows x64 | [AVE-Setup-0.1.0-x64.exe](https://github.com/player-Muteki/ave/actions/runs/45773655762/artifacts/15096049784) | `41258b3a7dde1bcffa8cc273aa573bc91335ac23455a117c461d818186449ae0` |
 | Ubuntu x64 | [AVE-0.1.0-x86_64.AppImage](https://github.com/player-Muteki/ave/actions/runs/45773655762/artifacts/15096156049) | `e9732b731b574da119e4fb36f89e882fa4f250c78935a36b5e42b95b0e3cbbc4` |
 
-在 Apple Silicon 实机上，使用表中下载的 arm64 DMG 和同一真实 Qwen 模型再次完成了拒绝、重新规划、审批、播放及导出。MP4 的 SHA-256 与上一节本地构建实测结果一致。其余目标的真实模型结果以各自的验收记录为准。v0.1.0 采用未签名分发。Windows 11 普通用户实机验收仍待完成。[各平台模型验收](https://github.com/player-Muteki/ave/actions/runs/45774973340)
+在 Apple Silicon 实机上，使用表中下载的 arm64 DMG 和同一真实 Qwen 模型再次完成了拒绝、重新规划、审批、播放及导出。从该 DMG 实际导出的 MP4 与本次导出清单的 SHA-256 均为 `24807fcdf37f61a6e3876ddbe10783dd33ec20baeb931374923e843b8287307f`。同一轮 macOS arm64 云端作业在第一份方案处超时，实机结果单列。v0.1.0 采用未签名分发。Windows 11 普通用户实机验收仍待完成。[各平台模型验收](https://github.com/player-Muteki/ave/actions/runs/45774973340)
 
 本批三个验收目标均完成通过界面填写区间的剪辑测试。安装包实际导出的 MP4 在下载后再次完整解码，两条流的起始 PTS 均为 0，时长均为一秒；成品摘要与各自清单一致。同批 Intel Mac 作业也完成了这项操作，已有 DMG 作为附加下载。v0.1.0 的 macOS 必测架构为 Apple Silicon。[原生界面剪辑及导出记录](https://github.com/player-Muteki/ave/actions/runs/45774983024)
+
+Windows Server 2025 x64 和 Ubuntu 24.04 x64 的原生安装包均通过 Qwen3.5-9B-Q4_K_M 端到端验收。两次独立规划都给出 [1.4, 2.4)；首次拒绝后，第二份方案通过预览、审片和导出审批。两端下载的 MP4 与各自清单摘要均为 `5f3a6d891971103ba5f88d5a9ed8908d931bda8e6470f2b884f8d014565efacc`。下载后再次用 FFmpeg 完整解码，25 帧 H.264 和 AAC 原声的起始 PTS 均为零，时长均为一秒。Windows Server 的结果单独记录，Windows 11 仍待普通用户现场验证。[Windows 模型验收](https://github.com/player-Muteki/ave/actions/runs/45774973340) · [安装包从草稿回读校验](https://github.com/player-Muteki/ave/actions/runs/45780821889)
