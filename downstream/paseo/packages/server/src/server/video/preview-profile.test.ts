@@ -49,7 +49,7 @@ describe("assertRenderablePreview", () => {
   });
 
   it("rejects filmcraft and empty timelines but accepts contiguous trims", () => {
-    expect(() => assertRenderablePreview(draft({ preferredDeterministicBackendId: "filmcraft" }))).toThrow("FFmpeg trims only");
+    expect(() => assertRenderablePreview(draft({ preferredDeterministicBackendId: "filmcraft" }))).toThrow('Set preferredDeterministicBackendId to "ffmpeg"');
     expect(() => assertRenderablePreview(draft({ trimOperations: [] }))).toThrow("At least one trim");
     const two = draft();
     const next = structuredClone(two.trimOperations[0]!);
@@ -59,11 +59,28 @@ describe("assertRenderablePreview", () => {
     expect(() => assertRenderablePreview(two)).not.toThrow();
   });
 
+  it("explains how to correct a main-track trim without changing its source range", () => {
+    const plan = draft();
+    const trim = plan.trimOperations[0]!;
+    trim.order = "0";
+    expect(() => assertRenderablePreview(plan)).toThrow('Expected trimOperations.order "1"');
+
+    trim.order = "1";
+    trim.overlayX = "0";
+    trim.overlayY = "0";
+    expect(() => assertRenderablePreview(plan)).toThrow("Omit overlayX and overlayY on v1");
+
+    delete trim.overlayX;
+    delete trim.overlayY;
+    expect(() => assertRenderablePreview(plan)).not.toThrow();
+  });
+
   it("keeps unsupported families and unbound edit operations out of approvals", () => {
     for (const [family, error] of [
       ["transformOperations", "Transforms must target trim clips"], ["audioOperations", "Audio operations must target trim clips"],
       ["subtitleOperations", "Subtitle cues must target trim clips"], ["transitionOperations", "Only crossfade/fade"],
-      ...["generationRequests", "qaRequirements", "externalDestinations"].map(name => [name, "FFmpeg trims only"] as const),
+      ["generationRequests", "Unsupported generationRequests provider profile"],
+      ["qaRequirements", "Set qaRequirements to []"], ["externalDestinations", "Set externalDestinations to []"],
     ] as const) expect(() => assertRenderablePreview(draft({ [family]: [{}] }))).toThrow(error);
   });
 

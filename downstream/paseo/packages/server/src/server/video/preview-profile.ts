@@ -19,16 +19,14 @@ function rationalAdd(a: Rational, b: Rational): Rational {
  * segment may carry at most one crop/scale/rotation transform.
  */
 export function assertRenderablePreview(draft: EditPlanDraftV1): void {
-  const unsupported = [
-    draft.generationRequests.filter(g => g.providerProfileId !== VACE_PROFILE),
-    draft.qaRequirements,
-    draft.externalDestinations,
-  ];
-  if (
-    draft.preferredDeterministicBackendId === "filmcraft" ||
-    unsupported.some((ops) => ops.length > 0)
-  )
-    editorFailure("CAPABILITY_UNAVAILABLE", "This preview profile supports FFmpeg trims only");
+  if (draft.preferredDeterministicBackendId === "filmcraft")
+    editorFailure("CAPABILITY_UNAVAILABLE", 'Set preferredDeterministicBackendId to "ffmpeg" for preview');
+  if (draft.qaRequirements.length)
+    editorFailure("CAPABILITY_UNAVAILABLE", "Set qaRequirements to []; the renderer performs its own QA");
+  if (draft.externalDestinations.length)
+    editorFailure("CAPABILITY_UNAVAILABLE", "Set externalDestinations to []; delivery requires separate approval");
+  if (draft.generationRequests.some(g => g.providerProfileId !== VACE_PROFILE))
+    editorFailure("CAPABILITY_UNAVAILABLE", "Unsupported generationRequests provider profile");
   if (draft.generationRequests.length) {
     const [g] = draft.generationRequests;
     if (draft.generationRequests.length !== 1 || draft.trimOperations.length !== 1 || draft.audioOperations.length ||
@@ -108,15 +106,14 @@ export function assertRenderablePreview(draft: EditPlanDraftV1): void {
     let cursor: Rational = { num: "0", den: "1" };
     list.forEach((op, k) => {
       if (op.order !== String(k + 1))
-        editorFailure("CAPABILITY_UNAVAILABLE", "Segment order must match its position per track");
+        editorFailure("CAPABILITY_UNAVAILABLE", `Expected trimOperations.order "${k + 1}" for segment ${k + 1} on ${trackId}`);
     });
     for (const op of list) {
       if (op.overlayX !== undefined || op.overlayY !== undefined) {
-        if (trackId !== "v2" || op.overlayX === undefined || op.overlayY === undefined)
-          editorFailure(
-            "CAPABILITY_UNAVAILABLE",
-            "Overlay offsets are only supported on v2 segments (both x and y)",
-          );
+        if (trackId === "v1")
+          editorFailure("CAPABILITY_UNAVAILABLE", "Omit overlayX and overlayY on v1, including zero offsets");
+        if (op.overlayX === undefined || op.overlayY === undefined)
+          editorFailure("CAPABILITY_UNAVAILABLE", "Set both overlayX and overlayY when positioning a v2 segment");
       }
       if (!rationalEquals(op.recordRange.start, cursor))
         editorFailure(
