@@ -16,11 +16,14 @@
 先核对候选包的 SHA-256。Ubuntu 24.04 的 AppArmor 会限制普通进程使用用户命名空间；AVE 的 Chromium 沙箱需要此能力。管理员可将已核对的 AppImage 安装在固定的 root 所有目录，再加载仅匹配该文件的配置。以下命令假设安装包与本仓库提供的 ave-appimage.apparmor 位于当前目录。[Ubuntu 24.04 发行说明](https://discourse.ubuntu.com/t/ubuntu-24-04-lts-noble-numbat-release-notes/39890)
 
 ```bash
+sudo apt-get update && sudo apt-get install -y fonts-noto-cjk
 sudo install -d -m 0755 /opt/ave
 sudo install -m 0755 AVE-0.1.0-x86_64.AppImage /opt/ave/AVE.AppImage
 sudo install -m 0644 ave-appimage.apparmor /etc/apparmor.d/ave-appimage
 sudo apparmor_parser -r /etc/apparmor.d/ave-appimage
 ```
+
+工作台使用中文。精简 Ubuntu 系统缺少中文字形时，按钮会显示方框。上述命令安装的 Noto CJK 字体在下次启动应用时生效。
 
 使用普通桌面账户运行 `/opt/ave/AVE.AppImage --appimage-extract-and-run`。该入口适用于缺少 FUSE 的环境。对应 CI 会读取 Chromium 渲染器的实际沙箱状态。
 

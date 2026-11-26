@@ -70,7 +70,7 @@ jobs:
         run: brew install nasm pkgconf
       - name: Install native tools on Linux
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y nasm pkg-config xvfb xauth libfuse2t64
+        run: sudo apt-get update && sudo apt-get install -y nasm pkg-config xvfb xauth fonts-noto-cjk libfuse2t64
       - uses: msys2/setup-msys2@3c51bf698df1e37b2261f53cb67797b97761185c
         if: runner.os == 'Windows'
         with:

@@ -124,7 +124,7 @@ jobs:
       - name: Prepare Linux desktop sandbox
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update && sudo apt-get install -y xvfb xauth
+          sudo apt-get update && sudo apt-get install -y xvfb xauth fonts-noto-cjk
           sudo install -d -m 0755 /opt/ave
           sudo install -m 0755 package/*.AppImage /opt/ave/AVE.AppImage
           sudo install -m 0644 release/desktop/ave-appimage.apparmor /etc/apparmor.d/ave-appimage
