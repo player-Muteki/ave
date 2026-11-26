@@ -11,6 +11,10 @@
 
 工作流的 sign 输入默认为关闭。候选附件随 Actions 运行保存，每个架构附带 SOURCE_SHA 和 SHA256SUMS。开启 sign 时使用 macOS 的 APPLE_CERTIFICATE、APPLE_CERTIFICATE_PASSWORD、APPLE_ID、APPLE_PASSWORD、APPLE_TEAM_ID，Windows 使用 WINDOWS_CERTIFICATE、WINDOWS_CERTIFICATE_PASSWORD。正式发布的安装、模型演示和下载复验以任务书第 9–11 项为准。
 
+### macOS 正式签名
+
+在 `AVE desktop candidate` 选择 `sign` 后，构建使用 Developer ID Application 身份签名应用与最终 DMG。工作流核对 DMG 签发团队，向 Apple 提交磁盘映像，等待接受后装订公证票据，并通过 Gatekeeper 检查。随后从该映像复制 AVE.app，再验证应用签名、团队及启动。安装包摘要在装订完成后生成。Apple 的公证提交 ID 与状态保存在该次工作流日志中。
+
 ### Ubuntu 24.04 安装
 
 先核对候选包的 SHA-256。Ubuntu 24.04 的 AppArmor 会限制普通进程使用用户命名空间；AVE 的 Chromium 沙箱需要此能力。管理员可将已核对的 AppImage 安装在固定的 root 所有目录，再加载仅匹配该文件的配置。以下命令假设安装包与本仓库提供的 ave-appimage.apparmor 位于当前目录。[Ubuntu 24.04 发行说明](https://discourse.ubuntu.com/t/ubuntu-24-04-lts-noble-numbat-release-notes/39890)

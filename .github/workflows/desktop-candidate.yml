@@ -99,19 +99,26 @@ jobs:
           TARGET_PLATFORM: ${{ matrix.platform }}
           TARGET_ARCH: ${{ matrix.arch }}
         run: |
+          build_options=(--publish never "--$TARGET_PLATFORM" "--$TARGET_ARCH")
           if [[ "$REQUIRE_SIGNING" == true ]]; then
             : "${CSC_LINK:?Signing certificate unavailable}"
+            if [[ "$TARGET_PLATFORM" == mac ]]; then
+              : "${APPLE_ID:?Missing Apple ID}" "${APPLE_APP_SPECIFIC_PASSWORD:?Missing notarization password}" "${APPLE_TEAM_ID:?Missing Apple team ID}"
+              build_options+=(--config.dmg.sign=true)
+            fi
           else
             unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
-          npm run build:desktop -- --publish never "--$TARGET_PLATFORM" "--$TARGET_ARCH"
-      - name: Verify notarized DMG
+          npm run build:desktop -- "${build_options[@]}"
+      - name: Notarize, staple and verify the signed disk image
         if: inputs.sign && runner.os == 'macOS'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          dmg=(runtime/packages/desktop/release/*.dmg)
-          xcrun stapler validate "${dmg[0]}"
-          spctl -a -t open --context context:primary-signature -v "${dmg[0]}"
+          bash release/desktop/notarize-dmg.sh runtime/packages/desktop/release/*.dmg
       - name: Verify Windows installer signature
         if: inputs.sign && runner.os == 'Windows'
         shell: pwsh
@@ -146,6 +153,7 @@ jobs:
       - name: Install and launch the DMG
         if: runner.os == 'macOS'
         env:
+          AVE_VERIFY_APPLE_TEAM_ID: ${{ inputs.sign && secrets.APPLE_TEAM_ID || '' }}
           PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
         run: release/desktop/check-dmg.sh runtime/packages/desktop/release/*.dmg runtime/packages/desktop
       - name: Install and launch the NSIS package

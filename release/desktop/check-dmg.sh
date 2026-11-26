@@ -18,4 +18,10 @@ attached=1
 ditto "$mount/AVE.app" "$install_dir/AVE.app"
 hdiutil detach "$mount"
 attached=0
+if [[ -n "${AVE_VERIFY_APPLE_TEAM_ID:-}" ]]; then
+  app="$install_dir/AVE.app"
+  codesign --verify --deep --strict --verbose=2 "$app"
+  codesign --display --verbose=4 "$app" 2>&1 | grep -Fx "TeamIdentifier=$AVE_VERIFY_APPLE_TEAM_ID"
+  spctl --assess --type execute --verbose=2 "$app"
+fi
 node "$desktop/e2e/packaged-app-smoke.js" --app "$install_dir/AVE.app"
