@@ -1,0 +1,56 @@
+name: Stage and verify desktop draft installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful desktop candidate build run ID
+        type: string
+        required: true
+      draft_id:
+        description: Existing GitHub draft release ID for this exact commit
+        type: string
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: desktop-draft-${{ inputs.draft_id }}
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Copy all four installers and verify the bytes downloaded from the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run }}
+          DRAFT_ID: ${{ inputs.draft_id }}
+        run: |
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ && "$DRAFT_ID" =~ ^[0-9]+$ ]]
+          api="repos/$GITHUB_REPOSITORY"
+          run=$(gh api "$api/actions/runs/$BUILD_RUN")
+          sha=$(jq -er 'select(.path == ".github/workflows/desktop-candidate.yml" and .head_branch == "main" and .event == "workflow_dispatch" and .conclusion == "success") | .head_sha' <<< "$run")
+          for target in mac-arm64 mac-x64 linux-x64 win-x64; do
+            dir="$RUNNER_TEMP/$target"
+            gh run download "$BUILD_RUN" -n "AVE-$sha-$target" -D "$dir"
+            python3 release/desktop/verify-candidate.py "$dir" "$sha"
+            read -r expected name < <(tr -d '\r' < "$dir/SHA256SUMS")
+            draft=$(gh api "$api/releases/$DRAFT_ID")
+            tag=$(jq -er --arg sha "$sha" 'select(.draft == true and .target_commitish == $sha) | .tag_name' <<< "$draft")
+            if ! jq -e --arg name "$name" '.assets[] | select(.name == $name)' <<< "$draft" > /dev/null; then
+              gh release upload "$tag" "$dir/$name"
+            fi
+            asset=$(gh api "$api/releases/$DRAFT_ID" | jq -er --arg name "$name" --arg hash "sha256:$expected" 'select(.draft == true) | .assets[] | select(.name == $name and .state == "uploaded" and .digest == $hash) | .id')
+            gh api -H 'Accept: application/octet-stream' "$api/releases/assets/$asset" > "$dir/download"
+            echo "$expected  $dir/download" | sha256sum -c -
+            echo "- $name · $expected" >> "$GITHUB_STEP_SUMMARY"
+          done
