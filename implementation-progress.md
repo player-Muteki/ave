@@ -329,3 +329,20 @@
 真实本地模型测试另外发现，带 2 秒偏移的 MKV 被展示为 4.4 秒。现在，存在非零起点时，以各音视频流的结束 PTS 和输入起点计算播放时长，报告精度为微秒。对应的实测回归使用另一份偏移 2 秒、实际时长 2 秒的 VFR 样片，ffprobe 容器字段为 4.000000，修复后桌面 RPC 和规划工具均返回 2.000000。若缺少完整流范围，结果为未知。上传、broker 和规划专项共 9 项通过。
 
 安装演示脚本现在从桌面工作台实际选择文件、提交意图、拒绝第一份方案、批准第二份、播放预览及最终审片代理，再通过界面下载 MP4 和清单。用固定响应的测试 provider 单独核对了这套操作；本次 macOS arm64 输出完整解码为 25 帧 H.264 和 48 kHz AAC，音视频时长一秒，原声半秒窗口有 440 个正向过零点，原始 MKV 和导出清单的摘要均已复核。真实 Qwen3-4B-Instruct-2507 在较早候选包中完成了多次工具读取，但仅在文字中输出草稿，未创建审批，真实模型项当次未通过。
+
+## 0.1.0 安装测试候选 · 四端交付记录
+
+候选源码为 `28671206478f6a6456c5ecc8f527ba8f2619fdd4`。下表安装包均已从同一批原生构建下载，在本机逐文件核对 SHA-256，并在相应 runner 上安装、启动和导出。Windows 验证了当前用户的开始菜单快捷方式和卸载。Ubuntu 使用限定到应用路径的 AppArmor 配置，以普通用户启动。[构建与原生安装日志](https://github.com/player-Muteki/ave/actions/runs/45662491787)
+
+| 验证环境 | 安装包 | 安装包 SHA-256 |
+| --- | --- | --- |
+| macOS 15 · Apple Silicon | [AVE-0.1.0-arm64.dmg](https://github.com/player-Muteki/ave/actions/runs/45662491787/artifacts/15046772228) | `0b3bc163b7e8fe2fd884a678958ef9a8d38c440d4e69ee26b6dceb6669e5e5cc` |
+| macOS 26 · Intel | [AVE-0.1.0-x64.dmg](https://github.com/player-Muteki/ave/actions/runs/45662491787/artifacts/15047604412) | `4948f0419a3fe9e29b41aa12326634a80652a32b34c768561f6d0ec94bb4770e` |
+| Windows Server 2025 · x64 | [AVE-Setup-0.1.0-x64.exe](https://github.com/player-Muteki/ave/actions/runs/45662491787/artifacts/15046404124) | `4f412872fcf9880ff40879df6a5e2c6282ce7f6be9f3bc59f5598e70aa1835f7` |
+| Ubuntu 24.04 · x64 | [AVE-0.1.0-x86_64.AppImage](https://github.com/player-Muteki/ave/actions/runs/45662491787/artifacts/15044789675) | `5cd1d297fa07841d179e4a9258be8d65c67a24d1d90ba19090cee3279404f15b` |
+
+四端导入相同的 2.4 秒 MKV，手动选取 [1.4, 2.4)。拒绝首份方案后重新提交，批准预览、播放、批准成品候选、播放审片代理，再批准并下载 MP4 和导出清单。四端均完整解码为一秒、25 帧 H.264、48 kHz AAC，样片摘要保持不变。对从 CI 下载的成品另行计算 SHA-256，均与各自清单一致。Apple Silicon 成品为 `9232c816d69cbca23876f13f0866806598ddb6b634e002dc35209dce511c5d86`，其余三端均为 `e3ab269d476883cab272546a51f90c62a7521337c960bb1aa0749175c2709f51`。每端附件有四次审批状态、ffprobe、窗口截图、成品和清单。[四端安装后剪辑及导出记录](https://github.com/player-Muteki/ave/actions/runs/45666021291)
+
+macOS Developer ID 签名及公证、Windows Authenticode 签名和 Windows 11 x64 真机验收待完成。Qwen3-4B-Instruct-2507 的本地测试读到了正确的 2.4 秒时长，也推导出 1.4 秒入点，但提交的轨道或音频片段引用未通过校验，未产生审批方案。该输入的手动剪辑结果单独计入上表。
+
+四个安装包已上传团队仓库的 0.1.0 草稿 Release，并从草稿附件重新下载。四份回读文件与上表的 SHA-256 逐项相同。草稿同时提供测试素材、安装和模型说明、许可证、CycloneDX SBOM、SHA256SUMS 与 SOURCE_SHA。签名和实机验收完成前保留草稿状态。[附件回读记录](https://github.com/player-Muteki/ave/actions/runs/45752671471)
