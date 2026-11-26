@@ -369,3 +369,5 @@ macOS Developer ID 签名及公证、Windows Authenticode 签名和 Windows 11 x
 | Ubuntu x64 | [AVE-0.1.0-x86_64.AppImage](https://github.com/player-Muteki/ave/actions/runs/45773655762/artifacts/15096156049) | `e9732b731b574da119e4fb36f89e882fa4f250c78935a36b5e42b95b0e3cbbc4` |
 
 在 Apple Silicon 实机上，使用表中下载的 arm64 DMG 和同一真实 Qwen 模型再次完成了拒绝、重新规划、审批、播放及导出。MP4 的 SHA-256 与上一节本地构建实测结果一致。其余目标的真实模型结果以各自的验收记录为准。v0.1.0 采用未签名分发。Windows 11 普通用户实机验收仍待完成。[各平台模型验收](https://github.com/player-Muteki/ave/actions/runs/45774973340)
+
+本批三个验收目标均完成通过界面填写区间的剪辑测试。安装包实际导出的 MP4 在下载后再次完整解码，两条流的起始 PTS 均为 0，时长均为一秒；成品摘要与各自清单一致。同批 Intel Mac 作业也完成了这项操作，已有 DMG 作为附加下载。v0.1.0 的 macOS 必测架构为 Apple Silicon。[原生界面剪辑及导出记录](https://github.com/player-Muteki/ave/actions/runs/45774983024)

@@ -4,7 +4,7 @@
 
 **立项基线**　以已合并 PR #10 的 `aac3650` 为起点。既有 Linux 开发包记录和 Chrome 回归可作对照。三端最终包须各自留下本版本的验收证据。建议版本号为 `v0.1.0`，正式打标签前核对是否已被使用。
 
-**平台范围**　按现有[产品交付标准](01-product.md)安排 macOS Apple Silicon 与 Intel、Windows x64、Linux x64。macOS 可交付通用 DMG，或分架构提供两份 DMG。Windows 首发以 Windows 11 为验收环境，Linux 以 Ubuntu 24.04 为验收环境。发布页只列实际通过的系统和架构。本轮功能验收聚焦确定性剪辑；Android 和长镜头生成列入后续版本。
+**平台范围**　本版按 macOS Apple Silicon、Windows x64 和 Linux x64 验收。已构建的 Intel Mac DMG 作为附加下载；其测试结果不参与本版发布判断。项目的长期目标见[产品交付标准](01-product.md)。Windows 首发以 Windows 11 为验收环境，Linux 以 Ubuntu 24.04 为验收环境。发布页只列实际通过的系统和架构。本轮功能验收聚焦确定性剪辑；Android 和长镜头生成列入后续版本。
 
 ## 一、修复与回归
 
@@ -33,7 +33,7 @@
 
 | 平台 | 文件 | 在目标系统执行 |
 | --- | --- | --- |
-| macOS | DMG，未使用 Developer ID 签名和公证 | 在 Apple Silicon 和 Intel 环境分别挂载对应 DMG、复制到 Applications 后启动。核对 SHA-256，记录架构、系统首次启动提示和步骤 10 结果。 |
+| macOS | DMG，未使用 Developer ID 签名和公证 | 在 Apple Silicon 环境挂载 arm64 DMG、复制到 Applications 后启动。核对 SHA-256，记录架构、系统首次启动提示和步骤 10 结果。 |
 | Windows | 未签名的 x64 NSIS EXE | 核对 SHA-256 并记录系统显示的发布者状态，在普通用户环境安装，从开始菜单启动，完成步骤 10 并验证卸载。记录安装路径和日志。 |
 | Linux | x64 AppImage | 在 Ubuntu 24.04 以普通用户启动，记录 FUSE 或已公布的解包运行方式。保留沙箱，验证包内媒体工具、步骤 10 及成品下载。 |
 

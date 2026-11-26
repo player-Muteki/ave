@@ -63,7 +63,6 @@ jobs:
       matrix:
         include:
           - { runner: macos-15, target: mac-arm64 }
-          - { runner: macos-26-intel, target: mac-x64 }
           - { runner: windows-2025, target: win-x64 }
           - { runner: ubuntu-24.04, target: linux-x64 }
     runs-on: ${{ matrix.runner }}

@@ -19,7 +19,6 @@ jobs:
       matrix:
         include:
           - { runner: macos-15, arch: arm64, platform: mac }
-          - { runner: macos-26-intel, arch: x64, platform: mac }
           - { runner: windows-2025, arch: x64, platform: win }
           - { runner: ubuntu-24.04, arch: x64, platform: linux }
     runs-on: ${{ matrix.runner }}

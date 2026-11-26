@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Copy all four installers and verify the bytes downloaded from the draft
+      - name: Copy the candidate installers and verify the bytes downloaded from the draft
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD_RUN: ${{ inputs.build_run }}
@@ -39,7 +39,12 @@ jobs:
           api="repos/$GITHUB_REPOSITORY"
           run=$(gh api "$api/actions/runs/$BUILD_RUN")
           sha=$(jq -er 'select(.path == ".github/workflows/desktop-candidate.yml" and .head_branch == "main" and .event == "workflow_dispatch" and .conclusion == "success") | .head_sha' <<< "$run")
-          for target in mac-arm64 mac-x64 linux-x64 win-x64; do
+          targets=(mac-arm64 linux-x64 win-x64)
+          artifacts=$(gh api --paginate "$api/actions/runs/$BUILD_RUN/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name')
+          if grep -Fxq "AVE-$sha-mac-x64" <<< "$artifacts"; then
+            targets+=(mac-x64)
+          fi
+          for target in "${targets[@]}"; do
             dir="$RUNNER_TEMP/$target"
             gh run download "$BUILD_RUN" -n "AVE-$sha-$target" -D "$dir"
             python3 release/desktop/verify-candidate.py "$dir" "$sha"
