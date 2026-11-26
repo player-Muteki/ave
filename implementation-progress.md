@@ -356,3 +356,16 @@ macOS Developer ID 签名及公证、Windows Authenticode 签名和 Windows 11 x
 在 Apple Silicon 实机安装本地 DMG，产品源码为 `fe56aaec492ff20a51a77b3c8b9602304aa95d89`，DMG 的 SHA-256 为 `6c1e357268b55ce47219947250427f1eba46ad4dbcec902a6ec8c7ec38020b4f`。Qwen3.5-9B-Q4_K_M 通过回环地址上的 llama.cpp b12722 处理“保留最后一秒和原声”。两次独立运行都从真实样片得出入点 7/5 秒、时长 1 秒。第一份方案被拒绝，随后产生了新的待审批方案。通过预览、成品审片、播放及导出后，MP4 完整解码为 25 帧 H.264，原声音轨的半秒窗口测得 440 次正向过零。源素材摘要未变，导出文件与清单中的 SHA-256 均为 `9232c816d69cbca23876f13f0866806598ddb6b634e002dc35209dce511c5d86`。
 
 此前实测的无效草稿在主轨上填写叠加坐标，或为普通剪切附加不支持的 QA 要求。现在模型会得到具体字段和修正方式。相关 8 项专项测试通过，含 Chrome 工作台的服务端回归通过 104 项，另有 2 项环境依赖用例跳过。跨平台发布包另行从同一产品提交构建，各平台的模型验收以各自安装包的实测为准。[原生构建](https://github.com/player-Muteki/ave/actions/runs/45773655762)
+
+### 本批原生候选安装包 · fe56aae
+
+四个安装包来自同一产品提交，已在各自的原生构建环境通过安装启动检查，并已下载核对文件摘要。[构建与启动记录](https://github.com/player-Muteki/ave/actions/runs/45773655762)
+
+| 平台 | 安装包 | SHA-256 |
+| --- | --- | --- |
+| macOS Apple Silicon | [AVE-0.1.0-arm64.dmg](https://github.com/player-Muteki/ave/actions/runs/45773655762/artifacts/15095567596) | `63b10d1c1543111a32c92f3267816dba3c6120f5453a945750c70c9a41a61e05` |
+| macOS Intel | [AVE-0.1.0-x64.dmg](https://github.com/player-Muteki/ave/actions/runs/45773655762/artifacts/15096948429) | `79ae0752a10fe91faf9ce5bc88d1dc444c4df2822f3376739fac8b0809a9ef9c` |
+| Windows x64 | [AVE-Setup-0.1.0-x64.exe](https://github.com/player-Muteki/ave/actions/runs/45773655762/artifacts/15096049784) | `41258b3a7dde1bcffa8cc273aa573bc91335ac23455a117c461d818186449ae0` |
+| Ubuntu x64 | [AVE-0.1.0-x86_64.AppImage](https://github.com/player-Muteki/ave/actions/runs/45773655762/artifacts/15096156049) | `e9732b731b574da119e4fb36f89e882fa4f250c78935a36b5e42b95b0e3cbbc4` |
+
+在 Apple Silicon 实机上，使用表中下载的 arm64 DMG 和同一真实 Qwen 模型再次完成了拒绝、重新规划、审批、播放及导出。MP4 的 SHA-256 与上一节本地构建实测结果一致。其余目标的真实模型结果以各自的验收记录为准。Windows 11 普通用户实机验收、macOS Developer ID 签名与公证、Windows Authenticode 签名仍待完成。[各平台模型验收](https://github.com/player-Muteki/ave/actions/runs/45774973340)
