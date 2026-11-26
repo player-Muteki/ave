@@ -2,7 +2,7 @@
 
 本地优先、跨平台的 Agent 视频编辑工作台设计。桌面端完成导入、编辑、生成、预览和导出；Android 连接同一桌面 daemon，负责远程会话、审批、监控和交付。
 
-> 当前是部分实现，未完成整机或安装包交付。已实际运行的用例和未验证范围见 [`implementation-progress.md`](implementation-progress.md)。原始需求见 [`research/demo.original.md`](research/demo.original.md)。
+> **[下载 AVE v0.1.0 桌面 Demo](https://github.com/player-Muteki/ave/releases/tag/v0.1.0)**，提供 macOS、Windows x64 和 Linux x64 未签名安装包。Windows 已测环境为 Windows Server 2025，Windows 11 未实测。发布页附安装说明、模型配置与测试素材。[实施与验证记录](implementation-progress.md) · [原始需求](research/demo.original.md)
 
 ## 恢复实现工作树
 
