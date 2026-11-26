@@ -67,7 +67,7 @@ jobs:
           - { runner: windows-2025, target: win-x64 }
           - { runner: ubuntu-24.04, target: linux-x64 }
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.mode == 'model' && 350 || 80 }}
     defaults:
       run:
         shell: bash

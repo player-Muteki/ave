@@ -10,12 +10,12 @@ const { WebSocket } = require("ws");
 const digest = file => createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 const rationalIs = (value, n, d = 1) => BigInt(value.num) * BigInt(d) === BigInt(value.den) * BigInt(n);
 
-async function until(read, check, name, timeout = 45000) {
+async function until(read, check, name, timeout = 45000, interval = 300) {
   const end = Date.now() + timeout;
   do {
     const value = await read();
     if (check(value)) return value;
-    await delay(300);
+    await delay(interval);
   } while (Date.now() < end);
   throw Error("Timed out waiting for " + name);
 }
@@ -80,7 +80,10 @@ async function runVideoReleaseDemo({ page, listen, source, evidence, media }) {
         }
         return current;
       };
-      const project = await until(readProposal, p => p.plans.length === number, "proposal " + number, manual ? 45_000 : 30 * 60_000);
+      // Hosted CPU runners can spend over an hour reading tool definitions before generating their first token.
+      const proposalTimeout = manual ? 45_000 : 150 * 60_000;
+      const project = await until(readProposal, p => p.plans.length === number, "proposal " + number,
+        proposalTimeout, manual ? 300 : 2000);
       const approval = project.approvals.find(a => a.purpose === "preview" && a.status === "pending");
       assert.ok(approval);
       const plan = project.plans.find(p => p.planId === approval.subjectId);

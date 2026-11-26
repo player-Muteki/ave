@@ -350,3 +350,9 @@ macOS Developer ID 签名及公证、Windows Authenticode 签名和 Windows 11 x
 在精简 Ubuntu 环境的首轮截图中，中文按钮显示为方框。补齐系统字体 fonts-noto-cjk 后，以同一安装包重走四端手动演示；复核了 Ubuntu 审片截图中的中文字形，四端 MP4 摘要与前次逐一相同。草稿附件 AVE-0.1.0-installed-demo.zip 包含这轮四端的成品、清单、审批记录和窗口截图。[复测记录](https://github.com/player-Muteki/ave/actions/runs/45753106211)
 
 真实模型验收使用 Qwen3.5-9B-Q4_K_M（GGUF SHA-256 `03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8`）及 llama.cpp b12722。四个原生 CI 作业均成功加载模型，等待首份方案 30 分钟后超时。另在本机将同一 arm64 DMG 安装后用该模型测试，工作台收到首份 [1.4, 2.4) 方案并拒绝。第二次规划先读取素材和旧方案，调用校验及提交工具，最终以 run.settled 结束，没有第二份待审批方案，未进入模型驱动的渲染和导出。任务书第 10 项仍待通过。[四端模型运行及失败日志](https://github.com/player-Muteki/ave/actions/runs/45752325515)
+
+### 真实模型拒绝后重新规划 · macOS arm64
+
+在 Apple Silicon 实机安装本地 DMG，产品源码为 `fe56aaec492ff20a51a77b3c8b9602304aa95d89`，DMG 的 SHA-256 为 `6c1e357268b55ce47219947250427f1eba46ad4dbcec902a6ec8c7ec38020b4f`。Qwen3.5-9B-Q4_K_M 通过回环地址上的 llama.cpp b12722 处理“保留最后一秒和原声”。两次独立运行都从真实样片得出入点 7/5 秒、时长 1 秒。第一份方案被拒绝，随后产生了新的待审批方案。通过预览、成品审片、播放及导出后，MP4 完整解码为 25 帧 H.264，原声音轨的半秒窗口测得 440 次正向过零。源素材摘要未变，导出文件与清单中的 SHA-256 均为 `9232c816d69cbca23876f13f0866806598ddb6b634e002dc35209dce511c5d86`。
+
+此前实测的无效草稿在主轨上填写叠加坐标，或为普通剪切附加不支持的 QA 要求。现在模型会得到具体字段和修正方式。相关 8 项专项测试通过，含 Chrome 工作台的服务端回归通过 104 项，另有 2 项环境依赖用例跳过。跨平台发布包另行从同一产品提交构建，各平台的模型验收以各自安装包的实测为准。[原生构建](https://github.com/player-Muteki/ave/actions/runs/45773655762)
