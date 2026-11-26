@@ -80,7 +80,7 @@ async function runVideoReleaseDemo({ page, listen, source, evidence, media }) {
         }
         return current;
       };
-      const project = await until(readProposal, p => p.plans.length === number, "model proposal " + number, 600000);
+      const project = await until(readProposal, p => p.plans.length === number, "proposal " + number, manual ? 45_000 : 30 * 60_000);
       const approval = project.approvals.find(a => a.purpose === "preview" && a.status === "pending");
       assert.ok(approval);
       const plan = project.plans.find(p => p.planId === approval.subjectId);
@@ -90,7 +90,7 @@ async function runVideoReleaseDemo({ page, listen, source, evidence, media }) {
       assert.ok(rationalIs(op.sourceRange.start, 7, 5) && rationalIs(op.sourceRange.duration, 1));
       assert.ok(rationalIs(op.recordRange.start, 0) && rationalIs(op.recordRange.duration, 1));
       assert.equal(renderJobs(project).length, 0);
-      if (!manual) await until(() => invoke("get_planning_run", { projectId, runId: plan.runId }), r => r.state === "settled", "settled planner");
+      if (!manual) await until(() => invoke("get_planning_run", { projectId, runId: plan.runId }), r => r.state === "settled", "settled planner", 5 * 60_000);
       await click("刷新事件");
       await page.getByText("预览审批", { exact: true }).waitFor();
       proposals.push({ runId: plan.runId, planId: plan.planId, planHash: plan.planHash, range: op.sourceRange });

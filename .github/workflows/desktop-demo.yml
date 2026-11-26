@@ -7,6 +7,11 @@ on:
         description: Run ID of the AVE desktop candidate to verify
         required: true
         type: string
+      mode:
+        description: Choose manual editing or real local model planning
+        type: choice
+        default: manual
+        options: [manual, model]
 
 permissions:
   actions: read
@@ -62,7 +67,7 @@ jobs:
           - { runner: windows-2025, target: win-x64 }
           - { runner: ubuntu-24.04, target: linux-x64 }
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 80
+    timeout-minutes: 120
     defaults:
       run:
         shell: bash
@@ -126,23 +131,29 @@ jobs:
           sudo apparmor_parser -r /etc/apparmor.d/ave-appimage
       - name: Install, edit, review, play and download
         env:
-          AVE_DEMO_MODE: manual
+          AVE_DEMO_MODE: ${{ inputs.mode }}
           AVE_DEMO_SOURCE: ${{ github.workspace }}/sample/demo-source.mkv
           PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/installed-demo
         run: |
           case "$RUNNER_OS" in
-            macOS) release/desktop/check-dmg.sh package/*.dmg runtime/packages/desktop ;;
-            Windows) pwsh -NoProfile -Command '$app = Get-ChildItem package/*.exe; ./release/desktop/check-nsis.ps1 -Installer $app.FullName -Desktop runtime/packages/desktop' ;;
-            Linux) node runtime/packages/desktop/e2e/verify-linux-image.js /opt/ave/AVE.AppImage ;;
+            macOS) command=(bash release/desktop/check-dmg.sh package/*.dmg runtime/packages/desktop) ;;
+            Windows) command=(pwsh -NoProfile -File release/desktop/check-nsis.ps1 -Installer package/*.exe -Desktop runtime/packages/desktop) ;;
+            Linux) command=(node runtime/packages/desktop/e2e/verify-linux-image.js /opt/ave/AVE.AppImage) ;;
           esac
+          if [[ "$AVE_DEMO_MODE" == model ]]; then
+            python release/desktop/with-qa-model.py "${command[@]}"
+          else
+            "${command[@]}"
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: manual-demo-${{ matrix.target }}
+          name: ${{ inputs.mode }}-demo-${{ matrix.target }}
           path: |
             ${{ runner.temp }}/installed-demo/demo.json
             ${{ runner.temp }}/installed-demo/manifest.json
             ${{ runner.temp }}/installed-demo/output.mp4
             ${{ runner.temp }}/installed-demo/*.png
+            ${{ runner.temp }}/installed-demo/unsubmitted-run.json
             ${{ runner.temp }}/installed-demo/failure.txt
           if-no-files-found: ignore
