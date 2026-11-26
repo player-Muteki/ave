@@ -1,6 +1,6 @@
 # Windows 11 x64 现场验收记录
 
-对应任务书第 9、10 项。请用普通 Windows 11 x64 账户操作。安装包、样片、记录表须对应同一次交付。未签名候选包可记录功能验证结果；正式签名栏以系统实际结果填写。
+对应任务书第 9、10 项。请用普通 Windows 11 x64 账户操作。安装包、样片、记录表须对应同一次交付。v0.1.0 采用未签名安装程序，签名状态和首次启动提示按实测填写。
 
 | 记录项 | 现场填写 |
 | --- | --- |
@@ -16,7 +16,7 @@
 | 完整解码、视频帧数、音轨、时长与 PTS | |
 | 卸载结果、证据目录、测试人和日期 | |
 
-1. 用本次提供的 SHA256SUMS 核对安装包。PowerShell 运行 `Get-FileHash .\AVE-Setup-0.1.0-x64.exe -Algorithm SHA256` 和 `Get-AuthenticodeSignature .\AVE-Setup-0.1.0-x64.exe | Format-List Status,SignerCertificate,TimeStamperCertificate`。记录结果。正式包须显示 Valid。
+1. 用本次提供的 SHA256SUMS 核对安装包。PowerShell 运行 `Get-FileHash .\AVE-Setup-0.1.0-x64.exe -Algorithm SHA256` 和 `Get-AuthenticodeSignature .\AVE-Setup-0.1.0-x64.exe | Format-List Status,SignerCertificate,TimeStamperCertificate`。核对哈希与发布清单一致。此版本预期签名状态为 NotSigned。
 2. 从资源管理器运行安装程序，以当前用户安装。按团队提供的模型配置为当前用户设置 VIDEO_EDITOR_PLANNER_MODEL 和 VIDEO_EDITOR_PLANNER_MODELS，后者指向本机模型配置文件。确认模型服务就绪，从开始菜单打开 AVE。保存“关于”或版本页截图。
 3. 在「剪辑工作台」创建项目。记录 2.4 秒 MKV 样片的 SHA-256，导入样片，在「规划意图」输入“保留最后一秒和原声”，点击「开始规划」，必要时点击「刷新事件」。
 4. 核对第一份方案并点击「拒绝预览方案」。截图记录拒绝状态，确认任务列表仅允许素材分析。再次输入相同意图并开始规划，确认保留源区间 [1.4, 2.4) 且原声保留。

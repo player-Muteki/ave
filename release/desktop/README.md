@@ -9,9 +9,9 @@
 | 规划 Worker | Pi SDK 随 daemon 安装。配置真实规划模型时设置 VIDEO_EDITOR_PLANNER_MODEL 为 provider/model，并设置 VIDEO_EDITOR_PLANNER_MODELS 为本机 models.json 的绝对路径。访问凭据由部署者在本机配置。 |
 | 桌面 | Electron 44.2.0。macOS arm64/x64 分别生成 DMG，Windows x64 生成 NSIS 安装程序，Linux x64 生成 AppImage。 |
 
-工作流的 sign 输入默认为关闭。候选附件随 Actions 运行保存，每个架构附带 SOURCE_SHA 和 SHA256SUMS。开启 sign 时使用 macOS 的 APPLE_CERTIFICATE、APPLE_CERTIFICATE_PASSWORD、APPLE_ID、APPLE_PASSWORD、APPLE_TEAM_ID，Windows 使用 WINDOWS_CERTIFICATE、WINDOWS_CERTIFICATE_PASSWORD。正式发布的安装、模型演示和下载复验以任务书第 9–11 项为准。
+v0.1.0 Demo 按未签名包分发。macOS 包未经 Developer ID 签名和公证，Windows 安装程序未经 Authenticode 签名，首次打开可能出现系统提示。安装前请按 SHA256SUMS 核对所下载的文件。工作流的 sign 输入默认为关闭。候选附件随 Actions 运行保存，每个架构附带 SOURCE_SHA 和 SHA256SUMS。开启 sign 时使用 macOS 的 APPLE_CERTIFICATE、APPLE_CERTIFICATE_PASSWORD、APPLE_ID、APPLE_PASSWORD、APPLE_TEAM_ID，Windows 使用 WINDOWS_CERTIFICATE、WINDOWS_CERTIFICATE_PASSWORD。正式发布的安装、模型演示和下载复验以任务书第 9–11 项为准。
 
-### macOS 正式签名
+### 可选的 macOS 签名流程
 
 在 `AVE desktop candidate` 选择 `sign` 后，构建使用 Developer ID Application 身份签名应用与最终 DMG。工作流核对 DMG 签发团队，向 Apple 提交磁盘映像，等待接受后装订公证票据，并通过 Gatekeeper 检查。随后从该映像复制 AVE.app，再验证应用签名、团队及启动。安装包摘要在装订完成后生成。Apple 的公证提交 ID 与状态保存在该次工作流日志中。
 
