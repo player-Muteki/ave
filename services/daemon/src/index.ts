@@ -2,6 +2,7 @@ export * from "./backends/deterministic-backend.js";
 export * from "./backends/ffmpeg-backend.js";
 export * from "./store-queries.js";
 export * from "./job-supervisor.js";
+export * from "./planner-controller.js";
 export * from "./tool-broker.js";
 export * from "./upload-manager.js";
 export * from "./rpc-registry.js";

@@ -16,6 +16,7 @@
     "@ave/cas": "*",
     "@ave/contracts": "*",
     "@ave/domain": "*",
+    "@ave/planner-worker": "*",
     "@ave/protocol": "*",
     "@ave/sqlite": "*",
     "ws": "^8.18.0",

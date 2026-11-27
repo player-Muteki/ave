@@ -9,7 +9,8 @@
     { "path": "../../packages/domain" },
     { "path": "../../packages/protocol" },
     { "path": "../../storage/cas" },
-    { "path": "../../storage/sqlite" }
+    { "path": "../../storage/sqlite" },
+    { "path": "../planner-worker" }
   ],
   "include": ["src/**/*.ts"]
 }

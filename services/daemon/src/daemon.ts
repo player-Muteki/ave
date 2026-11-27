@@ -6,6 +6,7 @@ import { AveStore, resolveAveHome } from "@ave/sqlite";
 import { DeterministicBackendRegistry } from "./backends/deterministic-backend.js";
 import { FfmpegBackend } from "./backends/ffmpeg-backend.js";
 import { AveJobSupervisor } from "./job-supervisor.js";
+import { AvePlannerController, type PlannerDefaults } from "./planner-controller.js";
 import { AveRpcRegistry } from "./rpc-registry.js";
 import { DaemonQueries } from "./store-queries.js";
 import { UploadManager } from "./upload-manager.js";
@@ -18,6 +19,8 @@ export interface AveDaemonOptions {
   ownerToken?: string;
   ffmpeg?: string;
   ffprobe?: string;
+  planner?: PlannerDefaults;
+  plannerWorkerEntryPath?: string;
 }
 
 export interface AveDaemonAddress {
@@ -38,6 +41,7 @@ export class AveDaemon {
   readonly jobs: AveJobSupervisor;
   readonly uploads: UploadManager;
   readonly queries: DaemonQueries;
+  readonly planner: AvePlannerController;
   readonly rpc: AveRpcRegistry;
   readonly ws: AveWsServer;
   private addressInfo?: AveDaemonAddress;
@@ -73,6 +77,13 @@ export class AveDaemon {
     };
 
     this.queries = new DaemonQueries(this.store, this.cas);
+    this.planner = new AvePlannerController({
+      store: this.store,
+      queries: this.queries,
+      onProjectEvent,
+      providerDefaults: options.planner,
+      workerEntryPath: options.plannerWorkerEntryPath,
+    });
     this.jobs = new AveJobSupervisor(this.store, this.cas, this.backends, onProjectEvent);
     this.uploads = new UploadManager(this.store, this.cas, this.backends);
     this.rpc = new AveRpcRegistry({
@@ -83,6 +94,7 @@ export class AveDaemon {
       uploads: this.uploads,
       queries: this.queries,
       onProjectEvent,
+      planner: this.planner,
     });
     this.ws = new AveWsServer({
       host: options.host ?? "127.0.0.1",
@@ -117,6 +129,7 @@ export class AveDaemon {
   }
 
   async stop(): Promise<void> {
+    await this.planner.disposeAll();
     await this.ws.stop();
     await this.jobs.stop();
     this.store.close();
