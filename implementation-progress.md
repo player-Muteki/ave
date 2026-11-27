@@ -229,6 +229,8 @@
 
 - Copilot 闭环继续推进：会话可绑定方案（`bind_object_edit_plan`，幂等+版本门禁）并沿状态机推进（`advance_object_edit_session`：mask_review→preview 需绑定方案的 preview job，preview→delivered 需已完成 export job，禁止回退，可取消）；planner 新增第 17 个工具 `get_object_edit_sessions`（broker 只读会话，prompt 已提示先读避免与用户决策冲突）；edit-desk 会话面板新增 绑定最新方案/推进 preview/delivered/取消 按钮。fixtures 182 例/123 defs，rpc-surface 57 case/53 export 一致；oes-smoke 新增 OES_BIND/OES_ADVANCE（含 INVALID_ARGUMENT、回退 INVALID_STATE、错误 planHash 拒绝）/BROKER_OES 全绿。
 
+- Copilot 闭环再补两块：① 候选风险评分改用真实分析信号——create_object_edit_session 读取 scene-cuts 的 score，强切点（score 高）风险低、弱切点风险高并提示画面跳变，confidence=归一化 score；② run 结构化问题的回答闭环——新增 `video.v1.answer_run_question`（operator，幂等，emit run.answer 事件），edit-desk 每条问题可点选项回答。fixtures 185 例/125 defs，rpc-surface 58 case/54 export 一致；oes-smoke 新增 RUN_ANSWER（幂等+事件落库）与 OES_RISK（强切点 risk 5 / 弱切点 risk 80）全绿。
+
 ## 环境与错误
 
 | 问题 | 处理 |

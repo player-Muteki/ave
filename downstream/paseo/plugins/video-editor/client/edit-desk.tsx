@@ -11,7 +11,7 @@ import {
   decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc, getMutationResultRpc,
-  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc,
+  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, answerRunQuestionRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot, type ObjectEditSession, type RunQuestion,
 } from "../shared/contracts/v1.js";
@@ -76,6 +76,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readRunQuestions = useRpc(getRunQuestionsRpc);
   const bindOesPlan = useRpc(bindObjectEditPlanRpc);
   const advanceOes = useRpc(advanceObjectEditSessionRpc);
+  const answerQuestion = useRpc(answerRunQuestionRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
   const readQaSummary = useRpc(getQaSummaryRpc);
@@ -840,9 +841,37 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
           {runQuestions.length > 0 && (
             <View style={styles.clip}>
               {runQuestions.map((q) => (
-                <Text key={q.eventId} style={muted}>
-                  {q.seq} · {q.text}{q.choices.length ? ` [${q.choices.join("/")}]` : ""}
-                </Text>
+                <View key={q.eventId}>
+                  <Text style={muted}>
+                    {q.seq} · {q.text}{q.choices.length ? ` [${q.choices.join("/")}]` : ""}
+                  </Text>
+                  {project && run && q.choices.map((c) => (
+                    <Text key={c}>
+                      {button(`回答：${c}`, async () => {
+                        await answerQuestion({
+                          requestId: requestId(`ans:${run.runId}:${q.questionId}:${c}`),
+                          projectId: project.projectId,
+                          runId: run.runId,
+                          questionId: q.questionId,
+                          answer: c,
+                        });
+                        const r = await readRunQuestions({ requestId: requestId(`questions:${run.runId}:after`), projectId: project.projectId, runId: run.runId });
+                        setRunQuestions(r.questions.slice().reverse());
+                        setNotice(`已回答「${q.text.slice(0, 20)}」→ ${c}`);
+                      })}
+                    </Text>
+                  ))}
+                  {project && run && !q.choices.length && button("回答：确认", async () => {
+                    await answerQuestion({
+                      requestId: requestId(`ans:${run.runId}:${q.questionId}:ok`),
+                      projectId: project.projectId,
+                      runId: run.runId,
+                      questionId: q.questionId,
+                      answer: "确认",
+                    });
+                    setNotice(`已确认「${q.text.slice(0, 20)}」`);
+                  })}
+                </View>
               ))}
             </View>
           )}

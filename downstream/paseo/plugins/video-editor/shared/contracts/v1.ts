@@ -911,6 +911,26 @@ export const getRunQuestionsRpc = {
   output: GetRunQuestionsResultSchema,
 };
 
+export const AnswerRunQuestionInputSchema = z
+  .object({ requestId, projectId: id, runId: id, questionId: id, answer: z.string().min(1).max(2000) })
+  .strict();
+export type AnswerRunQuestionInput = z.infer<typeof AnswerRunQuestionInputSchema>;
+export const AnswerRunQuestionResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    runId: id,
+    questionId: id,
+    answer: z.string().min(1).max(2000),
+    recorded: z.boolean(),
+  })
+  .strict();
+export const answerRunQuestionRpc = {
+  name: "video.v1.answer_run_question",
+  input: AnswerRunQuestionInputSchema,
+  output: AnswerRunQuestionResultSchema,
+};
+
 export const BindObjectEditPlanInputSchema = z
   .object({ requestId, projectId: id, sessionId: id, planId: id })
   .strict();

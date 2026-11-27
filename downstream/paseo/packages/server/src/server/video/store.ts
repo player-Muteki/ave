@@ -810,10 +810,10 @@ export class EditorStore {
     principal: EditorPrincipal,
   ) {
     this.authorize(input.projectId, principal, "operator");
-    let cutFrames: { frameIndex: number; ptsTime: string }[] = [];
+    let cutFrames: { frameIndex: number; ptsTime: string; score: string }[] = [];
     try {
       const cuts = await this.sceneCuts(input.projectId, input.assetId, principal);
-      cutFrames = cuts.cuts.map((c) => ({ frameIndex: c.frameIndex, ptsTime: c.ptsTime }));
+      cutFrames = cuts.cuts.map((c) => ({ frameIndex: c.frameIndex, ptsTime: c.ptsTime, score: c.score }));
     } catch {
       // no analysis artifacts yet: fall through with a single placeholder
     }
@@ -825,15 +825,28 @@ export class EditorStore {
         const project = this.project(projectId, principal);
         const asset = project.assets.find((a) => a.assetId === input.assetId);
         if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset does not exist in this project");
-        let candidates: PersonCandidate[] = cutFrames.slice(0, 8).map((cut, i) => ({
-          candidateId: `cand-${i + 1}`,
-          label: `候选人物 ${i + 1}`,
-          role: "uncertain" as const,
-          confidence: 0.5,
-          evidenceFrames: [String(cut.frameIndex)],
-          riskScore: 50,
-          riskReasons: ["detector not wired; scene-cut placeholder", `cut at ${cut.ptsTime}s`],
-        }));
+        let candidates: PersonCandidate[] = cutFrames.slice(0, 8).map((cut, i) => {
+          // Risk from the real scene-cut score: a hard boundary (high score)
+          // means the segment is a clean shot, so removing a person there is
+          // lower risk; a weak boundary raises the risk of visible artifacts.
+          const score = Number(cut.score);
+          const hard = Number.isFinite(score) ? Math.min(1, Math.max(0, score)) : 0.5;
+          const riskScore = Math.round(100 * (1 - hard));
+          const riskReasons = [
+            "detector not wired; scene-cut placeholder",
+            `cut at ${cut.ptsTime}s score ${cut.score}`,
+            hard >= 0.7 ? "强切点，移除风险低" : "弱切点，注意画面跳变",
+          ];
+          return {
+            candidateId: `cand-${i + 1}`,
+            label: `候选人物 ${i + 1}`,
+            role: "uncertain" as const,
+            confidence: hard,
+            evidenceFrames: [String(cut.frameIndex)],
+            riskScore,
+            riskReasons,
+          };
+        });
         if (!candidates.length)
           candidates = [{
             candidateId: "cand-1",
@@ -963,6 +976,30 @@ export class EditorStore {
         };
       })
       .filter((q) => q.text.length > 0);
+  }
+
+  /**
+   * Record the operator's answer to a run's structured question (idempotent).
+   * The answer is emitted as a run.answer event so the worker/session can
+   * consume it; the daemon itself never auto-answers.
+   */
+  answerRunQuestion(
+    input: { requestId: string; projectId: string; runId: string; questionId: string; answer: string },
+    principal: EditorPrincipal,
+  ) {
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: input,
+      execute: (projectId) => {
+        this.authorize(projectId, principal, "operator");
+        this.emit(projectId, "run.answer", {
+          questionId: input.questionId,
+          answer: input.answer,
+        }, { runId: input.runId });
+        return { ...input, recorded: true };
+      },
+    });
   }
 
   /**
