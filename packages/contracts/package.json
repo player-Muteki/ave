@@ -8,19 +8,23 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./src/index.ts"
+      "ave-source": "./src/index.ts",
+      "default": "./dist/index.js"
     },
     "./v1": {
       "types": "./dist/v1.d.ts",
-      "default": "./src/v1.ts"
+      "ave-source": "./src/v1.ts",
+      "default": "./dist/v1.js"
     },
     "./bytes": {
       "types": "./dist/bytes.d.ts",
-      "default": "./src/bytes.ts"
+      "ave-source": "./src/bytes.ts",
+      "default": "./dist/bytes.js"
     },
     "./errors": {
       "types": "./dist/errors.d.ts",
-      "default": "./src/errors.ts"
+      "ave-source": "./src/errors.ts",
+      "default": "./dist/errors.js"
     },
     "./schema": "./src/v1.schema.json"
   },

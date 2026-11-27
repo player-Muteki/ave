@@ -1,6 +1,9 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: {
+    conditions: ["ave-source", "import", "default"],
+  },
   test: {
     include: [
       "packages/**/*.test.ts",

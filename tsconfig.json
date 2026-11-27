@@ -3,7 +3,12 @@
   "references": [
     { "path": "packages/contracts" },
     { "path": "packages/domain" },
+    { "path": "packages/protocol" },
+    { "path": "packages/client-sdk" },
     { "path": "storage/cas" },
-    { "path": "storage/sqlite" }
+    { "path": "storage/sqlite" },
+    { "path": "services/daemon" },
+    { "path": "apps/web" },
+    { "path": "apps/desktop" }
   ]
 }

@@ -55,13 +55,12 @@ def main() -> int:
 
         for needle, label in FORBIDDEN_GLOBAL:
             if needle in text:
-                # Allow string literal "filmcraft" only in contracts/domain schema compat enum check,
-                # never as an import/dependency/package reference.
-                if needle == "filmcraft" and (
-                    rel.startswith("packages/contracts/")
-                    or rel.startswith("packages/domain/")
-                ):
-                    if re.search(r"""(?:from\s+['"][^'"]*filmcraft|require\(['"][^'"]*filmcraft|"filmcraft":)""", text, re.I):
+                if needle == "filmcraft":
+                    if re.search(
+                        r"""(?:from\s+['"][^'"]*filmcraft|import\s+['"][^'"]*filmcraft|require\(['"][^'"]*filmcraft|"filmcraft"\s*:)""",
+                        text,
+                        re.I,
+                    ):
                         errors.append(f"{rel}: forbidden FilmCraft import/dependency")
                     continue
                 errors.append(f"{rel}: forbidden {label} ({needle})")

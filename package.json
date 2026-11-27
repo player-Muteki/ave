@@ -4,7 +4,9 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "storage/*"
+    "storage/*",
+    "services/*",
+    "apps/*"
   ],
   "scripts": {
     "test": "vitest run",
