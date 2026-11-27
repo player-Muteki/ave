@@ -42,10 +42,7 @@ import {
   type JobSnapshot,
   type ProjectSnapshot,
   type SourceAsset,
-  ObjectEditSessionSchema,
   ModelPolicySchema,
-  type ObjectEditSession,
-  type PersonCandidate,
   type ModelPolicy,
   type ModelStage,
   type ModelRef,
@@ -213,10 +210,6 @@ CREATE TABLE IF NOT EXISTS uploads (
   upload_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, expected_size TEXT NOT NULL,
   expected_sha256 TEXT NOT NULL, display_name TEXT NOT NULL, media_type TEXT NOT NULL,
   next_offset TEXT NOT NULL, created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS object_sessions (
-  session_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
-  asset_id TEXT NOT NULL, document TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS model_policies (
   project_id TEXT NOT NULL REFERENCES projects(project_id), provider TEXT NOT NULL, model_id TEXT NOT NULL,
@@ -392,19 +385,19 @@ export class EditorStore {
       plans,
       approvals,
       jobs,
-      objectEditSessions: this.rows(
-        "SELECT document FROM object_sessions WHERE project_id = ? ORDER BY created_at DESC, session_id LIMIT 8",
+      objectEdits: this.rows(
+        "SELECT document FROM object_edits WHERE project_id = ? ORDER BY rowid DESC LIMIT 8",
         projectId,
       ).map((document) => {
-        const session = ObjectEditSessionSchema.parse(JSON.parse(document));
+        const workflow = ObjectEditWorkflowSchema.parse(JSON.parse(document));
         return {
-          sessionId: session.sessionId,
-          assetId: session.assetId,
-          state: session.state,
-          boundRevision: session.boundRevision,
-          candidateCount: session.candidates.length,
-          decisionCount: session.decisions.length,
-          ...(session.planId ? { planId: session.planId } : {}),
+          workflowId: workflow.workflowId,
+          assetId: workflow.assetId,
+          state: workflow.state,
+          candidateCount: workflow.candidates.length,
+          removalCount: removalTargets(workflow.candidates, workflow.decisions).length,
+          workflowRevision: workflow.workflowRevision,
+          createdAt: workflow.createdAt,
         };
       }),
       latestSeq: this.latestSeq(projectId),
@@ -843,123 +836,6 @@ export class EditorStore {
   }
 
   /**
-   * Create an object-editing session for one asset. Candidates are derived
-   * deterministically from the asset's scene-cut analysis as placeholders
-   * until a real person detector is wired into the worker; the session starts
-   * in awaiting_selection and is bound to the current project revision.
-   */
-  async createObjectEditSession(
-    input: { requestId: string; projectId: string; assetId: string },
-    principal: EditorPrincipal,
-  ) {
-    this.authorize(input.projectId, principal, "operator");
-    let cutFrames: { frameIndex: number; ptsTime: string; score: string }[] = [];
-    try {
-      const cuts = await this.sceneCuts(input.projectId, input.assetId, principal);
-      cutFrames = cuts.cuts.map((c) => ({ frameIndex: c.frameIndex, ptsTime: c.ptsTime, score: c.score }));
-    } catch {
-      // no analysis artifacts yet: fall through with a single placeholder
-    }
-    return this.mutate({
-      projectId: input.projectId,
-      requestId: input.requestId,
-      payload: { ...input, cutFrames },
-      execute: (projectId) => {
-        const project = this.project(projectId, principal);
-        const asset = project.assets.find((a) => a.assetId === input.assetId);
-        if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset does not exist in this project");
-        const candidates = this.deriveCandidates(cutFrames);
-        const state: ObjectEditSession["state"] = candidates.length ? "awaiting_selection" : "analyzing";
-        const sessionId = `oes-${randomUUID()}`;
-        const now = this.now();
-        const session: ObjectEditSession = {
-          sessionId,
-          projectId,
-          assetId: input.assetId,
-          state,
-          boundRevision: project.revision,
-          candidates,
-          decisions: [],
-          note: "candidates are scene-cut placeholders until the detector lands",
-          createdAt: now,
-          updatedAt: now,
-        };
-        this.database
-          .prepare(
-            "INSERT INTO object_sessions(session_id, project_id, asset_id, document, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-          )
-          .run(sessionId, projectId, input.assetId, JSON.stringify(session), now, now);
-        this.emit(projectId, "object_edit.session_created", {
-          sessionId,
-          assetId: input.assetId,
-          candidateCount: candidates.length,
-        });
-        return session;
-      },
-    });
-  }
-
-  objectEditSession(projectId: string, sessionId: string, principal: EditorPrincipal): ObjectEditSession {
-    this.authorize(projectId, principal, "viewer");
-    const row = this.database
-      .prepare("SELECT document FROM object_sessions WHERE project_id = ? AND session_id = ?")
-      .get(projectId, sessionId) as { document: string } | undefined;
-    if (!row) editorFailure("ASSET_NOT_FOUND", "The object-edit session does not exist in this project");
-    return ObjectEditSessionSchema.parse(JSON.parse(row.document));
-  }
-
-  /** Viewer-level listing of object-edit sessions, newest first, bounded. */
-  listObjectSessions(projectId: string, principal: EditorPrincipal): ObjectEditSession[] {
-    this.authorize(projectId, principal, "viewer");
-    return this.rows(
-      "SELECT document FROM object_sessions WHERE project_id = ? ORDER BY created_at DESC, session_id LIMIT 64",
-      projectId,
-    ).map((document) => ObjectEditSessionSchema.parse(JSON.parse(document)));
-  }
-
-  /**
-   * Record one candidate decision (idempotent per requestId). Refuses when the
-   * session is not awaiting selection or is bound to an older project revision.
-   * When every candidate has a decision the session advances to mask_review.
-   */
-  decideCandidate(
-    input: { requestId: string; projectId: string; sessionId: string; candidateId: string; decision: "remove" | "keep" | "skip" },
-    principal: EditorPrincipal,
-  ) {
-    return this.mutate({
-      projectId: input.projectId,
-      requestId: input.requestId,
-      payload: input,
-      execute: (projectId) => {
-        this.authorize(projectId, principal, "operator");
-        const session = this.objectEditSession(projectId, input.sessionId, principal);
-        if (session.state !== "awaiting_selection")
-          editorFailure("INVALID_STATE", `The session is ${session.state}, not awaiting_selection`);
-        const current = this.projectRow(projectId);
-        if (session.boundRevision !== current.revision)
-          editorFailure("REVISION_CONFLICT", "The session is bound to an older project revision; recreate it");
-        if (!session.candidates.some((c) => c.candidateId === input.candidateId))
-          editorFailure("ASSET_NOT_FOUND", "No such candidate in this session");
-        const decisions = session.decisions.filter((d) => d.candidateId !== input.candidateId);
-        decisions.push({ candidateId: input.candidateId, decision: input.decision });
-        const updated: ObjectEditSession = { ...session, decisions, updatedAt: this.now() };
-        if (updated.candidates.every((c) => updated.decisions.some((d) => d.candidateId === c.candidateId)))
-          updated.state = "mask_review";
-        this.database
-          .prepare("UPDATE object_sessions SET document = ?, updated_at = ? WHERE session_id = ?")
-          .run(JSON.stringify(updated), updated.updatedAt, input.sessionId);
-        this.emit(projectId, "object_edit.decision", {
-          sessionId: input.sessionId,
-          candidateId: input.candidateId,
-          decision: input.decision,
-          state: updated.state,
-        });
-        return updated;
-      },
-    });
-  }
-
-  /**
    * Structured HITL questions a planning run asked (events of type run.question
    * scoped to the run), newest first, bounded to 64.
    */
@@ -1114,192 +990,6 @@ export class EditorStore {
           .run(projectId, JSON.stringify({ allowCloudModels: input.allowCloudModels }));
         this.emit(projectId, "project.cloud_policy", { allowCloudModels: input.allowCloudModels });
         return { allowCloudModels: input.allowCloudModels };
-      },
-    });
-  }
-
-  /**
-   * Derive placeholder candidates from scene cuts. Risk comes from the real
-   * cut score: a hard boundary (high score) is a clean shot, so removing a
-   * person there is lower risk; a weak boundary risks visible jumps.
-   */
-  private deriveCandidates(
-    cutFrames: { frameIndex: number; ptsTime: string; score: string }[],
-  ): PersonCandidate[] {
-    return cutFrames.slice(0, 8).map((cut, i) => {
-      const score = Number(cut.score);
-      const hard = Number.isFinite(score) ? Math.min(1, Math.max(0, score)) : 0.5;
-      return {
-        candidateId: `cand-${i + 1}`,
-        label: `候选人物 ${i + 1}`,
-        role: "uncertain" as const,
-        confidence: hard,
-        evidenceFrames: [String(cut.frameIndex)],
-        riskScore: Math.round(100 * (1 - hard)),
-        riskReasons: [
-          "detector not wired; scene-cut placeholder",
-          `cut at ${cut.ptsTime}s score ${cut.score}`,
-          hard >= 0.7 ? "强切点，移除风险低" : "弱切点，注意画面跳变",
-        ],
-      };
-    });
-  }
-
-  /**
-   * Re-derive a session's candidates from the latest analysis artifacts
-   * (idempotent). analyzing → awaiting_selection once cuts exist; stays
-   * analyzing when the asset has no scene cuts yet.
-   */
-  async refreshObjectEditCandidates(
-    input: { requestId: string; projectId: string; sessionId: string },
-    principal: EditorPrincipal,
-  ) {
-    this.authorize(input.projectId, principal, "operator");
-    let cutFrames: { frameIndex: number; ptsTime: string; score: string }[] = [];
-    try {
-      const cuts = await this.sceneCuts(input.projectId, this.objectEditSession(input.projectId, input.sessionId, principal).assetId, principal);
-      cutFrames = cuts.cuts.map((c) => ({ frameIndex: c.frameIndex, ptsTime: c.ptsTime, score: c.score }));
-    } catch {
-      // no analysis yet: stays analyzing
-    }
-    return this.mutate({
-      projectId: input.projectId,
-      requestId: input.requestId,
-      payload: { ...input, cutFrames },
-      execute: (projectId) => {
-        const session = this.objectEditSession(projectId, input.sessionId, principal);
-        if (session.state === "cancelled" || session.state === "delivered")
-          editorFailure("INVALID_STATE", `The session is ${session.state} and cannot be refreshed`);
-        if (session.boundRevision !== this.projectRow(projectId).revision)
-          editorFailure("REVISION_CONFLICT", "The session is bound to an older project revision; recreate it");
-        const candidates = this.deriveCandidates(cutFrames);
-        const updated: ObjectEditSession = {
-          ...session,
-          candidates,
-          decisions: session.decisions.filter((d) => candidates.some((c) => c.candidateId === d.candidateId)),
-          state: candidates.length ? "awaiting_selection" : session.state === "analyzing" ? "analyzing" : session.state,
-          updatedAt: this.now(),
-        };
-        if (updated.state === "awaiting_selection" && session.state === "analyzing" && candidates.length)
-          updated.state = "awaiting_selection";
-        this.database
-          .prepare("UPDATE object_sessions SET document = ?, updated_at = ? WHERE session_id = ?")
-          .run(JSON.stringify(updated), updated.updatedAt, input.sessionId);
-        this.emit(projectId, "object_edit.candidates_refreshed", {
-          sessionId: input.sessionId,
-          candidateCount: candidates.length,
-          state: updated.state,
-        });
-        return updated;
-      },
-    });
-  }
-
-  /**
-   * Bind a proposed plan to an object-edit session (idempotent). The plan must
-   * exist in the same project and the session must be bound to the current
-   * project revision.
-   */
-  bindObjectEditPlan(
-    input: { requestId: string; projectId: string; sessionId: string; planId: string },
-    principal: EditorPrincipal,
-  ) {
-    return this.mutate({
-      projectId: input.projectId,
-      requestId: input.requestId,
-      payload: input,
-      execute: (projectId) => {
-        this.authorize(projectId, principal, "operator");
-        const session = this.objectEditSession(projectId, input.sessionId, principal);
-        if (session.state === "cancelled" || session.state === "delivered")
-          editorFailure("INVALID_STATE", `The session is ${session.state} and cannot be rebound`);
-        if (session.boundRevision !== this.projectRow(projectId).revision)
-          editorFailure("REVISION_CONFLICT", "The session is bound to an older project revision; recreate it");
-        const plan = this.plan(projectId, input.planId, principal);
-        const updated: ObjectEditSession = { ...session, planId: plan.planId, updatedAt: this.now() };
-        this.database
-          .prepare("UPDATE object_sessions SET document = ?, updated_at = ? WHERE session_id = ?")
-          .run(JSON.stringify(updated), updated.updatedAt, input.sessionId);
-        this.emit(projectId, "object_edit.plan_bound", {
-          sessionId: input.sessionId,
-          planId: plan.planId,
-          planHash: plan.planHash,
-        });
-        return updated;
-      },
-    });
-  }
-
-  private static readonly OES_ORDER = ["analyzing", "awaiting_selection", "mask_review", "preview", "delivered"] as const;
-
-  /**
-   * Advance an object-edit session along its state machine (idempotent).
-   * preview/delivered require a bound plan plus a job of that plan's hash
-   * (preview job for preview, completed export for delivered); anything not
-   * delivered may be cancelled.
-   */
-  advanceObjectEditSession(
-    input: {
-      requestId: string;
-      projectId: string;
-      sessionId: string;
-      target: "mask_review" | "preview" | "delivered" | "cancelled";
-      jobId?: string;
-    },
-    principal: EditorPrincipal,
-  ) {
-    return this.mutate({
-      projectId: input.projectId,
-      requestId: input.requestId,
-      payload: input,
-      execute: (projectId) => {
-        this.authorize(projectId, principal, "operator");
-        const session = this.objectEditSession(projectId, input.sessionId, principal);
-        if (session.boundRevision !== this.projectRow(projectId).revision)
-          editorFailure("REVISION_CONFLICT", "The session is bound to an older project revision; recreate it");
-        if (session.state === "cancelled")
-          editorFailure("INVALID_STATE", "cancelled is terminal");
-        const order = EditorStore.OES_ORDER;
-        const from = order.indexOf(session.state as (typeof order)[number]);
-        let updated: ObjectEditSession;
-        if (input.target === "cancelled") {
-          updated = { ...session, state: "cancelled", updatedAt: this.now() };
-        } else {
-          const to = order.indexOf(input.target as (typeof order)[number]);
-          if (to <= from)
-            editorFailure("INVALID_STATE", `cannot move ${session.state} → ${input.target}`);
-          if (input.target === "mask_review" &&
-              !session.candidates.every((c) => session.decisions.some((d) => d.candidateId === c.candidateId)))
-            editorFailure("INVALID_STATE", "not all candidates have a decision yet");
-          if (input.target === "preview" || input.target === "delivered") {
-            if (!session.planId) editorFailure("INVALID_STATE", "bind a plan to the session first");
-            const plan = this.plan(projectId, session.planId, principal);
-            if (!input.jobId) editorFailure("INVALID_ARGUMENT", "jobId is required for preview/delivered");
-            const job = this.job(projectId, input.jobId, principal);
-            if (job.planHash !== plan.planHash)
-              editorFailure("PLAN_SEMANTIC_INVALID", "The job does not belong to the bound plan");
-            if (input.target === "preview" && job.kind !== "preview")
-              editorFailure("INVALID_STATE", "preview requires a preview job");
-            if (input.target === "delivered" && (job.kind !== "export" || job.state !== "completed"))
-              editorFailure("INVALID_STATE", "delivered requires a completed export job");
-          }
-          updated = {
-            ...session,
-            state: input.target,
-            ...(input.jobId ? { jobId: input.jobId } : {}),
-            updatedAt: this.now(),
-          };
-        }
-        this.database
-          .prepare("UPDATE object_sessions SET document = ?, updated_at = ? WHERE session_id = ?")
-          .run(JSON.stringify(updated), updated.updatedAt, input.sessionId);
-        this.emit(projectId, "object_edit.advanced", {
-          sessionId: input.sessionId,
-          from: session.state,
-          to: updated.state,
-          jobId: updated.jobId ?? null,
-        });
-        return updated;
       },
     });
   }
@@ -1542,13 +1232,6 @@ export class EditorStore {
       requestId: request.requestId,
       payload: request,
       execute: () => {
-        if (request.objectEditSessionId) {
-          const session = this.objectEditSession(projectId, request.objectEditSessionId, principal);
-          if (session.state !== "mask_review" && session.state !== "preview")
-            editorFailure("INVALID_STATE", `The object-edit session is ${session.state}, not mask_review`);
-          if (session.boundRevision !== this.projectRow(projectId).revision)
-            editorFailure("REVISION_CONFLICT", "The object-edit session is bound to an older project revision");
-        }
         const { tracking, manifest, proxy } = this.trackingReviewInputs(
           projectId,
           jobId,
@@ -1578,7 +1261,6 @@ export class EditorStore {
         const approval = ApprovalRequestSchema.parse({
           projectId,
           approvalId: randomUUID(),
-          ...(request.objectEditSessionId ? { objectEditSessionId: request.objectEditSessionId } : {}),
           subjectType: "mask_revision",
           subjectId: manifest.artifactId,
           subjectRevision: manifest.revision,

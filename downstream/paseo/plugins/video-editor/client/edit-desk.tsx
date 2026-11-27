@@ -11,9 +11,9 @@ import {
   decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc, getMutationResultRpc,
-  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, answerRunQuestionRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc, setModelPolicyRpc, getModelPoliciesRpc, removeModelPolicyRpc, refreshObjectEditCandidatesRpc, setProjectCloudPolicyRpc,
+  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, getRunQuestionsRpc, answerRunQuestionRpc, setModelPolicyRpc, getModelPoliciesRpc, removeModelPolicyRpc, setProjectCloudPolicyRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
-  type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot, type ObjectEditSession, type RunQuestion, type ModelPolicy, type ModelStage,
+  type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot, type RunQuestion, type ModelPolicy, type ModelStage,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
 import { ObjectEditPanel } from "./object-edit-panel.js";
@@ -71,17 +71,11 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readRunEvents = useRpc(getRunEventsRpc);
   const listApprovals = useRpc(listApprovalsRpc);
   const listPlans = useRpc(listPlansRpc);
-  const createOes = useRpc(createObjectEditSessionRpc);
-  const listOes = useRpc(listObjectEditSessionsRpc);
-  const decideCand = useRpc(decideCandidateRpc);
   const readRunQuestions = useRpc(getRunQuestionsRpc);
-  const bindOesPlan = useRpc(bindObjectEditPlanRpc);
-  const advanceOes = useRpc(advanceObjectEditSessionRpc);
   const answerQuestion = useRpc(answerRunQuestionRpc);
   const setModelPolicy = useRpc(setModelPolicyRpc);
   const readPolicies = useRpc(getModelPoliciesRpc);
   const removePolicy = useRpc(removeModelPolicyRpc);
-  const refreshOes = useRpc(refreshObjectEditCandidatesRpc);
   const setCloudPolicy = useRpc(setProjectCloudPolicyRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
@@ -139,7 +133,6 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [planPrompt, setPlanPrompt] = useState("");
   const [run, setRun] = useState<PlanningRunStatus | null>(null);
   const [runEvents, setRunEvents] = useState<EditorEvent[]>([]);
-  const [oes, setOes] = useState<ObjectEditSession | null>(null);
   const [runQuestions, setRunQuestions] = useState<RunQuestion[]>([]);
   const [policies, setPolicies] = useState<ModelPolicy[]>([]);
   const [policyProvider, setPolicyProvider] = useState("local");
@@ -413,7 +406,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
         <>
           <View style={row}>
             <Text selectable style={muted}>
-              版本 {project.revision} · {project.assets.length} 份素材{project.objectEditSessions.length ? ` · ${project.objectEditSessions.filter((o) => o.state === "awaiting_selection").length} 个待选对象会话` : ""}
+              版本 {project.revision} · {project.assets.length} 份素材{project.objectEdits.length ? ` · ${project.objectEdits.filter((o) => o.state === "awaiting_target_selection").length} 个待选对象工作流` : ""}
             </Text>
             {button("刷新项目", async () => show(await read({ projectId: project.projectId })))}
           </View>
@@ -942,85 +935,6 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               })}
             </View>
           ))}
-          <Text style={heading}>对象编辑（Copilot 闭环）</Text>
-          {project && button("创建对象会话", async () => {
-            const assetId = selected || project.assets.find((a) => a.streams.some((st) => st.kind === "video"))?.assetId;
-            if (!assetId) throw new Error("请先选择一个视频素材。");
-            const r = await createOes({ requestId: requestId(`oes:${assetId}`), projectId: project.projectId, assetId });
-            setOes(r);
-            setNotice(`对象会话 ${r.sessionId.slice(0, 12)} · ${r.candidates.length} 个候选 · 状态 ${r.state} · 绑定版本 ${r.boundRevision}`);
-          }, !selected)}
-          {project && button("会话列表", async () => {
-            const r = await listOes({ requestId: requestId("oes-list"), projectId: project.projectId });
-            if (r.sessions.length) setOes(r.sessions[0]);
-            setNotice(`对象会话 ${r.sessionCount} 条${r.sessions.length ? ` · 最新 ${r.sessions[0].sessionId.slice(0, 12)} ${r.sessions[0].state}` : ""}`);
-          })}
-          {oes && oes.projectId === project?.projectId && (
-            <View style={styles.clip}>
-              <View style={row}>
-                <Text style={ink}>会话 {oes.sessionId.slice(0, 12)} · {oes.state} · 版本 {oes.boundRevision}{oes.boundRevision !== project?.revision ? "（已过期，需重建）" : ""}</Text>
-                {button("刷新候选", async () => {
-                  const r = await refreshOes({ requestId: requestId(`refresh:${oes.sessionId}`), projectId: project!.projectId, sessionId: oes.sessionId });
-                  setOes(r);
-                  setNotice(`候选 ${r.candidates.length} 个 · 状态 ${r.state}`);
-                })}
-              </View>
-              {oes.candidates.map((c) => {
-                const dec = oes.decisions.find((d) => d.candidateId === c.candidateId)?.decision;
-                return (
-                  <View key={c.candidateId} style={styles.timelineRow}>
-                    <Text style={muted}>
-                      {c.label} · {c.role} · 置信 {c.confidence} · 风险 {c.riskScore}{dec ? ` · 已选 ${dec}` : ""}
-                    </Text>
-                    {c.riskReasons.map((r) => <Text key={r} style={styles.error}>风险：{r}</Text>)}
-                    {oes.state === "awaiting_selection" && ["remove", "keep", "skip"].map((d) => (
-                      <Text key={d}>
-                        {button(d === "remove" ? "移除" : d === "keep" ? "保留" : "暂不处理", async () => {
-                          const r = await decideCand({
-                            requestId: requestId(`dec:${oes.sessionId}:${c.candidateId}:${d}`),
-                            projectId: project!.projectId,
-                            sessionId: oes.sessionId,
-                            candidateId: c.candidateId,
-                            decision: d as "remove" | "keep" | "skip",
-                          });
-                          setOes(r);
-                          setNotice(`候选 ${c.candidateId} → ${d} · 会话 ${r.state}`);
-                        }, !!dec)}
-                      </Text>
-                    ))}
-                  </View>
-                );
-              })}
-              {oes.state === "mask_review" && <Text style={muted}>已完成候选决策；可在下方任务的审片中通过 objectEditSessionId 关联本会话</Text>}
-              {oes.planId && <Text style={muted}>已绑定方案 {oes.planId.slice(0, 12)}{oes.jobId ? ` · 任务 ${oes.jobId.slice(0, 12)}` : ""}</Text>}
-              {!oes.planId && oes.state === "mask_review" && project && project.plans.length > 0 && button("绑定最新方案", async () => {
-                const plan = project.plans.at(-1)!;
-                const r = await bindOesPlan({ requestId: requestId(`bind:${oes.sessionId}:${plan.planId}`), projectId: project.projectId, sessionId: oes.sessionId, planId: plan.planId });
-                setOes(r);
-                setNotice(`会话绑定方案 ${plan.planId.slice(0, 12)}`);
-              })}
-              {oes.planId && (oes.state === "mask_review" || oes.state === "preview") && project && (() => {
-                const plan = project.plans.find((pl) => pl.planId === oes.planId);
-                const jobs = project.jobs.filter((j) => plan && j.planHash === plan.planHash);
-                const previewJob = jobs.find((j) => j.kind === "preview");
-                const exportJob = jobs.find((j) => j.kind === "export" && j.state === "completed");
-                return <View>
-                  {oes.state === "mask_review" && previewJob && button("推进到 preview", async () => {
-                    const r = await advanceOes({ requestId: requestId(`adv:${oes.sessionId}:preview`), projectId: project.projectId, sessionId: oes.sessionId, target: "preview", jobId: previewJob.jobId });
-                    setOes(r); setNotice(`会话 → ${r.state}（任务 ${previewJob.jobId.slice(0, 12)}）`);
-                  })}
-                  {oes.state === "preview" && exportJob && button("推进到 delivered", async () => {
-                    const r = await advanceOes({ requestId: requestId(`adv:${oes.sessionId}:delivered`), projectId: project.projectId, sessionId: oes.sessionId, target: "delivered", jobId: exportJob.jobId });
-                    setOes(r); setNotice(`会话 → ${r.state}（导出 ${exportJob.jobId.slice(0, 12)}）`);
-                  })}
-                  {oes.state !== "delivered" && button("取消会话", async () => {
-                    const r = await advanceOes({ requestId: requestId(`adv:${oes.sessionId}:cancel`), projectId: project.projectId, sessionId: oes.sessionId, target: "cancelled" });
-                    setOes(r); setNotice(`会话已取消`);
-                  })}
-                </View>;
-              })()}
-            </View>
-          )}
           <Text style={heading}>已提议的时间线</Text>
           {button("方案列表", async () => {
             const r = await listPlans({ requestId: requestId("plans"), projectId: project.projectId });
@@ -1096,7 +1010,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               setNotice(`待审批 ${r.approvalCount} 条${r.approvals.length ? ` · 最新 ${r.approvals.at(-1)?.subjectType}/${r.approvals.at(-1)?.purpose}` : ""}`);
             })}
             <Text style={ink}>{approval.diffSummary.intent}</Text>
-            <Text selectable style={muted}>项目版本 {approval.baseTimelineRevision} · 方案 {approval.subjectHash}{approval.objectEditSessionId ? ` · 对象会话 ${approval.objectEditSessionId.slice(0, 12)}` : ""}</Text>
+            <Text selectable style={muted}>项目版本 {approval.baseTimelineRevision} · 方案 {approval.subjectHash}</Text>
             <Text style={muted}>{approval.diffSummary.operationCount} 项编辑 · {approval.diffSummary.summary}</Text>
             <Text style={muted}>只渲染预览，不批准成品或导出。</Text>
             {button("拒绝预览方案", async () => {

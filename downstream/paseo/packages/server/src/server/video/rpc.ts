@@ -27,15 +27,8 @@ import {
   GetRunEventsInputSchema,
   ListApprovalsInputSchema,
   ListPlansInputSchema,
-  CreateObjectEditSessionInputSchema,
-  GetObjectEditSessionInputSchema,
-  ListObjectEditSessionsInputSchema,
-  DecideCandidateInputSchema,
   GetRunQuestionsInputSchema,
-  BindObjectEditPlanInputSchema,
-  AdvanceObjectEditSessionInputSchema,
   AnswerRunQuestionInputSchema,
-  RefreshObjectEditCandidatesInputSchema,
   SetModelPolicyInputSchema,
   GetModelPoliciesInputSchema,
   RemoveModelPolicyInputSchema,
@@ -202,58 +195,6 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...this.editor.store.listPlans(request.projectId, principal, request.afterPlanId),
-        };
-      }
-      case "video.v1.create_object_edit_session": {
-        const request = CreateObjectEditSessionInputSchema.parse(input);
-        return {
-          requestId: request.requestId,
-          ...(await this.editor.store.createObjectEditSession(request, principal)),
-        };
-      }
-      case "video.v1.get_object_edit_session": {
-        const request = GetObjectEditSessionInputSchema.parse(input);
-        return {
-          requestId: request.requestId,
-          ...this.editor.store.objectEditSession(request.projectId, request.sessionId, principal),
-        };
-      }
-      case "video.v1.list_object_edit_sessions": {
-        const request = ListObjectEditSessionsInputSchema.parse(input);
-        const sessions = this.editor.store.listObjectSessions(request.projectId, principal);
-        return {
-          requestId: request.requestId,
-          projectId: request.projectId,
-          sessionCount: sessions.length,
-          sessions,
-        };
-      }
-      case "video.v1.decide_candidate": {
-        const request = DecideCandidateInputSchema.parse(input);
-        return {
-          requestId: request.requestId,
-          ...this.editor.store.decideCandidate(request, principal),
-        };
-      }
-      case "video.v1.refresh_object_edit_candidates": {
-        const request = RefreshObjectEditCandidatesInputSchema.parse(input);
-        return {
-          requestId: request.requestId,
-          ...(await this.editor.store.refreshObjectEditCandidates(request, principal)),
-        };
-      }
-      case "video.v1.bind_object_edit_plan": {
-        const request = BindObjectEditPlanInputSchema.parse(input);
-        return {
-          requestId: request.requestId,
-          ...this.editor.store.bindObjectEditPlan(request, principal),
-        };
-      }
-      case "video.v1.advance_object_edit_session": {
-        const request = AdvanceObjectEditSessionInputSchema.parse(input);
-        return {
-          requestId: request.requestId,
-          ...this.editor.store.advanceObjectEditSession(request, principal),
         };
       }
       case "video.v1.answer_run_question": {

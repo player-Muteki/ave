@@ -30,6 +30,7 @@ export class VideoToolBroker {
         for (const j of [...p.jobs].sort((a, b) => (a.jobId < b.jobId ? 1 : -1)))
           if (j.analysisAssetId && !analysisState.has(j.analysisAssetId))
             analysisState.set(j.analysisAssetId, j.state);
+        const workflows = this.store.listObjectEdits(projectId, undefined, principal);
         return {
           projectId,
           revision: p.revision,
@@ -55,11 +56,12 @@ export class VideoToolBroker {
           hasMorePlans: p.plans.length > 32,
           approvalCount: p.approvals.length,
           pendingApprovalCount: p.approvals.filter((a) => a.status === "pending").length,
-          objectEditSessionCount: this.store.listObjectSessions(projectId, principal).length,
-          objectEditSessions: this.store.listObjectSessions(projectId, principal).slice(0, 8).map((o) => ({
-            sessionId: o.sessionId, assetId: o.assetId, state: o.state, boundRevision: o.boundRevision,
-            candidateCount: o.candidates.length, decisionCount: o.decisions.length,
-            ...(o.planId ? { planId: o.planId } : {}),
+          objectEditCount: workflows.length,
+          objectEdits: workflows.slice(0, 8).map((o) => ({
+            workflowId: o.workflowId, assetId: o.assetId, state: o.state,
+            candidateCount: o.candidates.length,
+            removalCount: o.decisions.filter((d) => d.decision === "remove").length,
+            workflowRevision: o.workflowRevision,
           })),
           jobCount: p.jobs.length,
           jobs: p.jobs
@@ -78,11 +80,8 @@ export class VideoToolBroker {
         return this.store.plannerAssetMetadata(projectId, call.args.assetId, call.args.contentHash, principal);
       case "list_artifacts":
         return this.store.listArtifacts(projectId, call.args.jobId, principal);
-      case "get_object_edit_sessions":
-        return {
-          sessionCount: this.store.listObjectSessions(projectId, principal).length,
-          sessions: this.store.listObjectSessions(projectId, principal),
-        };
+      case "get_object_edits":
+        return { workflows: this.store.listObjectEdits(projectId, call.args.assetId, principal) };
       case "get_job_status": {
         const job = this.store.job(projectId, call.args.jobId, principal);
         return {

@@ -14,7 +14,7 @@ const expected = [
   "get_asset_metadata",
   "get_contact_sheet",
   "get_job_status",
-  "get_object_edit_sessions",
+  "get_object_edits",
   "get_plan",
   "get_planning_run",
   "get_project_snapshot",

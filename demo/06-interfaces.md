@@ -370,18 +370,12 @@ type ExportManifest = {
 | `get_run_events` | 按 runId 订阅单次规划运行的事件（按项目和 runId 筛选后分页，单页 ≤200；latestSeq 为本页最后已读序号，空页沿用请求游标） | viewer；requestId + projectId + runId + afterSeq? |
 | `list_approvals` | 审批列表，可选 status 过滤（pending/approved/rejected/superseded/expired/revoked），最新 256 条 | viewer；requestId + projectId + status? |
 | `list_plans` | 方案摘要按创建顺序分页，下一页传上一页末条 planId，单页 ≤128；get_plan 支持查询已移出项目快照的历史方案 | viewer；requestId + projectId + afterPlanId? |
-| `create_object_edit_session` | 为某素材创建对象编辑会话（候选人物来自场景切点占位，绑定项目版本，幂等） | operator；requestId + projectId + assetId |
-| `get_object_edit_session/list_object_edit_sessions` | 读取对象编辑会话（状态机 analyzing→awaiting_selection→mask_review→…，候选+决策） | viewer；最新 64 条 |
-| `decide_candidate` | 对候选人物做 移除/保留/暂不处理 决策；幂等，拒绝过期版本与非等待状态，全部决策后进入 mask_review | operator；requestId + projectId + sessionId + candidateId + decision |
-| `get_run_questions` | 读取某次规划 run 发出的结构化 HITL 提问（run.question 事件，≤64 条） | viewer；requestId + projectId + runId |
-| `answer_run_question` | 记录操作员对 run 结构化问题的回答（幂等，落为 run.answer 事件，daemon 不代答） | operator；requestId + projectId + runId + questionId + answer |
-| `set_model_policy` | 登记/更新模型网关策略（provider+modelId → 可服务阶段 stages、local/cloud、启用与否），owner 幂等 upsert | owner；requestId + projectId + policy |
-| `get_model_policies` | 查看项目模型策略（≤64 条） | viewer；requestId + projectId |
-| `remove_model_policy` | 删除策略（owner，幂等） | owner；requestId + projectId + provider + modelId |
-| `set_project_cloud_policy` | 项目级云端模型授权开关（owner，幂等；默认关闭，云端策略一律拒绝） | owner；requestId + projectId + allowCloudModels |
-| `bind_object_edit_plan` | 把已提议方案绑定到对象编辑会话（幂等，拒绝过期版本） | operator；requestId + projectId + sessionId + planId |
-| `advance_object_edit_session` | 推进会话状态机：mask_review→preview 需绑定方案+该方案的 preview job，preview→delivered 需该方案已完成的 export job，任意非 delivered 可取消；禁止回退 | operator；requestId + projectId + sessionId + target + jobId? |
-| `refresh_object_edit_candidates` | 用最新分析产物重建会话候选（analyzing→awaiting_selection），幂等，过期版本拒绝 | operator；requestId + projectId + sessionId |
+| `open_object_edit` | 为某素材+区间+时间线版本开启对象编辑工作流（错定素材哈希与 baseTimelineRevision，空候选 analyzing） | operator；requestId 幂等，版本不符 REVISION_CONFLICT |
+| `record_object_candidates` | owner 守护进程写入检测器候选（角色/置信/证据帧/box/风险），analyzing→awaiting_target_selection | owner only；expectedWorkflowRevision 乐观锁 |
+| `decide_object_target` | 对候选做 移除/保留/暂不处理 批量决策；素材或时间线变更后旧决策作废 REVISION_CONFLICT；有 remove → awaiting_mask_review，否则 completed | operator；幂等 |
+| `review_object_mask` | 审核对象对象掩码（maskRevisionId）：approved→awaiting_generation_review，拒绝停留在同一步 | operator；乐观锁 |
+| `record_object_qa` | owner 记录去人 QA（residual/complete/flicker），达标→completed，不达标→failed | owner only；乐观锁 |
+| `get_object_edit` / `list_object_edits` | 读取单个/列表工作流（可按 assetId 过滤），状态机 analyzing→awaiting_target_selection→awaiting_mask_review→awaiting_generation_review→completed/failed | viewer |
 | `cancel_job/pause_job/resume_job` | 控制任务 | operator；独立 Agent abort |
 | `get_qa_report` | 查询 QA | viewer |
 | `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |

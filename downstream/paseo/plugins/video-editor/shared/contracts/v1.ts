@@ -251,7 +251,6 @@ export const ApprovalRequestSchema = z
     externalDestinations: z.array(z.string()),
     status: z.enum(["pending", "approved", "rejected", "superseded", "expired", "revoked"]),
     expiresAt: z.string().datetime(),
-    objectEditSessionId: id.optional(),
   })
   .strict();
 export type ApprovalRequest = z.infer<typeof ApprovalRequestSchema>;
@@ -368,20 +367,32 @@ export const EditorEventSchema = z
   .strict();
 export type EditorEvent = z.infer<typeof EditorEventSchema>;
 
-// Bounded summary of object-edit sessions carried in the project snapshot so
+export const ObjectEditStateSchema = z.enum([
+  "analyzing",
+  "awaiting_target_selection",
+  "awaiting_mask_review",
+  "awaiting_generation_review",
+  "completed",
+  "failed",
+]);
+export type ObjectEditState = z.infer<typeof ObjectEditStateSchema>;
+
+// Bounded summary of object-edit workflows carried in the project snapshot so
 // clients see pending HITL selections without a separate call.
-export const ObjectEditSessionSummarySchema = z
+
+
+export const ObjectEditWorkflowSummarySchema = z
   .object({
-    sessionId: id,
+    workflowId: id,
     assetId: id,
-    state: z.enum(["analyzing", "awaiting_selection", "mask_review", "preview", "delivered", "cancelled"]),
-    boundRevision: uint,
+    state: ObjectEditStateSchema,
     candidateCount: z.number().int().min(0),
-    decisionCount: z.number().int().min(0),
-    planId: id.optional(),
+    removalCount: z.number().int().min(0),
+    workflowRevision: uint,
+    createdAt: z.string().datetime(),
   })
   .strict();
-export type ObjectEditSessionSummary = z.infer<typeof ObjectEditSessionSummarySchema>;
+export type ObjectEditWorkflowSummary = z.infer<typeof ObjectEditWorkflowSummarySchema>;
 export const ProjectSnapshotSchema = z
   .object({
     protocolVersion: z.literal(VIDEO_PROTOCOL_VERSION),
@@ -393,7 +404,7 @@ export const ProjectSnapshotSchema = z
     plans: z.array(AcceptedEditPlanSchema),
     approvals: z.array(ApprovalRequestSchema),
     jobs: z.array(JobSnapshotSchema),
-    objectEditSessions: z.array(ObjectEditSessionSummarySchema).max(8),
+    objectEdits: z.array(ObjectEditWorkflowSummarySchema).max(8),
     latestSeq: uint,
   })
   .strict();
@@ -458,8 +469,8 @@ export const VideoToolCallSchema = z.discriminatedUnion("tool", [
     args: z.object({ jobId: id }).strict(),
   }),
   toolEnvelope.extend({
-    tool: z.literal("get_object_edit_sessions"),
-    args: ProjectRequestSchema,
+    tool: z.literal("get_object_edits"),
+    args: z.object({ projectId: id, assetId: id.optional() }).strict(),
   }),
   toolEnvelope.extend({ tool: z.literal("validate_edit_plan"), args: EditPlanDraftV1Schema }),
   toolEnvelope.extend({ tool: z.literal("estimate_timeline"), args: z.union([savedPlanArgs, EditPlanDraftV1Schema]) }),
@@ -810,98 +821,6 @@ export const listPlansRpc = {
   output: ListPlansResultSchema,
 };
 
-// ---- Object-editing HITL workflow (Copilot loop) ----
-// A session binds candidate persons detected in one asset to user decisions.
-// Decisions are bound to the project revision; stale sessions refuse writes.
-export const CandidateRoleSchema = z.enum(["protagonist", "bystander", "uncertain"]);
-export type CandidateRole = z.infer<typeof CandidateRoleSchema>;
-export const PersonCandidateSchema = z
-  .object({
-    candidateId: id,
-    label: z.string().min(1).max(64),
-    role: CandidateRoleSchema,
-    confidence: z.number().min(0).max(1),
-    evidenceFrames: z.array(uint).max(16),
-    riskScore: z.number().int().min(0).max(100),
-    riskReasons: z.array(z.string().min(1).max(200)).max(8),
-  })
-  .strict();
-export type PersonCandidate = z.infer<typeof PersonCandidateSchema>;
-export const CandidateDecisionSchema = z.enum(["remove", "keep", "skip"]);
-export type CandidateDecision = z.infer<typeof CandidateDecisionSchema>;
-export const ObjectEditStateSchema = z.enum([
-  "analyzing",
-  "awaiting_selection",
-  "mask_review",
-  "preview",
-  "delivered",
-  "cancelled",
-]);
-export type ObjectEditState = z.infer<typeof ObjectEditStateSchema>;
-export const CandidateDecisionRecordSchema = z
-  .object({ candidateId: id, decision: CandidateDecisionSchema })
-  .strict();
-export const ObjectEditSessionSchema = z
-  .object({
-    sessionId: id,
-    projectId: id,
-    assetId: id,
-    state: ObjectEditStateSchema,
-    boundRevision: uint,
-    candidates: z.array(PersonCandidateSchema).max(32),
-    decisions: z.array(CandidateDecisionRecordSchema).max(32),
-    planId: id.optional(),
-    jobId: id.optional(),
-    note: z.string().max(512),
-    createdAt: z.string().datetime(),
-    updatedAt: z.string().datetime(),
-  })
-  .strict();
-export type ObjectEditSession = z.infer<typeof ObjectEditSessionSchema>;
-
-export const CreateObjectEditSessionInputSchema = z
-  .object({ requestId, projectId: id, assetId: id })
-  .strict();
-export type CreateObjectEditSessionInput = z.infer<typeof CreateObjectEditSessionInputSchema>;
-export const ObjectEditSessionResultSchema = ObjectEditSessionSchema.extend({ requestId }).strict();
-export const createObjectEditSessionRpc = {
-  name: "video.v1.create_object_edit_session",
-  input: CreateObjectEditSessionInputSchema,
-  output: ObjectEditSessionResultSchema,
-};
-export const GetObjectEditSessionInputSchema = z
-  .object({ requestId, projectId: id, sessionId: id })
-  .strict();
-export const getObjectEditSessionRpc = {
-  name: "video.v1.get_object_edit_session",
-  input: GetObjectEditSessionInputSchema,
-  output: ObjectEditSessionResultSchema,
-};
-export const ListObjectEditSessionsInputSchema = z
-  .object({ requestId, projectId: id })
-  .strict();
-export const ListObjectEditSessionsResultSchema = z
-  .object({
-    requestId,
-    projectId: id,
-    sessionCount: z.number().int().min(0),
-    sessions: z.array(ObjectEditSessionSchema).max(64),
-  })
-  .strict();
-export const listObjectEditSessionsRpc = {
-  name: "video.v1.list_object_edit_sessions",
-  input: ListObjectEditSessionsInputSchema,
-  output: ListObjectEditSessionsResultSchema,
-};
-export const DecideCandidateInputSchema = z
-  .object({ requestId, projectId: id, sessionId: id, candidateId: id, decision: CandidateDecisionSchema })
-  .strict();
-export type DecideCandidateInput = z.infer<typeof DecideCandidateInputSchema>;
-export const decideCandidateRpc = {
-  name: "video.v1.decide_candidate",
-  input: DecideCandidateInputSchema,
-  output: ObjectEditSessionResultSchema,
-};
 // Structured questions a planning run asks the operator (HITL), read from events.
 export const RunQuestionSchema = z
   .object({
@@ -1024,32 +943,6 @@ export const setProjectCloudPolicyRpc = {
   output: ProjectCloudPolicyResultSchema,
 };
 
-export const BindObjectEditPlanInputSchema = z
-  .object({ requestId, projectId: id, sessionId: id, planId: id })
-  .strict();
-export const bindObjectEditPlanRpc = {
-  name: "video.v1.bind_object_edit_plan",
-  input: BindObjectEditPlanInputSchema,
-  output: ObjectEditSessionResultSchema,
-};
-export const ObjectEditTargetSchema = z.enum(["mask_review", "preview", "delivered", "cancelled"]);
-export const AdvanceObjectEditSessionInputSchema = z
-  .object({ requestId, projectId: id, sessionId: id, target: ObjectEditTargetSchema, jobId: id.optional() })
-  .strict();
-export const advanceObjectEditSessionRpc = {
-  name: "video.v1.advance_object_edit_session",
-  input: AdvanceObjectEditSessionInputSchema,
-  output: ObjectEditSessionResultSchema,
-};
-
-export const RefreshObjectEditCandidatesInputSchema = z
-  .object({ requestId, projectId: id, sessionId: id })
-  .strict();
-export const refreshObjectEditCandidatesRpc = {
-  name: "video.v1.refresh_object_edit_candidates",
-  input: RefreshObjectEditCandidatesInputSchema,
-  output: ObjectEditSessionResultSchema,
-};
 export const createUploadRpc = {
   name: "video.v1.create_upload",
   input: CreateUploadRequestSchema,
@@ -1201,8 +1094,6 @@ export const proposeVacePreviewRpc = {name:"video.v1.propose_vace_preview",input
 
 export const RequestTrackedMaskReviewSchema = z.object({
   projectId: id, requestId, jobId: id, expectedRevision: uint, manifestHash: sha256, reviewHash: sha256,
-  // Link the mask review to an object-edit session so the Copilot loop tracks it.
-  objectEditSessionId: id.optional(),
 }).strict();
 export type RequestTrackedMaskReview = z.infer<typeof RequestTrackedMaskReviewSchema>;
 export const requestTrackedMaskReviewRpc = {
@@ -1569,15 +1460,7 @@ export const getPlanningRunRpc = {
 // was opened against. If any of them moves, the recorded target decision is stale
 // and the editor must reopen; the store refuses stale decisions instead of
 // silently retargeting a generation.
-export const ObjectEditStateSchema = z.enum([
-  "analyzing",
-  "awaiting_target_selection",
-  "awaiting_mask_review",
-  "awaiting_generation_review",
-  "completed",
-  "failed",
-]);
-export type ObjectEditState = z.infer<typeof ObjectEditStateSchema>;
+
 
 export const PersonRoleSchema = z.enum(["protagonist", "background", "uncertain"]);
 export type PersonRole = z.infer<typeof PersonRoleSchema>;

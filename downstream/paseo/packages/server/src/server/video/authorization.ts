@@ -18,8 +18,6 @@ const READ_METHODS = new Set([
   "video.v1.get_run_events",
   "video.v1.list_approvals",
   "video.v1.list_plans",
-  "video.v1.get_object_edit_session",
-  "video.v1.list_object_edit_sessions",
   "video.v1.get_run_questions",
   "video.v1.get_model_policies",
   "video.v1.get_upload_status",

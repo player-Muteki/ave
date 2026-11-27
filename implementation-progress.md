@@ -225,21 +225,7 @@
 
 - FilmCraft 上游 pin 更新到 `7b8e522d`（`research/upstream.json`，craft-libs `a4db7995`），源码审查见 `research/filmcraft-ba6fe105-to-7b8e522d.md`：新遁不启用为产物后端（导出/文档路径/控制桥均变，未构建验收），FFmpeg 继续承担确定性编辑。落地代码：新增离线门禁 `scripts/check_filmcraft_pin.py`（接入 `check_project.py`）固化 pin==审查 commit、审查文档存在且含不启用结论、capabilities 保持 `filmcraft available:false`、preview-profile 拒绝 filmcraft 后端、E13 探针从 upstream.json 读 pin；`get_capabilities` 的 filmcraft reason 改为引用审查 pin。本地 `check_project.py` 全绿。未跑真模型/e2e。
 
-- Copilot 闭环 P0 骨架落地：新增对象编辑会话持久化（`object_sessions` 表，状态机 analyzing→awaiting_selection→mask_review→preview→delivered/cancelled，决策绑定项目版本，过期拒绝 REVISION_CONFLICT，幂等 mutate），RPC `create/get/list_object_edit_session` + `decide_candidate`（operator）与 `get_run_questions`（viewer，读取 run.question 事件）；候选人物先用场景切点占位（接检测器后替换）；edit-desk 新增对象编辑面板（候选卡片+风险+三种决策）与规划提问按钮。contracts 新增 ObjectEdit*/PersonCandidate/RunQuestion 等（v1.schema.json 120 defs），fixtures 177 例，rpc-surface 55 case/51 export/25 read 一致；本地 oes-smoke 全绿（创建幂等/决策幂等/状态与版本门禁/viewer 权限/run questions）。未接真实检测器，未跑真模型/e2e。
-
-- Copilot 闭环继续推进：会话可绑定方案（`bind_object_edit_plan`，幂等+版本门禁）并沿状态机推进（`advance_object_edit_session`：mask_review→preview 需绑定方案的 preview job，preview→delivered 需已完成 export job，禁止回退，可取消）；planner 新增第 17 个工具 `get_object_edit_sessions`（broker 只读会话，prompt 已提示先读避免与用户决策冲突）；edit-desk 会话面板新增 绑定最新方案/推进 preview/delivered/取消 按钮。fixtures 182 例/123 defs，rpc-surface 57 case/53 export 一致；oes-smoke 新增 OES_BIND/OES_ADVANCE（含 INVALID_ARGUMENT、回退 INVALID_STATE、错误 planHash 拒绝）/BROKER_OES 全绿。
-
-- Copilot 闭环再补两块：① 候选风险评分改用真实分析信号——create_object_edit_session 读取 scene-cuts 的 score，强切点（score 高）风险低、弱切点风险高并提示画面跳变，confidence=归一化 score；② run 结构化问题的回答闭环——新增 `video.v1.answer_run_question`（operator，幂等，emit run.answer 事件），edit-desk 每条问题可点选项回答。fixtures 185 例/125 defs，rpc-surface 58 case/54 export 一致；oes-smoke 新增 RUN_ANSWER（幂等+事件落库）与 OES_RISK（强切点 risk 5 / 弱切点 risk 80）全绿。
-
-- mask 审批可关联对象编辑会话：`RequestTrackedMaskReview`/`ApprovalRequest` 新增可选 `objectEditSessionId`，store 在 request_tracked_mask_review 时校验会话存在且处于 mask_review/preview 且版本未过期（否则 INVALID_STATE/REVISION_CONFLICT），审批单上记录关联；edit-desk 审批行显示会话 ID，会话面板在 mask_review 时提示关联入口。fixtures 187 例/125 defs；oes-smoke 新增 OES_MASK_LINK_GUARD 全绿。
-
-- 模型网关 P1 骨架：`model_policies` 表 + RPC `set_model_policy`/`get_model_policies`（viewer）/`remove_model_policy`（owner，均幂等）；`reservePlanningRun` 接受可选 model 并经 `modelAllowed(projectId, "planning", model)` 服务端强校验（未登记/停用 → PERMISSION_DENIED）；edit-desk 新增策略面板。fixtures 191 例/132 defs，rpc-surface 61 case/57 export/26 read 一致；oes-smoke 新增 MODEL_POLICY（登记/准入/外来拒绝/停用拒绝/删除）全绿。阶段枚举 planning/detection/segmentation/tracking/inpainting/qa 已留好，媒体各阶段接入待后续。
-
-- Copilot 闭环状态流转补齐：无分析产物时会话以 `analyzing` 创建（空候选），新增 `video.v1.refresh_object_edit_candidates`（operator，幂等）在分析完成后重建候选并推进到 awaiting_selection，候选派生逻辑抽成 `deriveCandidates` 复用；`analyze_asset` 新增可选 `model`，createAnalysisJob 按 detection 阶段策略强校验（未准入 → PERMISSION_DENIED）并把 model 记录到 JobSnapshot；edit-desk 会话面板新增“刷新候选”按钮。fixtures 195 例/134 defs，rpc-surface 62 case/58 export/26 read 一致；oes-smoke 重写为完整流（analyzing→refresh→2 候选 risk 5/80→双决策→mask_review→绑定→preview→delivered→门禁全绿）。
-
-- 模型网关再补齐：`create_job` 可带可选 `model`，按任务映射阶段强校验（有 generationRequests 的 preview/final → inpainting，export → qa，其余 → planning），校验通过后 model 记录到 JobSnapshot；新增项目级云端开关 `video.v1.set_project_cloud_policy`（owner，默认关闭），`modelAllowed` 对 location=cloud 的策略要求项目显式授权；`get_model_policies` 返回 allowCloudModels；edit-desk 策略面板新增云端授权开关。fixtures 199 例/136 defs，rpc-surface 63 case/59 export/26 read 一致；oes-smoke 新增 CLOUD_GATE（默认拒绝云端 → opt-in 后放行）全绿。
-
-- 对象会话摘要进入主快照：`ProjectSnapshotSchema` 新增 `objectEditSessions`（最新 8 条摘要：sessionId/assetId/state/版本/候选与决策计数/planId），store.project 与 broker get_project_snapshot 都填充，edit-desk 项目头显示待选会话数；fixtures 200 例/137 defs，rpc-surface 63 case/59 export 一致；oes-smoke 新增 SNAPSHOT_OES（project 与 broker 快照均带会话）全绿。
+- Copilot 闭环与 PR #13 取更优解（采用 #13 的 object_edits 持久工作流+P0-B/C/P1 链路）：删除自己 PR #12 的 object_sessions 会话模型及 bind/advance/mask-link，改用 #13 的 open_object_edit/record_object_candidates/decide_object_target/review_object_mask/record_object_qa/get/list_object_edits；保留不重叠的部分：快照摘要 objectEdits（workflow 摘要，最新 8 条）、planner 工具 get_object_edits（可按 assetId 过滤）、run 问题闭环 get_run_questions/answer_run_question、模型网关 model_policies + 云端开关（与 #13 的 model-gateway 本地工具记录互补，保留服务端强制层）。fixtures 196 例/137 defs，rpc-surface 63 case/59 export/26 read+7 manage 一致；本地 oes-smoke 按工作流全链路重写全绿。
 
 ## 环境与错误
 
