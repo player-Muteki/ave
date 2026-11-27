@@ -11,9 +11,9 @@ import {
   decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc, getMutationResultRpc,
-  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, answerRunQuestionRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc,
+  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, answerRunQuestionRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc, setModelPolicyRpc, getModelPoliciesRpc, removeModelPolicyRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
-  type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot, type ObjectEditSession, type RunQuestion,
+  type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot, type ObjectEditSession, type RunQuestion, type ModelPolicy, type ModelStage,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
 import { TrackedMaskReview } from "./tracked-mask-review.js";
@@ -77,6 +77,9 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const bindOesPlan = useRpc(bindObjectEditPlanRpc);
   const advanceOes = useRpc(advanceObjectEditSessionRpc);
   const answerQuestion = useRpc(answerRunQuestionRpc);
+  const setModelPolicy = useRpc(setModelPolicyRpc);
+  const readPolicies = useRpc(getModelPoliciesRpc);
+  const removePolicy = useRpc(removeModelPolicyRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
   const readQaSummary = useRpc(getQaSummaryRpc);
@@ -135,6 +138,10 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [runEvents, setRunEvents] = useState<EditorEvent[]>([]);
   const [oes, setOes] = useState<ObjectEditSession | null>(null);
   const [runQuestions, setRunQuestions] = useState<RunQuestion[]>([]);
+  const [policies, setPolicies] = useState<ModelPolicy[]>([]);
+  const [policyProvider, setPolicyProvider] = useState("local");
+  const [policyModel, setPolicyModel] = useState("");
+  const [policyStage, setPolicyStage] = useState<ModelStage>("planning");
   const runActive = run?.state === "running" || run?.state === "awaiting_input";
   const afterSeq = useRef("0");
   const runSeq = useRef("0");
@@ -890,6 +897,38 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             runSeq.current = result.events.at(-1)?.seq ?? runSeq.current;
             setRunEvents((prev) => [...prev, ...result.events].slice(-12));
           })}
+          <Text style={heading}>模型网关策略</Text>
+          {project && <View style={row}>
+            {field("provider", policyProvider, setPolicyProvider)}
+            {field("modelId", policyModel, setPolicyModel)}
+          </View>}
+          {project && button("登记策略（planning）", async () => {
+            if (!policyModel.trim()) throw new Error("请填写 modelId。");
+            const r = await setModelPolicy({
+              requestId: requestId(`policy:${policyProvider}:${policyModel}`),
+              projectId: project.projectId,
+              policy: { provider: policyProvider.trim(), modelId: policyModel.trim(), stages: [policyStage], location: "local", enabled: true, note: "planning stage policy" },
+            });
+            setNotice(`策略已登记 ${r.provider}/${r.modelId} stages=${r.stages.join(",")}`);
+            const l = await readPolicies({ requestId: requestId("policies"), projectId: project.projectId });
+            setPolicies(l.policies);
+          }, !policyModel.trim())}
+          {project && button("刷新策略", async () => {
+            const l = await readPolicies({ requestId: requestId("policies"), projectId: project.projectId });
+            setPolicies(l.policies);
+            setNotice(`模型策略 ${l.policyCount} 条`);
+          })}
+          {policies.map((p) => (
+            <View key={`${p.provider}/${p.modelId}`} style={styles.timelineRow}>
+              <Text style={muted}>
+                {p.provider}/{p.modelId} · {p.stages.join(",")} · {p.location}{p.enabled ? "" : "（已停用）"}
+              </Text>
+              {project && button("移除", async () => {
+                await removePolicy({ requestId: requestId(`rm:${p.provider}:${p.modelId}`), projectId: project.projectId, provider: p.provider, modelId: p.modelId });
+                setPolicies((prev) => prev.filter((q) => !(q.provider === p.provider && q.modelId === p.modelId)));
+              })}
+            </View>
+          ))}
           <Text style={heading}>对象编辑（Copilot 闭环）</Text>
           {project && button("创建对象会话", async () => {
             const assetId = selected || project.assets.find((a) => a.streams.some((st) => st.kind === "video"))?.assetId;

@@ -3374,6 +3374,26 @@
       ],
       "additionalProperties": false
     },
+    "GetModelPoliciesInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:GetModelPoliciesInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
     "GetMutationResultInput": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:GetMutationResultInput",
@@ -5542,6 +5562,165 @@
       ],
       "additionalProperties": false
     },
+    "ModelPolicyListResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ModelPolicyListResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "policyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "policies": {
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:ModelPolicy"
+          }
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "policyCount",
+        "policies"
+      ],
+      "additionalProperties": false
+    },
+    "ModelPolicyResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ModelPolicyResult",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "stages": {
+          "minItems": 1,
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:ModelStage"
+          }
+        },
+        "location": {
+          "type": "string",
+          "enum": [
+            "local",
+            "cloud"
+          ]
+        },
+        "maxFrames": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "provider",
+        "modelId",
+        "stages",
+        "location",
+        "enabled",
+        "requestId",
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
+    "ModelPolicy": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ModelPolicy",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "stages": {
+          "minItems": 1,
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:ModelStage"
+          }
+        },
+        "location": {
+          "type": "string",
+          "enum": [
+            "local",
+            "cloud"
+          ]
+        },
+        "maxFrames": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "provider",
+        "modelId",
+        "stages",
+        "location",
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "ModelStage": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ModelStage",
+      "type": "string",
+      "enum": [
+        "planning",
+        "detection",
+        "segmentation",
+        "tracking",
+        "inpainting",
+        "qa"
+      ]
+    },
     "ObjectEditSessionResult": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:ObjectEditSessionResult",
@@ -6483,6 +6662,38 @@
       ],
       "additionalProperties": false
     },
+    "RemoveModelPolicyInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RemoveModelPolicyInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "provider",
+        "modelId"
+      ],
+      "additionalProperties": false
+    },
     "RequestTrackedMaskReview": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:RequestTrackedMaskReview",
@@ -6922,6 +7133,30 @@
         "cutCount",
         "cuts",
         "note"
+      ],
+      "additionalProperties": false
+    },
+    "SetModelPolicyInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:SetModelPolicyInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "policy": {
+          "$ref": "urn:video-editor:v1:ModelPolicy"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "policy"
       ],
       "additionalProperties": false
     },

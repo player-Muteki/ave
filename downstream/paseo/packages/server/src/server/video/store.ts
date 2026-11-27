@@ -41,8 +41,11 @@ import {
   type ProjectSnapshot,
   type SourceAsset,
   ObjectEditSessionSchema,
+  ModelPolicySchema,
   type ObjectEditSession,
   type PersonCandidate,
+  type ModelPolicy,
+  type ModelStage,
 } from "#video-editor/contracts/v1";
 import { describeEditorError, EditorError, editorFailure } from "./errors.js";
 
@@ -196,6 +199,10 @@ CREATE TABLE IF NOT EXISTS uploads (
 CREATE TABLE IF NOT EXISTS object_sessions (
   session_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
   asset_id TEXT NOT NULL, document TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS model_policies (
+  project_id TEXT NOT NULL REFERENCES projects(project_id), provider TEXT NOT NULL, model_id TEXT NOT NULL,
+  document TEXT NOT NULL, PRIMARY KEY(project_id, provider, model_id)
 );
 CREATE TABLE IF NOT EXISTS upload_receipts (
   upload_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, request_id TEXT NOT NULL,
@@ -1000,6 +1007,81 @@ export class EditorStore {
         return { ...input, recorded: true };
       },
     });
+  }
+
+  /**
+   * Upsert a model gateway policy (owner only, idempotent). A policy declares
+   * which stages a model may serve and whether it runs locally or in the cloud.
+   */
+  setModelPolicy(
+    input: { requestId: string; projectId: string; policy: ModelPolicy },
+    principal: EditorPrincipal,
+  ) {
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: input,
+      execute: (projectId) => {
+        this.authorize(projectId, principal, "owner");
+        const policy = ModelPolicySchema.parse(input.policy);
+        this.database
+          .prepare(
+            "INSERT INTO model_policies(project_id, provider, model_id, document) VALUES (?, ?, ?, ?) ON CONFLICT(project_id, provider, model_id) DO UPDATE SET document = excluded.document",
+          )
+          .run(projectId, policy.provider, policy.modelId, JSON.stringify(policy));
+        this.emit(projectId, "model.policy_set", { provider: policy.provider, modelId: policy.modelId, stages: policy.stages });
+        return policy;
+      },
+    });
+  }
+
+  /** Viewer-level listing of the project's model gateway policies. */
+  listModelPolicies(projectId: string, principal: EditorPrincipal): ModelPolicy[] {
+    this.authorize(projectId, principal, "viewer");
+    return this.rows(
+      "SELECT document FROM model_policies WHERE project_id = ? ORDER BY provider, model_id LIMIT 64",
+      projectId,
+    ).map((document) => ModelPolicySchema.parse(JSON.parse(document)));
+  }
+
+  removeModelPolicy(
+    input: { requestId: string; projectId: string; provider: string; modelId: string },
+    principal: EditorPrincipal,
+  ) {
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: input,
+      execute: (projectId) => {
+        this.authorize(projectId, principal, "owner");
+        const info = this.database
+          .prepare("DELETE FROM model_policies WHERE project_id = ? AND provider = ? AND model_id = ?")
+          .run(projectId, input.provider, input.modelId);
+        const removed = info.changes > 0;
+        if (removed)
+          this.emit(projectId, "model.policy_removed", { provider: input.provider, modelId: input.modelId });
+        return { removed };
+      },
+    });
+  }
+
+  /**
+   * Server-side enforcement: is this model allowed to serve the given stage in
+   * this project right now? Used by planning-run reservation and (later) media
+   * jobs so a worker can never pick a model the project did not admit.
+   */
+  modelAllowed(
+    projectId: string,
+    stage: ModelStage,
+    model: { provider: string; id: string },
+    principal: EditorPrincipal,
+  ): boolean {
+    this.authorize(projectId, principal, "viewer");
+    const policy = this.listModelPolicies(projectId, principal).find(
+      (p) => p.provider === model.provider && p.modelId === model.id,
+    );
+    if (!policy || !policy.enabled) return false;
+    return policy.stages.includes(stage);
   }
 
   /**
@@ -2417,10 +2499,21 @@ export class EditorStore {
   }
 
   /** Reserve the persistent receipt and first event atomically, before spawning a worker. */
-  reservePlanningRun(projectId: string, requestId: string, prompt: string, principal: EditorPrincipal) {
+  reservePlanningRun(
+    projectId: string,
+    requestId: string,
+    prompt: string,
+    principal: EditorPrincipal,
+    model?: { provider: string; id: string },
+  ) {
     this.authorize(projectId, principal, "operator");
+    if (model && !this.modelAllowed(projectId, "planning", model, principal))
+      editorFailure(
+        "PERMISSION_DENIED",
+        `Model ${model.provider}/${model.id} is not admitted for stage "planning" by any enabled policy`,
+      );
     let created = false;
-    const receipt = this.mutate({ projectId, requestId, payload: { method: "start_planning_run", prompt, principalId: principal.principalId }, execute: () => {
+    const receipt = this.mutate({ projectId, requestId, payload: { method: "start_planning_run", prompt, principalId: principal.principalId, ...(model ? { model } : {}) }, execute: () => {
       const runId = randomUUID();
       const sessionId = randomUUID();
       const result = { projectId, runId, sessionId, state: "running" as const };

@@ -932,6 +932,65 @@ export const answerRunQuestionRpc = {
   output: AnswerRunQuestionResultSchema,
 };
 
+// ---- Model gateway policies ----
+// Which model may act at which pipeline stage, and where it runs. The daemon
+// enforces these server-side; workers/planner must not pick models freely.
+export const ModelStageSchema = z.enum([
+  "planning",
+  "detection",
+  "segmentation",
+  "tracking",
+  "inpainting",
+  "qa",
+]);
+export type ModelStage = z.infer<typeof ModelStageSchema>;
+export const ModelPolicySchema = z
+  .object({
+    provider: z.string().min(1).max(128),
+    modelId: z.string().min(1).max(256),
+    stages: z.array(ModelStageSchema).min(1).max(6),
+    location: z.enum(["local", "cloud"]),
+    maxFrames: uint.optional(),
+    note: z.string().max(512).optional(),
+    enabled: z.boolean(),
+  })
+  .strict();
+export type ModelPolicy = z.infer<typeof ModelPolicySchema>;
+export const SetModelPolicyInputSchema = z
+  .object({ requestId, projectId: id, policy: ModelPolicySchema })
+  .strict();
+export type SetModelPolicyInput = z.infer<typeof SetModelPolicyInputSchema>;
+export const ModelPolicyResultSchema = ModelPolicySchema.extend({ requestId, projectId: id }).strict();
+export const setModelPolicyRpc = {
+  name: "video.v1.set_model_policy",
+  input: SetModelPolicyInputSchema,
+  output: ModelPolicyResultSchema,
+};
+export const GetModelPoliciesInputSchema = z
+  .object({ requestId, projectId: id })
+  .strict();
+export const ModelPolicyListResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    policyCount: z.number().int().min(0),
+    policies: z.array(ModelPolicySchema).max(64),
+  })
+  .strict();
+export const getModelPoliciesRpc = {
+  name: "video.v1.get_model_policies",
+  input: GetModelPoliciesInputSchema,
+  output: ModelPolicyListResultSchema,
+};
+export const RemoveModelPolicyInputSchema = z
+  .object({ requestId, projectId: id, provider: z.string().min(1).max(128), modelId: z.string().min(1).max(256) })
+  .strict();
+export const removeModelPolicyRpc = {
+  name: "video.v1.remove_model_policy",
+  input: RemoveModelPolicyInputSchema,
+  output: z.object({ requestId, projectId: id, removed: z.boolean() }).strict(),
+};
+
 export const BindObjectEditPlanInputSchema = z
   .object({ requestId, projectId: id, sessionId: id, planId: id })
   .strict();

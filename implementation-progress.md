@@ -233,6 +233,8 @@
 
 - mask 审批可关联对象编辑会话：`RequestTrackedMaskReview`/`ApprovalRequest` 新增可选 `objectEditSessionId`，store 在 request_tracked_mask_review 时校验会话存在且处于 mask_review/preview 且版本未过期（否则 INVALID_STATE/REVISION_CONFLICT），审批单上记录关联；edit-desk 审批行显示会话 ID，会话面板在 mask_review 时提示关联入口。fixtures 187 例/125 defs；oes-smoke 新增 OES_MASK_LINK_GUARD 全绿。
 
+- 模型网关 P1 骨架：`model_policies` 表 + RPC `set_model_policy`/`get_model_policies`（viewer）/`remove_model_policy`（owner，均幂等）；`reservePlanningRun` 接受可选 model 并经 `modelAllowed(projectId, "planning", model)` 服务端强校验（未登记/停用 → PERMISSION_DENIED）；edit-desk 新增策略面板。fixtures 191 例/132 defs，rpc-surface 61 case/57 export/26 read 一致；oes-smoke 新增 MODEL_POLICY（登记/准入/外来拒绝/停用拒绝/删除）全绿。阶段枚举 planning/detection/segmentation/tracking/inpainting/qa 已留好，媒体各阶段接入待后续。
+
 ## 环境与错误
 
 | 问题 | 处理 |

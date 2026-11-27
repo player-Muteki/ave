@@ -35,6 +35,9 @@ import {
   BindObjectEditPlanInputSchema,
   AdvanceObjectEditSessionInputSchema,
   AnswerRunQuestionInputSchema,
+  SetModelPolicyInputSchema,
+  GetModelPoliciesInputSchema,
+  RemoveModelPolicyInputSchema,
   GetExportSummaryInputSchema,
   VerifyExportInputSchema,
   GetAssetMetadataInputSchema,
@@ -80,6 +83,7 @@ export class EditorRpcService {
             "run-questions",
             "object-edit-bind-advance",
             "answer-run-question",
+            "model-policies",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
           operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export", "object-edit-session", "decide-candidate", "run-questions"],
@@ -242,6 +246,32 @@ export class EditorRpcService {
           runId: request.runId,
           questionCount: questions.length,
           questions,
+        };
+      }
+      case "video.v1.set_model_policy": {
+        const request = SetModelPolicyInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          ...this.editor.store.setModelPolicy(request, principal),
+        };
+      }
+      case "video.v1.get_model_policies": {
+        const request = GetModelPoliciesInputSchema.parse(input);
+        const policies = this.editor.store.listModelPolicies(request.projectId, principal);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          policyCount: policies.length,
+          policies,
+        };
+      }
+      case "video.v1.remove_model_policy": {
+        const request = RemoveModelPolicyInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          ...this.editor.store.removeModelPolicy(request, principal),
         };
       }
       case "video.v1.get_run_events": {

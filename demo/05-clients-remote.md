@@ -41,7 +41,7 @@ WebCodecs/canvas 只作可选预览/标注加速，先验证目标 Chromium/GPU�
 
 工作台向当前项目发送剪辑意图。「刷新事件」同步本次规划的工具活动、阶段以及项目的方案和审批。首次模型请求由 Worker 补充已授权的项目 ID，因此用户可以直接描述要保留的时间范围。点击「批准并渲染预览」才会创建预览 Job。
 
-编辑工作台还提供：提交前「预估输出时长」（`estimate_timeline`，含素材越界警告）、任务行的「QA 摘要」（`get_qa_summary`）、「方案」（`get_plan`）、“产物”（`list_artifacts`，kind/大小/SHA-256 列表）、导出后的「导出摘要」（`get_export_summary`）、素材「元数据」（`get_asset_metadata`，时长/帧数）、「分析切点/波形」（`get_scene_cuts`/`get_waveform`，切点芯片可直接设入点/出点）、按静音区间自动挖洞的「静音挖洞」、未完成上传的「取消上传」（`cancel_upload`）；规划面板新增“run 事件”“规划提问”按钮（结构化 HITL 问题，每条可点选项回答，落为 run.answer 事件）；新增“对象编辑（Copilot 闭环）”面板：创建对象会话、候选人物卡片（角色/置信/风险原因）带 移除/保留/暂不处理 决策、会话状态与版本绑定展示；原有“run 事件”按钮（`get_run_events` 按 runId 游标拉取单次运行事件）；方案卡片上可直接“预估时长”（`estimate_timeline` 按 planId 估算已采纳方案；无 fontconfig 时自动回落软字幕。
+编辑工作台还提供：提交前「预估输出时长」（`estimate_timeline`，含素材越界警告）、任务行的「QA 摘要」（`get_qa_summary`）、「方案」（`get_plan`）、“产物”（`list_artifacts`，kind/大小/SHA-256 列表）、导出后的「导出摘要」（`get_export_summary`）、素材「元数据」（`get_asset_metadata`，时长/帧数）、「分析切点/波形」（`get_scene_cuts`/`get_waveform`，切点芯片可直接设入点/出点）、按静音区间自动挖洞的「静音挖洞」、未完成上传的「取消上传」（`cancel_upload`）；规划面板新增“run 事件”“规划提问”按钮（结构化 HITL 问题，每条可点选项回答，落为 run.answer 事件）；新增“模型网关策略”面板（登记/刷新/移除 planning 策略）；新增“对象编辑（Copilot 闭环）”面板：创建对象会话、候选人物卡片（角色/置信/风险原因）带 移除/保留/暂不处理 决策、会话状态与版本绑定展示；原有“run 事件”按钮（`get_run_events` 按 runId 游标拉取单次运行事件）；方案卡片上可直接“预估时长”（`estimate_timeline` 按 planId 估算已采纳方案；无 fontconfig 时自动回落软字幕。
 
 在已恢复并构建宿主依赖的 `vendor/paseo/packages/server` 中执行以下命令。需要 `ffmpeg`、`ffprobe` 和当前 Pi 环境可用的 strict tool calling 模型。
 
