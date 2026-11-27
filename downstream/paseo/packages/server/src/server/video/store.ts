@@ -376,6 +376,21 @@ export class EditorStore {
       plans,
       approvals,
       jobs,
+      objectEditSessions: this.rows(
+        "SELECT document FROM object_sessions WHERE project_id = ? ORDER BY created_at DESC, session_id LIMIT 8",
+        projectId,
+      ).map((document) => {
+        const session = ObjectEditSessionSchema.parse(JSON.parse(document));
+        return {
+          sessionId: session.sessionId,
+          assetId: session.assetId,
+          state: session.state,
+          boundRevision: session.boundRevision,
+          candidateCount: session.candidates.length,
+          decisionCount: session.decisions.length,
+          ...(session.planId ? { planId: session.planId } : {}),
+        };
+      }),
       latestSeq: this.latestSeq(projectId),
     });
   }

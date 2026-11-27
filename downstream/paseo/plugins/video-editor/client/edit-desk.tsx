@@ -412,7 +412,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
         <>
           <View style={row}>
             <Text selectable style={muted}>
-              版本 {project.revision} · {project.assets.length} 份素材
+              版本 {project.revision} · {project.assets.length} 份素材{project.objectEditSessions.length ? ` · ${project.objectEditSessions.filter((o) => o.state === "awaiting_selection").length} 个待选对象会话` : ""}
             </Text>
             {button("刷新项目", async () => show(await read({ projectId: project.projectId })))}
           </View>

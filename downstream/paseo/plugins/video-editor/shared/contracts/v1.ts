@@ -368,6 +368,20 @@ export const EditorEventSchema = z
   .strict();
 export type EditorEvent = z.infer<typeof EditorEventSchema>;
 
+// Bounded summary of object-edit sessions carried in the project snapshot so
+// clients see pending HITL selections without a separate call.
+export const ObjectEditSessionSummarySchema = z
+  .object({
+    sessionId: id,
+    assetId: id,
+    state: z.enum(["analyzing", "awaiting_selection", "mask_review", "preview", "delivered", "cancelled"]),
+    boundRevision: uint,
+    candidateCount: z.number().int().min(0),
+    decisionCount: z.number().int().min(0),
+    planId: id.optional(),
+  })
+  .strict();
+export type ObjectEditSessionSummary = z.infer<typeof ObjectEditSessionSummarySchema>;
 export const ProjectSnapshotSchema = z
   .object({
     protocolVersion: z.literal(VIDEO_PROTOCOL_VERSION),
@@ -379,6 +393,7 @@ export const ProjectSnapshotSchema = z
     plans: z.array(AcceptedEditPlanSchema),
     approvals: z.array(ApprovalRequestSchema),
     jobs: z.array(JobSnapshotSchema),
+    objectEditSessions: z.array(ObjectEditSessionSummarySchema).max(8),
     latestSeq: uint,
   })
   .strict();

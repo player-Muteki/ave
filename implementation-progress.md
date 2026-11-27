@@ -239,6 +239,8 @@
 
 - 模型网关再补齐：`create_job` 可带可选 `model`，按任务映射阶段强校验（有 generationRequests 的 preview/final → inpainting，export → qa，其余 → planning），校验通过后 model 记录到 JobSnapshot；新增项目级云端开关 `video.v1.set_project_cloud_policy`（owner，默认关闭），`modelAllowed` 对 location=cloud 的策略要求项目显式授权；`get_model_policies` 返回 allowCloudModels；edit-desk 策略面板新增云端授权开关。fixtures 199 例/136 defs，rpc-surface 63 case/59 export/26 read 一致；oes-smoke 新增 CLOUD_GATE（默认拒绝云端 → opt-in 后放行）全绿。
 
+- 对象会话摘要进入主快照：`ProjectSnapshotSchema` 新增 `objectEditSessions`（最新 8 条摘要：sessionId/assetId/state/版本/候选与决策计数/planId），store.project 与 broker get_project_snapshot 都填充，edit-desk 项目头显示待选会话数；fixtures 200 例/137 defs，rpc-surface 63 case/59 export 一致；oes-smoke 新增 SNAPSHOT_OES（project 与 broker 快照均带会话）全绿。
+
 ## 环境与错误
 
 | 问题 | 处理 |

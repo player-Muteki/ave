@@ -55,6 +55,12 @@ export class VideoToolBroker {
           hasMorePlans: p.plans.length > 32,
           approvalCount: p.approvals.length,
           pendingApprovalCount: p.approvals.filter((a) => a.status === "pending").length,
+          objectEditSessionCount: this.store.listObjectSessions(projectId, principal).length,
+          objectEditSessions: this.store.listObjectSessions(projectId, principal).slice(0, 8).map((o) => ({
+            sessionId: o.sessionId, assetId: o.assetId, state: o.state, boundRevision: o.boundRevision,
+            candidateCount: o.candidates.length, decisionCount: o.decisions.length,
+            ...(o.planId ? { planId: o.planId } : {}),
+          })),
           jobCount: p.jobs.length,
           jobs: p.jobs
             .slice(0, 64)
