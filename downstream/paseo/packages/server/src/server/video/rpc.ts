@@ -58,6 +58,7 @@ import {
   type EditorPrincipal,
 } from "#video-editor/contracts/v1";
 import { configuredVacePython } from "./vace-preview.js";
+import { MODEL_REGISTRY } from "./model-gateway.js";
 import { decodeFramedChunk } from "#video-editor/bytes";
 import { authorizeVideoMethod, type EditorCaller } from "./authorization.js";
 import { editorFailure } from "./errors.js";
@@ -107,6 +108,9 @@ export class EditorRpcService {
           // People detection stays on the owner's machine; the server only holds
           // the Apache-2.0 backend list and never downloads weights.
           objectProfiles: [{profileId:"people-detector-cpu-v1",backends:[{id:"yolox-onnx",license:"Apache-2.0",weights:"caller-supplied"},{id:"hog",license:"Apache-2.0",weights:"builtin"}],maxCandidates:32,maxEvidenceFrames:12}],
+          // Licenses are filtered in the gateway, not only advertised here.
+          models: MODEL_REGISTRY.map(({id,stage,license,maxFrames,weights})=>({id,stage,license,maxFrames,weights})),
+          modelStages: ["detect","segment","generate","qa"],
         };
       }
       case "video.v1.create_project":
