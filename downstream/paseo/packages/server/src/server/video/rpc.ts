@@ -76,7 +76,7 @@ export class EditorRpcService {
             {
               id: "filmcraft",
               available: false,
-              reason: "Full source build and media conformance have not been verified",
+              reason: "Reviewed at 7b8e522d (source-only, not built): export/doc-path/control-bridge changed; FFmpeg remains the deterministic backend",
             },
           ],
           workerProfiles: await configuredVacePython() ? [{profileId:VACE_PROFILE,engine:"vace",maxFrames:"9",maxWidth:832,maxHeight:480,colorSpaces:["SDR RGB24"]}] : [],

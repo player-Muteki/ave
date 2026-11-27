@@ -115,6 +115,17 @@ def main() -> int:
         )
         if surface.returncode:
             fail(errors, surface.stdout.strip() or surface.stderr.strip())
+    pin_gate = ROOT / "scripts" / "check_filmcraft_pin.py"
+    if pin_gate.exists():
+        pin = subprocess.run(
+            [sys.executable, str(pin_gate)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if pin.returncode:
+            fail(errors, pin.stdout.strip() or pin.stderr.strip())
     repository = subprocess.run(
         ["git", "-C", str(ROOT), "rev-parse", "--is-inside-work-tree"],
         check=False,

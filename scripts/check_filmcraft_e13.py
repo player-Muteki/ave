@@ -6,6 +6,10 @@ ffmpeg/ffprobe on PATH or via --ffmpeg/--ffprobe. Asserts the whitelist op
 (single-segment trim + h264/aac export, audio-only export) conforms; records the
 known non-conformant surfaces (VFR timing, subtitle/multi-audio passthrough) that
 keep FilmCraft a constrained backend per ADR 005/006/011.
+
+The pinned commit is source-review-only (research/filmcraft-ba6fe105-to-7b8e522d.md):
+the upstream is NOT adopted as the product backend. The dual-run remains a research
+probe; scripts/check_filmcraft_pin.py guards the pin and the non-adoption verdict.
 """
 
 from __future__ import annotations

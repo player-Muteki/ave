@@ -223,6 +223,8 @@
 
 - 新增 viewer RPC `video.v1.list_approvals`（可选 status 过滤，最新 256 条）与 `video.v1.list_plans`（planId 游标分页，单页 ≤128 摘要）；客户端方案区新增“方案列表”、审批区新增“待审批”按钮；capabilities 新增 list-approvals/list-plans。v1.schema.json 104 defs，fixtures 158 例，rpc-surface 50 case/46 export/22 read 一致；smoke 新增 RPC_LIST_PLANS（游标）/RPC_LIST_APPROVALS（过滤与全量）全绿。未跑真模型/e2e。
 
+- FilmCraft 上游 pin 更新到 `7b8e522d`（`research/upstream.json`，craft-libs `a4db7995`），源码审查见 `research/filmcraft-ba6fe105-to-7b8e522d.md`：新遁不启用为产物后端（导出/文档路径/控制桥均变，未构建验收），FFmpeg 继续承担确定性编辑。落地代码：新增离线门禁 `scripts/check_filmcraft_pin.py`（接入 `check_project.py`）固化 pin==审查 commit、审查文档存在且含不启用结论、capabilities 保持 `filmcraft available:false`、preview-profile 拒绝 filmcraft 后端、E13 探针从 upstream.json 读 pin；`get_capabilities` 的 filmcraft reason 改为引用审查 pin。本地 `check_project.py` 全绿。未跑真模型/e2e。
+
 ## 环境与错误
 
 | 问题 | 处理 |
