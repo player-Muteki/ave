@@ -374,6 +374,8 @@ type ExportManifest = {
 | `get_object_edit_session/list_object_edit_sessions` | 读取对象编辑会话（状态机 analyzing→awaiting_selection→mask_review→…，候选+决策） | viewer；最新 64 条 |
 | `decide_candidate` | 对候选人物做 移除/保留/暂不处理 决策；幂等，拒绝过期版本与非等待状态，全部决策后进入 mask_review | operator；requestId + projectId + sessionId + candidateId + decision |
 | `get_run_questions` | 读取某次规划 run 发出的结构化 HITL 提问（run.question 事件，≤64 条） | viewer；requestId + projectId + runId |
+| `bind_object_edit_plan` | 把已提议方案绑定到对象编辑会话（幂等，拒绝过期版本） | operator；requestId + projectId + sessionId + planId |
+| `advance_object_edit_session` | 推进会话状态机：mask_review→preview 需绑定方案+该方案的 preview job，preview→delivered 需该方案已完成的 export job，任意非 delivered 可取消；禁止回退 | operator；requestId + projectId + sessionId + target + jobId? |
 | `cancel_job/pause_job/resume_job` | 控制任务 | operator；独立 Agent abort |
 | `get_qa_report` | 查询 QA | viewer |
 | `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |

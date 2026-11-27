@@ -438,6 +438,10 @@ export const VideoToolCallSchema = z.discriminatedUnion("tool", [
     tool: z.literal("list_artifacts"),
     args: z.object({ jobId: id }).strict(),
   }),
+  toolEnvelope.extend({
+    tool: z.literal("get_object_edit_sessions"),
+    args: ProjectRequestSchema,
+  }),
   toolEnvelope.extend({ tool: z.literal("validate_edit_plan"), args: EditPlanDraftV1Schema }),
   toolEnvelope.extend({ tool: z.literal("estimate_timeline"), args: z.union([savedPlanArgs, EditPlanDraftV1Schema]) }),
   toolEnvelope.extend({ tool: z.literal("submit_edit_plan"), args: EditPlanDraftV1Schema }),
@@ -825,6 +829,8 @@ export const ObjectEditSessionSchema = z
     boundRevision: uint,
     candidates: z.array(PersonCandidateSchema).max(32),
     decisions: z.array(CandidateDecisionRecordSchema).max(32),
+    planId: id.optional(),
+    jobId: id.optional(),
     note: z.string().max(512),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
@@ -903,6 +909,24 @@ export const getRunQuestionsRpc = {
   name: "video.v1.get_run_questions",
   input: GetRunQuestionsInputSchema,
   output: GetRunQuestionsResultSchema,
+};
+
+export const BindObjectEditPlanInputSchema = z
+  .object({ requestId, projectId: id, sessionId: id, planId: id })
+  .strict();
+export const bindObjectEditPlanRpc = {
+  name: "video.v1.bind_object_edit_plan",
+  input: BindObjectEditPlanInputSchema,
+  output: ObjectEditSessionResultSchema,
+};
+export const ObjectEditTargetSchema = z.enum(["mask_review", "preview", "delivered", "cancelled"]);
+export const AdvanceObjectEditSessionInputSchema = z
+  .object({ requestId, projectId: id, sessionId: id, target: ObjectEditTargetSchema, jobId: id.optional() })
+  .strict();
+export const advanceObjectEditSessionRpc = {
+  name: "video.v1.advance_object_edit_session",
+  input: AdvanceObjectEditSessionInputSchema,
+  output: ObjectEditSessionResultSchema,
 };
 export const createUploadRpc = {
   name: "video.v1.create_upload",

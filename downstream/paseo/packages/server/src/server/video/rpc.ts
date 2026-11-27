@@ -32,6 +32,8 @@ import {
   ListObjectEditSessionsInputSchema,
   DecideCandidateInputSchema,
   GetRunQuestionsInputSchema,
+  BindObjectEditPlanInputSchema,
+  AdvanceObjectEditSessionInputSchema,
   GetExportSummaryInputSchema,
   VerifyExportInputSchema,
   GetAssetMetadataInputSchema,
@@ -75,6 +77,7 @@ export class EditorRpcService {
             "list-plans",
             "object-edit-sessions",
             "run-questions",
+            "object-edit-bind-advance",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
           operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export", "object-edit-session", "decide-candidate", "run-questions"],
@@ -208,6 +211,20 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...this.editor.store.decideCandidate(request, principal),
+        };
+      }
+      case "video.v1.bind_object_edit_plan": {
+        const request = BindObjectEditPlanInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.bindObjectEditPlan(request, principal),
+        };
+      }
+      case "video.v1.advance_object_edit_session": {
+        const request = AdvanceObjectEditSessionInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.advanceObjectEditSession(request, principal),
         };
       }
       case "video.v1.get_run_questions": {

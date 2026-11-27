@@ -965,6 +965,115 @@ export class EditorStore {
       .filter((q) => q.text.length > 0);
   }
 
+  /**
+   * Bind a proposed plan to an object-edit session (idempotent). The plan must
+   * exist in the same project and the session must be bound to the current
+   * project revision.
+   */
+  bindObjectEditPlan(
+    input: { requestId: string; projectId: string; sessionId: string; planId: string },
+    principal: EditorPrincipal,
+  ) {
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: input,
+      execute: (projectId) => {
+        this.authorize(projectId, principal, "operator");
+        const session = this.objectEditSession(projectId, input.sessionId, principal);
+        if (session.state === "cancelled" || session.state === "delivered")
+          editorFailure("INVALID_STATE", `The session is ${session.state} and cannot be rebound`);
+        if (session.boundRevision !== this.projectRow(projectId).revision)
+          editorFailure("REVISION_CONFLICT", "The session is bound to an older project revision; recreate it");
+        const plan = this.plan(projectId, input.planId, principal);
+        const updated: ObjectEditSession = { ...session, planId: plan.planId, updatedAt: this.now() };
+        this.database
+          .prepare("UPDATE object_sessions SET document = ?, updated_at = ? WHERE session_id = ?")
+          .run(JSON.stringify(updated), updated.updatedAt, input.sessionId);
+        this.emit(projectId, "object_edit.plan_bound", {
+          sessionId: input.sessionId,
+          planId: plan.planId,
+          planHash: plan.planHash,
+        });
+        return updated;
+      },
+    });
+  }
+
+  private static readonly OES_ORDER = ["analyzing", "awaiting_selection", "mask_review", "preview", "delivered"] as const;
+
+  /**
+   * Advance an object-edit session along its state machine (idempotent).
+   * preview/delivered require a bound plan plus a job of that plan's hash
+   * (preview job for preview, completed export for delivered); anything not
+   * delivered may be cancelled.
+   */
+  advanceObjectEditSession(
+    input: {
+      requestId: string;
+      projectId: string;
+      sessionId: string;
+      target: "mask_review" | "preview" | "delivered" | "cancelled";
+      jobId?: string;
+    },
+    principal: EditorPrincipal,
+  ) {
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: input,
+      execute: (projectId) => {
+        this.authorize(projectId, principal, "operator");
+        const session = this.objectEditSession(projectId, input.sessionId, principal);
+        if (session.boundRevision !== this.projectRow(projectId).revision)
+          editorFailure("REVISION_CONFLICT", "The session is bound to an older project revision; recreate it");
+        if (session.state === "cancelled")
+          editorFailure("INVALID_STATE", "cancelled is terminal");
+        const order = EditorStore.OES_ORDER;
+        const from = order.indexOf(session.state as (typeof order)[number]);
+        let updated: ObjectEditSession;
+        if (input.target === "cancelled") {
+          updated = { ...session, state: "cancelled", updatedAt: this.now() };
+        } else {
+          const to = order.indexOf(input.target as (typeof order)[number]);
+          if (to <= from)
+            editorFailure("INVALID_STATE", `cannot move ${session.state} → ${input.target}`);
+          if (input.target === "mask_review" &&
+              !session.candidates.every((c) => session.decisions.some((d) => d.candidateId === c.candidateId)))
+            editorFailure("INVALID_STATE", "not all candidates have a decision yet");
+          if (input.target === "preview" || input.target === "delivered") {
+            if (!session.planId) editorFailure("INVALID_STATE", "bind a plan to the session first");
+            const plan = this.plan(projectId, session.planId, principal);
+            if (!input.jobId) editorFailure("INVALID_ARGUMENT", "jobId is required for preview/delivered");
+            const job = this.job(projectId, input.jobId, principal);
+            if (job.planHash !== plan.planHash)
+              editorFailure("PLAN_SEMANTIC_INVALID", "The job does not belong to the bound plan");
+            if (input.target === "preview" && job.kind !== "preview")
+              editorFailure("INVALID_STATE", "preview requires a preview job");
+            if (input.target === "delivered" && (job.kind !== "export" || job.state !== "completed"))
+              editorFailure("INVALID_STATE", "delivered requires a completed export job");
+          }
+          updated = {
+            ...session,
+            state: input.target,
+            ...(input.jobId ? { jobId: input.jobId } : {}),
+            updatedAt: this.now(),
+          };
+        }
+        this.database
+          .prepare("UPDATE object_sessions SET document = ?, updated_at = ? WHERE session_id = ?")
+          .run(JSON.stringify(updated), updated.updatedAt, input.sessionId);
+        this.emit(projectId, "object_edit.advanced", {
+          sessionId: input.sessionId,
+          from: session.state,
+          to: updated.state,
+          jobId: updated.jobId ?? null,
+        });
+        return updated;
+      },
+    });
+  }
+
   validateProposal(draft: EditPlanDraftV1, principal: EditorPrincipal): void {
     this.authorize(draft.projectId, principal, "operator");
     this.validatePlan(draft);

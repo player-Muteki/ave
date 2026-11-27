@@ -579,6 +579,39 @@
       ],
       "additionalProperties": false
     },
+    "AdvanceObjectEditSessionInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:AdvanceObjectEditSessionInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "target": {
+          "$ref": "urn:video-editor:v1:ObjectEditTarget"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "sessionId",
+        "target"
+      ],
+      "additionalProperties": false
+    },
     "AnalysisRate": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:AnalysisRate",
@@ -1131,6 +1164,36 @@
         "assetContentHash",
         "streamUid",
         "probeRevision"
+      ],
+      "additionalProperties": false
+    },
+    "BindObjectEditPlanInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:BindObjectEditPlanInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "planId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "sessionId",
+        "planId"
       ],
       "additionalProperties": false
     },
@@ -5433,6 +5496,14 @@
             "$ref": "urn:video-editor:v1:CandidateDecisionRecord"
           }
         },
+        "planId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
         "note": {
           "type": "string",
           "maxLength": 512
@@ -5505,6 +5576,14 @@
             "$ref": "urn:video-editor:v1:CandidateDecisionRecord"
           }
         },
+        "planId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "jobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
         "note": {
           "type": "string",
           "maxLength": 512
@@ -5541,6 +5620,17 @@
       "enum": [
         "analyzing",
         "awaiting_selection",
+        "mask_review",
+        "preview",
+        "delivered",
+        "cancelled"
+      ]
+    },
+    "ObjectEditTarget": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ObjectEditTarget",
+      "type": "string",
+      "enum": [
         "mask_review",
         "preview",
         "delivered",
@@ -7483,6 +7573,33 @@
                 "jobId"
               ],
               "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "toolCallId",
+            "tool",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "type": "string",
+              "const": "1"
+            },
+            "toolCallId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "tool": {
+              "type": "string",
+              "const": "get_object_edit_sessions"
+            },
+            "args": {
+              "$ref": "urn:video-editor:v1:ProjectRequest"
             }
           },
           "required": [

@@ -227,6 +227,8 @@
 
 - Copilot 闭环 P0 骨架落地：新增对象编辑会话持久化（`object_sessions` 表，状态机 analyzing→awaiting_selection→mask_review→preview→delivered/cancelled，决策绑定项目版本，过期拒绝 REVISION_CONFLICT，幂等 mutate），RPC `create/get/list_object_edit_session` + `decide_candidate`（operator）与 `get_run_questions`（viewer，读取 run.question 事件）；候选人物先用场景切点占位（接检测器后替换）；edit-desk 新增对象编辑面板（候选卡片+风险+三种决策）与规划提问按钮。contracts 新增 ObjectEdit*/PersonCandidate/RunQuestion 等（v1.schema.json 120 defs），fixtures 177 例，rpc-surface 55 case/51 export/25 read 一致；本地 oes-smoke 全绿（创建幂等/决策幂等/状态与版本门禁/viewer 权限/run questions）。未接真实检测器，未跑真模型/e2e。
 
+- Copilot 闭环继续推进：会话可绑定方案（`bind_object_edit_plan`，幂等+版本门禁）并沿状态机推进（`advance_object_edit_session`：mask_review→preview 需绑定方案的 preview job，preview→delivered 需已完成 export job，禁止回退，可取消）；planner 新增第 17 个工具 `get_object_edit_sessions`（broker 只读会话，prompt 已提示先读避免与用户决策冲突）；edit-desk 会话面板新增 绑定最新方案/推进 preview/delivered/取消 按钮。fixtures 182 例/123 defs，rpc-surface 57 case/53 export 一致；oes-smoke 新增 OES_BIND/OES_ADVANCE（含 INVALID_ARGUMENT、回退 INVALID_STATE、错误 planHash 拒绝）/BROKER_OES 全绿。
+
 ## 环境与错误
 
 | 问题 | 处理 |

@@ -11,7 +11,7 @@ import {
   decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc, getMutationResultRpc,
-  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc,
+  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot, type ObjectEditSession, type RunQuestion,
 } from "../shared/contracts/v1.js";
@@ -74,6 +74,8 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const listOes = useRpc(listObjectEditSessionsRpc);
   const decideCand = useRpc(decideCandidateRpc);
   const readRunQuestions = useRpc(getRunQuestionsRpc);
+  const bindOesPlan = useRpc(bindObjectEditPlanRpc);
+  const advanceOes = useRpc(advanceObjectEditSessionRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
   const readQaSummary = useRpc(getQaSummaryRpc);
@@ -901,6 +903,33 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   </View>
                 );
               })}
+              {oes.planId && <Text style={muted}>已绑定方案 {oes.planId.slice(0, 12)}{oes.jobId ? ` · 任务 ${oes.jobId.slice(0, 12)}` : ""}</Text>}
+              {!oes.planId && oes.state === "mask_review" && project && project.plans.length > 0 && button("绑定最新方案", async () => {
+                const plan = project.plans.at(-1)!;
+                const r = await bindOesPlan({ requestId: requestId(`bind:${oes.sessionId}:${plan.planId}`), projectId: project.projectId, sessionId: oes.sessionId, planId: plan.planId });
+                setOes(r);
+                setNotice(`会话绑定方案 ${plan.planId.slice(0, 12)}`);
+              })}
+              {oes.planId && (oes.state === "mask_review" || oes.state === "preview") && project && (() => {
+                const plan = project.plans.find((pl) => pl.planId === oes.planId);
+                const jobs = project.jobs.filter((j) => plan && j.planHash === plan.planHash);
+                const previewJob = jobs.find((j) => j.kind === "preview");
+                const exportJob = jobs.find((j) => j.kind === "export" && j.state === "completed");
+                return <View>
+                  {oes.state === "mask_review" && previewJob && button("推进到 preview", async () => {
+                    const r = await advanceOes({ requestId: requestId(`adv:${oes.sessionId}:preview`), projectId: project.projectId, sessionId: oes.sessionId, target: "preview", jobId: previewJob.jobId });
+                    setOes(r); setNotice(`会话 → ${r.state}（任务 ${previewJob.jobId.slice(0, 12)}）`);
+                  })}
+                  {oes.state === "preview" && exportJob && button("推进到 delivered", async () => {
+                    const r = await advanceOes({ requestId: requestId(`adv:${oes.sessionId}:delivered`), projectId: project.projectId, sessionId: oes.sessionId, target: "delivered", jobId: exportJob.jobId });
+                    setOes(r); setNotice(`会话 → ${r.state}（导出 ${exportJob.jobId.slice(0, 12)}）`);
+                  })}
+                  {oes.state !== "delivered" && button("取消会话", async () => {
+                    const r = await advanceOes({ requestId: requestId(`adv:${oes.sessionId}:cancel`), projectId: project.projectId, sessionId: oes.sessionId, target: "cancelled" });
+                    setOes(r); setNotice(`会话已取消`);
+                  })}
+                </View>;
+              })()}
             </View>
           )}
           <Text style={heading}>已提议的时间线</Text>

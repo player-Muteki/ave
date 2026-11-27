@@ -72,6 +72,11 @@ export class VideoToolBroker {
         return this.store.plannerAssetMetadata(projectId, call.args.assetId, call.args.contentHash, principal);
       case "list_artifacts":
         return this.store.listArtifacts(projectId, call.args.jobId, principal);
+      case "get_object_edit_sessions":
+        return {
+          sessionCount: this.store.listObjectSessions(projectId, principal).length,
+          sessions: this.store.listObjectSessions(projectId, principal),
+        };
       case "get_job_status": {
         const job = this.store.job(projectId, call.args.jobId, principal);
         return {
