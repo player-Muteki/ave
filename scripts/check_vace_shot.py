@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(ROOT / "downstream/paseo/plugins/video-editor/worker"))
+sys.path.insert(0, str(ROOT / "services/media-worker"))
 from protected_composite import composite_rgb24
 from vace_shot import VaceCanvas, generate_shot
 from vace_model import digest, verify_model

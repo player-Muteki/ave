@@ -1,14 +1,12 @@
 # 路线图
 
-详细工作量、依赖和验收证据见 [`demo/08-delivery.md`](demo/08-delivery.md)，实时职责状态见 [`DIVISION.svg`](DIVISION.svg)。
+实时职责与证据状态见 [`DIVISION.svg`](DIVISION.svg)，原生收敛架构决策见 [ADR 012](docs/adr/0012-native-ave-architecture.md)，R0–R5 完整实施记录见 [原生迁移计划](demo/11-native-migration-plan.md)。
 
-| 阶段 | 目标 | 完成门 |
-| --- | --- | --- |
-| M0 设计基线 | 需求、架构、接口、分工、工作流 | 文档与脚本校验通过；不宣称应用已实现 |
-| M1 集成探针 | Pi SDK/封闭工具、Paseo 插件、FFmpeg/FilmCraft 后端、移动连接 | 探针证明关键 API 与失败路径；形成 ADR；原始 Pi RPC/FilmCraft MCP 仅作辅助探针 |
-| M2 确定性桌面闭环 | 导入、计划审批、裁切/拼接、预览、导出、恢复 | 三桌面平台真实素材验收；源 hash 不变 |
-| M3 生成式短镜头 | mask、锚帧、视频传播、合成、QA | 固定基准集成功与失败报告；真实视频输出 |
-| M4 Android 远程 | 配对、预览、审批、取消、下载、重连 | 真机控制桌面任务；权限和过期审批测试通过 |
-| M5 发布候选 | 安装包、签名、公证、更新、恢复、许可 | 目标系统干净机器验收；可追溯 manifest |
-
-阶段按依赖推进，但不阻塞独立包开发：contracts 和探针稳定后，后端、桌面、Android 并行；跨端协议变更必须回到同一 contract PR。生成模型效果不达标时，不降低验收门或伪造输出，应缩小支持的素材范围并记录；若 F-05 仍未通过，只能发布明确标注的确定性基础版，完整 P0/M5 发布阻断。
+| 阶段 | 目标 | 当前状态 | 验收范围 |
+| --- | --- | --- | --- |
+| R0 | 冻结 196 条契约 fixtures、63 RPC、权限矩阵、17 工具、4 个黄金媒体样本 | 已完成 | `verify_r0_baseline.py` 与 `ffprobe`/完整解码通过 |
+| R1 | 原生 `packages/contracts`、`packages/domain`、`storage/sqlite`（5 repo）、`storage/cas` | 已完成 | 零 Paseo/Pi/FilmCraft 耦合；单测、幂等与 CAS 校验全过 |
+| R2 | 原生 `packages/protocol`、`packages/client-sdk`、`services/daemon`（FFmpeg 后端）、`apps/web`、`apps/desktop` | 已完成 | 真实 FFmpeg 导入→裁剪→审批→渲染→QA→导出解码；Electron 安全单元过（无显示服务实机 GUI 未运行） |
+| R3 | 原生 `services/planner-worker`（stdio JSONL、单 strict Provider、17 封闭工具） | 已完成 | 本地 HTTP 确定性模型 E2E、越权拒绝、abort 与重启恢复通过 |
+| R4 | 迁移 `services/media-worker`（11 个 Python 内核）并打通对象编辑/掩码/VACE 提议链 | 已完成 | `pytest`（核心 7 过，2 项可选依赖跳过）、`AvePyWorker`、`inspect_frame`、录制适配追帧与 6 态对象编辑全过（真实 GPU SAM2/VACE 权重未在本机运行） |
+| R5 | `apps/mobile` 远程监督、`services/relay` 边界、旧库只读迁移工具、归档 `legacy/paseo-based` 并删除 `downstream/paseo/` | 已完成 | `mobile-supervisor` 单元与实时 daemon E2E 过；只读导出/隔离导入全过（Android `.apk` 构建与真机联调未运行） |

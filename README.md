@@ -1,83 +1,60 @@
-# ave — Agentic Video Editor
+# ave — Agentic Video Editor（原生独立版）
 
-本地优先、跨平台的 Agent 视频编辑工作台设计。桌面端完成导入、编辑、生成、预览和导出；Android 连接同一桌面 daemon，负责远程会话、审批、监控和交付。
+本地优先、跨平台的 Agent 视频编辑工作台：模块化单体 AVE daemon + 独立原生 Planner Worker + FFmpeg/Python Media Worker + Electron/React 桌面工作台 + Expo Android 远程监督端。
 
-> **[下载 AVE v0.1.0 桌面 Demo](https://github.com/player-Muteki/ave/releases/tag/v0.1.0)**，提供 macOS、Windows x64 和 Linux x64 未签名安装包。Windows 已测环境为 Windows Server 2025，Windows 11 未实测。发布页附安装说明、模型配置与测试素材。[实施与验证记录](implementation-progress.md) · [原始需求](research/demo.original.md)
+按照 [ADR 012](docs/adr/0012-native-ave-architecture.md) 与 [原生迁移计划](demo/11-native-migration-plan.md)，本仓库已完成 R0–R5 原生化收敛：不再携带 Paseo、Pi 或 FilmCraft 的源码、包依赖或宿主进程（历史 Paseo 形态归档于 Git 分支/标签 `legacy/paseo-based` / `legacy-paseo-based`）。
 
-## 恢复实现工作树
+## 目录结构
 
-根仓库的 `downstream/paseo/` 收录相对锁定上游的全部新增和修改文件，不是指向本机提交的 gitlink。在全新克隆的根目录中执行以下命令；已有开发工作树时不要覆盖：
-
-```bash
-test ! -e vendor/paseo && (
-  git clone --no-checkout https://github.com/getpaseo/paseo.git vendor/paseo &&
-  git -C vendor/paseo checkout --detach c626bf37071491981fc8e11c3e2f4df093381d37 &&
-  cp -R downstream/paseo/. vendor/paseo/
-)
+```text
+apps/
+  desktop/             Electron 主进程与 preload（sandbox + contextIsolation + nodeIntegration:false）
+  web/                 React 桌面编辑工作台 UI
+  mobile/              Expo Android 远程监督端（配对/预览/审批/取消/校验下载）
+packages/
+  contracts/           AVE wire schema（63 个 video.v1.* RPC）、分块字节帧与错误码
+  domain/              有理数时间模型、EditGraph、审批哈希、对象编辑六态状态机与主体授权
+  protocol/            WebSocket 消息信封与二进制帧编解码
+  client-sdk/          类型化 AVE Client SDK、重连、afterSeq 事件补拉与 get_mutation_result 对账
+services/
+  daemon/              唯一项目事实源、授权中间件、任务调度、FFmpeg 确定性后端与方法注册表
+  planner-worker/      原生 AVE 规划 Worker（JSONL stdio IPC、strict JSON Schema、17 受控工具）
+  media-worker/        Python 媒体内核（SamplingMap、镜头/人像检测、SAM2/VACE 掩码与保护合成）
+  relay/               可选远期 E2EE 密文转发边界说明（首版直连不依赖）
+storage/
+  sqlite/              单 SQLite WAL 数据库 + 事务协调器 + 5 Repositories + 旧版只读迁移工具
+  cas/                 SHA-256 内容寻址存储与分块上传暂存
+conformance/
+  r0-baseline/         冻结的 196 条契约 fixtures、基线规格与 4 个黄金媒体样本生成器
 ```
 
-上游许可证随覆盖目录保留。依赖、参考检出、素材、权重和安装包不入库。
+## 快速构建与验证
 
-在 `vendor/paseo` 运行 `npm ci` 安装锁定依赖。已有依赖若是用 `--ignore-scripts` 安装的，请在同一目录先运行 `npm run postinstall`，再导出桌面 renderer。首屏的 `SheetHostScope` 依赖该步骤为 `@gorhom/bottom-sheet` 补齐的导出。
-
-## 文档入口
-
-从 [`demo.md`](demo.md) 开始。设计拆分为产品与验收、总体架构、Agent Runtime、媒体流水线、客户端与远程、接口契约、团队并行、测试发布、风险与实验九份文档。
-
-- [总体架构 SVG](ARCHITECTURE.svg)
-- [团队分工与实时统计 SVG](DIVISION.svg)
-- [调研证据](findings.md)
-- [执行与验证记录](progress.md)
-- [路线图](ROADMAP.md)
-- [贡献与并行开发规则](CONTRIBUTING.md)
-
-## 本地初始化
-
-要求：Git、Python 3.10+。文档和统计脚本没有第三方 Python 依赖。
+前置环境：Node.js 22+（内置 `node:sqlite`）、Python 3.11+（`pytest`、`numpy`、`Pillow`）、`ffmpeg`、`ffprobe`。本原生仓库可直接独立构建，无需恢复任何外部参考仓库。
 
 ```bash
-# 根仓库已包含文档；恢复三个锁定版本的上游参考仓库。
-python3 scripts/bootstrap_references.py --restore
-
-# 启用提交前校验。
-git config core.hooksPath .githooks
-
-# 校验文档、链接、SVG、团队数据和统计图。
+npm install --offline --no-audit --no-fund --legacy-peer-deps
+node apps/web/scripts/build.mjs
+npm run typecheck
+npm test
+pytest services/media-worker/tests
+python3 scripts/check_native_boundaries.py
+python3 scripts/check_native_rpc_surface.py
+python3 conformance/r0-baseline/verify_r0_baseline.py
 python3 scripts/check_project.py
 ```
 
-`pi/`、`paseo/`、`filmcraft/` 是可复现的**只读参考 checkout**，版本由 [`research/upstream.json`](research/upstream.json) 锁定，不直接纳入当前 M0 根仓库。M1 实现 Paseo 内置插件前，先记录 ADR、建立团队可访问的 Paseo downstream fork，再由根 superproject 用精确 gitlink 管理；Pi 和 FilmCraft 默认保持上游只读。这样不会把嵌套仓库误提交成空目录，也不会产生两套不可追踪的上游改动。
+### 旧版项目迁移（只读导出 → 隔离导入）
 
-FilmCraft 作为候选确定性编辑后端，与 FFmpeg 共用 EditGraph/命令契约；其原生 MCP、TCP 控制和 egui 不进入生产控制面。详见 [媒体后端路由](demo/04-media-pipeline.md#21-filmcraft-适配器与后端路由) 和 [E13 验收](demo/09-risks-research.md#2-必做实验)。`upstream.json` 的 `sparseCheckout` 仅用于轻量源码调研，不是可构建的完整源码包；E13 构建/验收需完整源码与依赖。
-
-## 分工图与统计
-
-成员职责和里程碑状态维护在 [`research/team.json`](research/team.json)。提交数、有效代码行和 SVG 由脚本从当前 Git 历史生成：
+严禁旧版与原生版共享同一数据库或 CAS 目录。迁移旧版 `video-editor` 项目使用只读清单工具：
 
 ```bash
-python3 scripts/update_division.py
-python3 scripts/update_division.py --check
+node scripts/migrate_legacy_project.mjs export --legacy-dir /path/to/legacy --out ./migration.json
+node scripts/migrate_legacy_project.mjs import --manifest ./migration.json --legacy-cas /path/to/legacy/cas --target-home ~/.ave
 ```
 
-- **进度**：已完成工作流数 / 分配给该成员的工作流数；不能由代码行推导。
-- **提交数**：当前分支可达的非合并、非 `chore(stats):` 提交，按 `research/team.json` 中的 Git 作者名或邮箱匹配。
-- **有效代码数**：该快照中仍存活、经 `git blame` 归属的非空非注释源码行；含测试源码，排除文档、生成物、锁文件、依赖和参考仓库。对根仓库交付的 `downstream/paseo/`，与 `research/upstream.json` 固定的 Paseo 提交逐文件比较：新文件按根仓库 blame，已有文件只计新增/修改行，不把随文件复制的上游行归给导入者。运行统计前需按上节恢复 `paseo/`；不读取本地 `vendor/paseo/` 的未提交改动。M1 若根仓库以 `vendor/paseo` gitlink 管理 downstream，脚本会同时聚合该已初始化且 HEAD 与 gitlink 一致的 fork 的提交和 blame；未初始化或指针不一致时不计入。
-- 提交功能改动后重新生成图，再以 `chore(stats): refresh division` 单独提交；统计提交不重复计数，避免自引用导致永远无法稳定。
-- L、J、C 开始提交前必须补全各自 Git `names` / `emails`，否则只显示人工里程碑，不会冒领他人提交。
+## 文档入口
 
-## 当前仓库结构
-
-```text
-demo.md                     # 设计入口
-ARCHITECTURE.svg            # 架构图
-DIVISION.svg                # 自动生成的团队图，禁止手改
-demo/                       # 九份可执行设计文档
-research/                   # 原始需求、上游锁、团队数据
-scripts/                    # 参考仓库、统计与项目校验
-.githooks/                  # 本地提交门
-.github/workflows/          # 文档与统计 CI
-findings.md                 # 一手资料与设计依据
-task_plan.md / progress.md  # 执行状态和验证边界
-```
-
-M1 的目标实现位于 Paseo downstream fork：`plugins/video-editor/shared/contracts`（契约）、`plugins/video-editor/server`（daemon）、`plugins/video-editor/client`（共享/桌面/Android UI）、`services/generation-worker`（Python 模型 Worker），以及 Paseo 既有 desktop/app 测试和发布目录。路径只有出现真实实现时才创建，不用空目录或伪脚本冒充进度。
+- [架构图 SVG](ARCHITECTURE.svg) · [团队分工与实时统计 SVG](DIVISION.svg)
+- [ADR 012：原生 AVE 架构](docs/adr/0012-native-ave-architecture.md) · [R0–R5 迁移计划](demo/11-native-migration-plan.md)
+- [设计总览](demo.md) · [路线图](ROADMAP.md) · [调研证据](findings.md) · [执行记录](progress.md)

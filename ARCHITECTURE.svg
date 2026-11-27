@@ -1,83 +1,83 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900" role="img" aria-labelledby="title desc">
-  <title id="title">Agentic Video Editor 总体架构</title>
-  <desc id="desc">桌面和 Android 客户端通过受控协议连接 Paseo daemon。视频领域服务唯一拥有 Pi 会话和 EditJob，共享 EditCommand 由 FilmCraft 或 FFmpeg 确定性后端执行，Python Worker 负责生成。源资产不可变，移动端和 Agent 不能绕过服务端审批或调用原生 FilmCraft MCP。</desc>
+  <title id="title">Agentic Video Editor 总体架构（原生版）</title>
+  <desc id="desc">桌面与 Android 客户端通过受控 WebSocket/二进制协议（packages/protocol + packages/client-sdk）连接原生 AVE daemon。daemon 独占 SQLite WAL 五个 Repository、CAS 与任务调度；独立 Planner Worker 通过封闭 17 工具循环提议 EditPlan；Media Worker（FFmpeg + Python 内核）执行媒体处理与 QA。</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0L10 5L0 10Z" fill="currentColor"/>
     </marker>
   </defs>
   <g font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans CJK SC, sans-serif" fill="currentColor">
-    <text x="40" y="48" font-size="28" font-weight="700">本地优先的 Agentic Video Editor</text>
-    <text x="40" y="76" font-size="14" opacity="0.68">单一领域事实源 · 会话与任务分离 · 原片不可变 · 审批不可绕过</text>
+    <text x="40" y="48" font-size="28" font-weight="700">本地优先的原生 Agentic Video Editor</text>
+    <text x="40" y="76" font-size="14" opacity="0.68">单一领域事实源 · 无 Paseo/Pi/FilmCraft 宿主耦合 · 原片不可变 · 审批不可绕过</text>
 
     <rect x="40" y="108" width="440" height="174" rx="14" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.35"/>
-    <text x="64" y="140" font-size="20" font-weight="700">桌面端 · Electron + Expo Web</text>
-    <text x="64" y="171" font-size="14">项目 / 镜头 / 时间线 / 帧与 mask 精修</text>
-    <text x="64" y="197" font-size="14">Agent 会话 / 计划 diff / 关键帧审批</text>
-    <text x="64" y="223" font-size="14">代理播放 / 对比 / QA / 导出</text>
-    <text x="64" y="257" font-size="12" opacity="0.65">原生文件授权 · daemon 生命周期 · 签名与更新</text>
+    <text x="64" y="140" font-size="20" font-weight="700">桌面端 · apps/desktop + apps/web</text>
+    <text x="64" y="171" font-size="14">Electron 安全壳（sandbox + contextIsolation）</text>
+    <text x="64" y="197" font-size="14">React 工作台 / 时间线裁剪 / 审批队列</text>
+    <text x="64" y="223" font-size="14">对象编辑工作流 / 成片校验下载与播放</text>
+    <text x="64" y="257" font-size="12" opacity="0.65">仅调用 @ave/client-sdk · 不直接访问 SQLite/CAS</text>
 
     <rect x="520" y="108" width="440" height="174" rx="14" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.35"/>
-    <text x="544" y="140" font-size="20" font-weight="700">Android · Expo</text>
-    <text x="544" y="171" font-size="14">会话 / 进度 / 压缩预览 / 计划审批</text>
-    <text x="544" y="197" font-size="14">追加指令 / 暂停与取消 / 上传与下载</text>
-    <text x="544" y="223" font-size="14">viewer 只读 · operator 显式审批</text>
-    <text x="544" y="257" font-size="12" opacity="0.65">不做复杂 mask 精修 · 退出客户端不终止任务</text>
+    <text x="544" y="140" font-size="20" font-weight="700">移动端 · apps/mobile (Expo Android)</text>
+    <text x="544" y="171" font-size="14">设备配对 / 预览 / 计划审批 / 取消与校验下载</text>
+    <text x="544" y="197" font-size="14">snapshot + events(afterSeq) 断线补拉恢复</text>
+    <text x="544" y="223" font-size="14">viewer 只读 · operator 显式审批 · 设备吊销即断</text>
+    <text x="544" y="257" font-size="12" opacity="0.65">不含桌面时间线/掩码精修 · services/relay 可选远期扩展</text>
 
     <path d="M260 282V322" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow)"/>
     <path d="M740 282V322" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow)"/>
-    <text x="278" y="306" font-size="12" opacity="0.7">typed RPC / events / 分块媒体</text>
-    <text x="604" y="306" font-size="12" opacity="0.7">配对 · 直连或 E2EE relay</text>
+    <text x="278" y="306" font-size="12" opacity="0.7">@ave/client-sdk · WS 信封与分块帧</text>
+    <text x="604" y="306" font-size="12" opacity="0.7">直连认证设备通道（v1）</text>
 
     <rect x="120" y="328" width="760" height="280" rx="16" fill="var(--surface)" fill-opacity="0.035" stroke="currentColor" stroke-width="1.5"/>
-    <text x="148" y="362" font-size="21" font-weight="700">Paseo daemon · video-editor 领域模块</text>
-    <text x="852" y="360" text-anchor="end" font-size="12" opacity="0.65">每次 RPC 重新鉴权与校验 revision</text>
+    <text x="148" y="362" font-size="21" font-weight="700">AVE 模块化单体 daemon · services/daemon</text>
+    <text x="852" y="360" text-anchor="end" font-size="12" opacity="0.65">63 个注册 RPC · 服务端主体鉴权与 Revision 冲突检测</text>
 
     <rect x="148" y="388" width="328" height="80" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.28"/>
-    <text x="168" y="417" font-size="16" font-weight="650">SessionService</text>
-    <text x="168" y="443" font-size="13" opacity="0.72">唯一拥有 Pi 会话 / 事件映射 / 对话恢复</text>
+    <text x="168" y="417" font-size="16" font-weight="650">AvePlannerController + ToolBroker</text>
+    <text x="168" y="443" font-size="13" opacity="0.72">封闭 17 工具 · Run 事件入库 · agent_settled ≠ 完成</text>
 
     <rect x="500" y="388" width="352" height="80" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.28"/>
-    <text x="520" y="417" font-size="16" font-weight="650">Project / Revision / EditJob</text>
-    <text x="520" y="443" font-size="13" opacity="0.72">SQLite 事务 / 状态机 / 审批 / 幂等 / 审计</text>
+    <text x="520" y="417" font-size="16" font-weight="650">单库单事务协调器 · 5 Repositories</text>
+    <text x="520" y="443" font-size="13" opacity="0.72">Project/Plan/Job+Outbox/ObjectEdit/Device+Grant</text>
 
     <rect x="148" y="490" width="328" height="88" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.28"/>
-    <text x="168" y="519" font-size="16" font-weight="650">MediaService + ToolGateway</text>
-    <text x="168" y="545" font-size="13" opacity="0.72">hash / 代理 / WS 分块 / 可选 Range</text>
-    <text x="168" y="565" font-size="12" opacity="0.62">模型上下文只接收资产引用，不接收任意路径</text>
+    <text x="168" y="519" font-size="16" font-weight="650">ContentAddressedStore + UploadManager</text>
+    <text x="168" y="545" font-size="13" opacity="0.72">SHA-256 内容寻址 · 分块校验 · 独立 AVE_HOME</text>
+    <text x="168" y="565" font-size="12" opacity="0.62">严格隔离旧 legacy 目录 · 禁止共享数据库或 CAS</text>
 
     <rect x="500" y="490" width="352" height="88" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.28"/>
-    <text x="520" y="519" font-size="16" font-weight="650">JobRunner</text>
-    <text x="520" y="545" font-size="13" opacity="0.72">DAG / 队列 / 背压 / 取消 / 检查点 / 恢复</text>
-    <text x="520" y="565" font-size="12" opacity="0.62">Agent 不能批准、完成或越过状态门</text>
+    <text x="520" y="519" font-size="16" font-weight="650">AveJobSupervisor</text>
+    <text x="520" y="545" font-size="13" opacity="0.72">队列 / 取消 / 暂停 / 重试 / 重启中断恢复</text>
+    <text x="520" y="565" font-size="12" opacity="0.62">所有写操作绑定 requestId + expectedRevision 幂等</text>
 
     <path d="M312 608V654" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow)"/>
     <path d="M500 608V654" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow)"/>
     <path d="M688 608V654" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow)"/>
 
     <rect x="40" y="660" width="280" height="132" rx="12" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.35"/>
-    <text x="60" y="690" font-size="17" font-weight="700">Pi agent-worker</text>
-    <text x="60" y="718" font-size="13">独立进程 · createAgentSession</text>
-    <text x="60" y="742" font-size="13">自有 IPC · 视频工具 · 会话与事件</text>
-    <text x="60" y="770" font-size="12" opacity="0.65">无通用 shell / 无审批权</text>
+    <text x="60" y="690" font-size="17" font-weight="700">Native Planner Worker</text>
+    <text x="60" y="718" font-size="13">独立子进程 · JSONL stdio IPC</text>
+    <text x="60" y="742" font-size="13">单 strict JSON Schema Provider</text>
+    <text x="60" y="770" font-size="12" opacity="0.65">无 SQLite / 无 CAS / 无 shell / 无审批权</text>
 
     <rect x="360" y="660" width="280" height="132" rx="12" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.35"/>
-    <text x="380" y="690" font-size="17" font-weight="700">确定性编辑后端</text>
-    <text x="380" y="718" font-size="13">FilmCraft adapter / FFmpeg</text>
-    <text x="380" y="742" font-size="13">共享 EditCommand · 受控独立进程</text>
-    <text x="380" y="770" font-size="12" opacity="0.65">能力矩阵路由 / 禁止原生 MCP 直通</text>
+    <text x="380" y="690" font-size="17" font-weight="700">FFmpeg 确定性后端</text>
+    <text x="380" y="718" font-size="13">probe / index / 裁切拼接 / QA</text>
+    <text x="380" y="742" font-size="13">shell:false 参数数组 + staging 提交</text>
+    <text x="380" y="770" font-size="12" opacity="0.65">保留可选 DeterministicBackend 扩展点</text>
 
     <rect x="680" y="660" width="280" height="132" rx="12" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.35"/>
-    <text x="700" y="690" font-size="17" font-weight="700">Python Video Worker</text>
-    <text x="700" y="718" font-size="13">固定版本 job protocol</text>
-    <text x="700" y="742" font-size="13">SAM / 图像编辑 / 视频传播 / QA</text>
-    <text x="700" y="770" font-size="12" opacity="0.65">本地或显式远程 · 能力声明与配额</text>
+    <text x="700" y="690" font-size="17" font-weight="700">Python Media Worker</text>
+    <text x="700" y="718" font-size="13">services/media-worker (python3 -I -B)</text>
+    <text x="700" y="742" font-size="13">SamplingMap / SAM2 / VACE / 受控合成</text>
+    <text x="700" y="770" font-size="12" opacity="0.65">未配置 GPU 权重时诚实返回未就绪</text>
 
     <rect x="180" y="822" width="640" height="50" rx="10" fill="none" stroke="currentColor" stroke-dasharray="6 5" stroke-opacity="0.38"/>
-    <text x="500" y="852" text-anchor="middle" font-size="14">不可变 Asset + Revision / Mask lineage + 可复现 ExportManifest + QA 报告</text>
+    <text x="500" y="852" text-anchor="middle" font-size="14">不可变 Asset + 有理数 EditGraph + 哈希绑定 Approval + 可校验 ExportManifest</text>
 
-    <text x="324" y="638" font-size="11" opacity="0.62">RPC</text>
-    <text x="514" y="638" font-size="11" opacity="0.62">受控任务</text>
-    <text x="702" y="638" font-size="11" opacity="0.62">localhost / authenticated worker</text>
+    <text x="324" y="638" font-size="11" opacity="0.62">JSONL IPC</text>
+    <text x="514" y="638" font-size="11" opacity="0.62">argv 执行</text>
+    <text x="702" y="638" font-size="11" opacity="0.62">CAS BlobRef</text>
   </g>
 </svg>

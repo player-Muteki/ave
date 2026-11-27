@@ -45,14 +45,14 @@
       "title": "总体架构、领域边界与接口基线",
       "owners": ["lead"],
       "status": "done",
-      "evidence": "demo/02-architecture.md; demo/06-interfaces.md"
+      "evidence": "demo/02-architecture.md; demo/06-interfaces.md; docs/adr/0012-native-ave-architecture.md"
     },
     {
       "id": "backend-contract",
       "title": "后端数据模型、任务状态机与工具协议设计",
       "owners": ["lead", "l"],
       "status": "done",
-      "evidence": "demo/03-agent-runtime.md; demo/04-media-pipeline.md"
+      "evidence": "demo/03-agent-runtime.md; demo/04-media-pipeline.md; packages/contracts/test/contracts.test.ts"
     },
     {
       "id": "workflow-baseline",
@@ -63,51 +63,51 @@
     },
     {
       "id": "integration-probes",
-      "title": "Pi/Paseo 集成探针与跨域 ADR 评审",
+      "title": "原生架构去宿主收敛（ADR 012 R0–R5）与迁移规范",
       "owners": ["lead", "l", "j", "c"],
-      "status": "in_progress",
-      "evidence": "demo/08-delivery.md"
+      "status": "done",
+      "evidence": "docs/adr/0012-native-ave-architecture.md; demo/11-native-migration-plan.md; conformance/r0-baseline/verify_r0_baseline.py"
     },
     {
       "id": "backend-core",
-      "title": "项目存储、JobRunner、ToolGateway 与恢复实现",
+      "title": "原生 SQLite 5 Repository、CAS、Daemon 与原生 Planner 闭环",
       "owners": ["lead", "l"],
-      "status": "planned",
-      "evidence": "demo/08-delivery.md"
+      "status": "done",
+      "evidence": "storage/sqlite/test/sqlite-store.test.ts; services/daemon/test/daemon.e2e.test.ts; services/daemon/test/planner.e2e.test.ts"
     },
     {
       "id": "media-worker",
-      "title": "FilmCraft/FFmpeg、mask、生成 Worker、合成与 QA 实现",
+      "title": "FFmpeg 后端、Python Worker、对象编辑状态机与 QA",
       "owners": ["l"],
-      "status": "in_progress",
-      "evidence": "scripts/check_sam2_shot.py; scripts/check_vace_shot.py"
+      "status": "done",
+      "evidence": "services/media-worker/README.md; services/daemon/test/object-edit.e2e.test.ts; scripts/check_vace_canvas.py"
     },
     {
       "id": "desktop-editor",
-      "title": "Electron 桌面工作台、时间线与导出交互",
+      "title": "Electron 桌面安全壳、React 编辑台与导出验证",
       "owners": ["c"],
-      "status": "in_progress",
-      "evidence": "demo/05-clients-remote.md; downstream/paseo/packages/server/src/server/video/agent/planning-approval.real.e2e.test.ts"
+      "status": "done",
+      "evidence": "apps/web/test/web-workbench.test.ts; apps/desktop/test/desktop-security.test.ts"
     },
     {
       "id": "android-supervision",
-      "title": "Android 会话、预览、审批、取消与下载",
+      "title": "Android 远程监督端：配对、审批、取消与校验下载",
       "owners": ["j"],
-      "status": "planned",
-      "evidence": "demo/05-clients-remote.md"
+      "status": "done",
+      "evidence": "apps/mobile/test/mobile-supervisor.test.ts; services/daemon/test/mobile-supervisor.e2e.test.ts"
     },
     {
       "id": "remote-control",
-      "title": "配对、权限、断线恢复与双端远程联调",
+      "title": "Typed Client SDK、断线事件补拉、设备撤销与迁移工具",
       "owners": ["j", "c"],
-      "status": "planned",
-      "evidence": "demo/05-clients-remote.md"
+      "status": "done",
+      "evidence": "packages/client-sdk/test/client-sdk.test.ts; storage/sqlite/test/legacy-migration.test.ts"
     },
     {
       "id": "release-validation",
-      "title": "三桌面平台与 Android 真机发布验收",
+      "title": "三桌面平台与 Android 真机及真实 GPU 权重发布验收",
       "owners": ["lead", "l", "j", "c"],
-      "status": "planned",
+      "status": "in_progress",
       "evidence": "demo/08-delivery.md"
     }
   ]

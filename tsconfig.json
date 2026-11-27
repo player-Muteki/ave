@@ -10,6 +10,7 @@
     { "path": "services/planner-worker" },
     { "path": "services/daemon" },
     { "path": "apps/web" },
-    { "path": "apps/desktop" }
+    { "path": "apps/desktop" },
+    { "path": "apps/mobile" }
   ]
 }

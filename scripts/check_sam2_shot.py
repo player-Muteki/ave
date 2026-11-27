@@ -19,7 +19,7 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(ROOT / "downstream/paseo/plugins/video-editor/worker"))
+sys.path.insert(0, str(ROOT / "services/media-worker"))
 from sam2_shot import FramePrompt, Point, track_shot
 
 SOURCE_REV = "2b90b9f5ceec907a1c18123530e92e794ad901a4"

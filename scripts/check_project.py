@@ -26,6 +26,7 @@ def markdown_files() -> list[Path]:
         "demo.md", "findings.md", "task_plan.md", "progress.md",
     )]
     files.extend((ROOT / "demo").glob("**/*.md"))
+    files.extend((ROOT / "docs").glob("**/*.md"))
     return sorted({path for path in files if path.exists()})
 
 
@@ -104,28 +105,18 @@ def main() -> int:
         else:
             fail(errors, f"缺少 {name}")
     check_team(errors)
-    rpc_surface = ROOT / "downstream" / "paseo" / "plugins" / "video-editor" / "test" / "test_rpc_surface.py"
-    if rpc_surface.exists():
-        surface = subprocess.run(
-            [sys.executable, str(rpc_surface)],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if surface.returncode:
-            fail(errors, surface.stdout.strip() or surface.stderr.strip())
-    pin_gate = ROOT / "scripts" / "check_filmcraft_pin.py"
-    if pin_gate.exists():
-        pin = subprocess.run(
-            [sys.executable, str(pin_gate)],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if pin.returncode:
-            fail(errors, pin.stdout.strip() or pin.stderr.strip())
+    for gate_name in ("check_native_rpc_surface.py", "check_native_boundaries.py"):
+        gate_script = ROOT / "scripts" / gate_name
+        if gate_script.exists():
+            res = subprocess.run(
+                [sys.executable, str(gate_script)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if res.returncode:
+                fail(errors, res.stdout.strip() or res.stderr.strip())
     repository = subprocess.run(
         ["git", "-C", str(ROOT), "rev-parse", "--is-inside-work-tree"],
         check=False,

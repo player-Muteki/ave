@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "downstream/paseo/plugins/video-editor/worker"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "services/media-worker"))
 from vace_shot import VaceCanvas
 
 

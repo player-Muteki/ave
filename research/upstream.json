@@ -1,19 +1,22 @@
 {
   "schemaVersion": 1,
+  "note": "Historical upstream research archive. Native AVE (ADR 012 R0-R5) builds and runs independently without restoring these reference checkouts.",
   "references": [
     {
       "path": "pi",
       "url": "https://github.com/earendil-works/pi.git",
       "commit": "fcc33744b072b9bb5529fa4ff8b151f9fa578e14",
       "versionAtResearch": "1.5.2",
-      "licenseAtResearch": "MIT"
+      "licenseAtResearch": "MIT",
+      "status": "archived-design-reference"
     },
     {
       "path": "paseo",
       "url": "https://github.com/getpaseo/paseo.git",
       "commit": "c626bf37071491981fc8e11c3e2f4df093381d37",
       "versionAtResearch": "0.17.4",
-      "licenseAtResearch": "Apache-2.0"
+      "licenseAtResearch": "Apache-2.0",
+      "status": "archived-design-reference"
     },
     {
       "path": "filmcraft",
@@ -21,29 +24,8 @@
       "commit": "7b8e522d63f2e2c1617dea4939feb48e769d6f2f",
       "versionAtResearch": "0.20.1",
       "licenseAtResearch": "MIT OR Apache-2.0",
-      "integration": "candidate deterministic backend; benchmark and conformance gates required",
-      "sparseCheckout": [
-        "/Cargo.toml",
-        "/Cargo.lock",
-        "/README.md",
-        "/NOTICE",
-        "/LICENSE-MIT",
-        "/LICENSE-APACHE",
-        "/ATTRIBUTION.md",
-        "/docs",
-        "/crates/engine",
-        "/crates/automation",
-        "/crates/project",
-        "/crates/time",
-        "/crates/export",
-        "/crates/format",
-        "/apps/filmcraft-cli",
-        "/apps/filmcraft/src/control_server.rs"
-      ],
-      "dependencyPins": {
-        "craft-libs": "a4db799563c9ccd7217e1731ec34c58f6ba57248",
-        "craft-fcproj-format": "3af2280ee3434a2c860012df2f440652621c2c81"
-      }
+      "status": "archived-design-reference",
+      "integration": "removed from native critical path per ADR 012; optional future DeterministicBackend adapter only"
     }
   ]
 }

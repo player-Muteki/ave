@@ -2,8 +2,5 @@
 set -eu
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
-# The checks inspect HEAD and independent reference worktrees. A path-limited
-# commit exports its temporary index, which belongs only to the root repository.
 unset $(git rev-parse --local-env-vars)
 python3 scripts/check_project.py
-python3 scripts/bootstrap_references.py

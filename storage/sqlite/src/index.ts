@@ -1,5 +1,6 @@
 export * from "./schema.js";
 export * from "./coordinator.js";
+export * from "./legacy-migration.js";
 export * from "./store.js";
 export * from "./repositories/device-grant-repository.js";
 export * from "./repositories/project-asset-repository.js";
