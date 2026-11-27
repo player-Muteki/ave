@@ -35,6 +35,7 @@ import {
   BindObjectEditPlanInputSchema,
   AdvanceObjectEditSessionInputSchema,
   AnswerRunQuestionInputSchema,
+  RefreshObjectEditCandidatesInputSchema,
   SetModelPolicyInputSchema,
   GetModelPoliciesInputSchema,
   RemoveModelPolicyInputSchema,
@@ -217,6 +218,13 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...this.editor.store.decideCandidate(request, principal),
+        };
+      }
+      case "video.v1.refresh_object_edit_candidates": {
+        const request = RefreshObjectEditCandidatesInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...(await this.editor.store.refreshObjectEditCandidates(request, principal)),
         };
       }
       case "video.v1.bind_object_edit_plan": {

@@ -11,7 +11,7 @@ import {
   decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc, getMutationResultRpc,
-  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, answerRunQuestionRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc, setModelPolicyRpc, getModelPoliciesRpc, removeModelPolicyRpc,
+  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, answerRunQuestionRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc, setModelPolicyRpc, getModelPoliciesRpc, removeModelPolicyRpc, refreshObjectEditCandidatesRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot, type ObjectEditSession, type RunQuestion, type ModelPolicy, type ModelStage,
 } from "../shared/contracts/v1.js";
@@ -80,6 +80,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const setModelPolicy = useRpc(setModelPolicyRpc);
   const readPolicies = useRpc(getModelPoliciesRpc);
   const removePolicy = useRpc(removeModelPolicyRpc);
+  const refreshOes = useRpc(refreshObjectEditCandidatesRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
   const readQaSummary = useRpc(getQaSummaryRpc);
@@ -944,7 +945,14 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
           })}
           {oes && oes.projectId === project?.projectId && (
             <View style={styles.clip}>
-              <Text style={ink}>会话 {oes.sessionId.slice(0, 12)} · {oes.state} · 版本 {oes.boundRevision}{oes.boundRevision !== project?.revision ? "（已过期，需重建）" : ""}</Text>
+              <View style={row}>
+                <Text style={ink}>会话 {oes.sessionId.slice(0, 12)} · {oes.state} · 版本 {oes.boundRevision}{oes.boundRevision !== project?.revision ? "（已过期，需重建）" : ""}</Text>
+                {button("刷新候选", async () => {
+                  const r = await refreshOes({ requestId: requestId(`refresh:${oes.sessionId}`), projectId: project!.projectId, sessionId: oes.sessionId });
+                  setOes(r);
+                  setNotice(`候选 ${r.candidates.length} 个 · 状态 ${r.state}`);
+                })}
+              </View>
               {oes.candidates.map((c) => {
                 const dec = oes.decisions.find((d) => d.candidateId === c.candidateId)?.decision;
                 return (

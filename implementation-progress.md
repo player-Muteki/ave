@@ -235,6 +235,8 @@
 
 - 模型网关 P1 骨架：`model_policies` 表 + RPC `set_model_policy`/`get_model_policies`（viewer）/`remove_model_policy`（owner，均幂等）；`reservePlanningRun` 接受可选 model 并经 `modelAllowed(projectId, "planning", model)` 服务端强校验（未登记/停用 → PERMISSION_DENIED）；edit-desk 新增策略面板。fixtures 191 例/132 defs，rpc-surface 61 case/57 export/26 read 一致；oes-smoke 新增 MODEL_POLICY（登记/准入/外来拒绝/停用拒绝/删除）全绿。阶段枚举 planning/detection/segmentation/tracking/inpainting/qa 已留好，媒体各阶段接入待后续。
 
+- Copilot 闭环状态流转补齐：无分析产物时会话以 `analyzing` 创建（空候选），新增 `video.v1.refresh_object_edit_candidates`（operator，幂等）在分析完成后重建候选并推进到 awaiting_selection，候选派生逻辑抽成 `deriveCandidates` 复用；`analyze_asset` 新增可选 `model`，createAnalysisJob 按 detection 阶段策略强校验（未准入 → PERMISSION_DENIED）并把 model 记录到 JobSnapshot；edit-desk 会话面板新增“刷新候选”按钮。fixtures 195 例/134 defs，rpc-surface 62 case/58 export/26 read 一致；oes-smoke 重写为完整流（analyzing→refresh→2 候选 risk 5/80→双决策→mask_review→绑定→preview→delivered→门禁全绿）。
+
 ## 环境与错误
 
 | 问题 | 处理 |

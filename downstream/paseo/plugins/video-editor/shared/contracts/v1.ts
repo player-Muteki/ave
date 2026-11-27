@@ -6,6 +6,8 @@ export const VACE_PROFILE = "vace-local-9f-480p-v1";
 export const VACE_MODEL = "ec4d2cb062b548996b179d493fdd05340de702a1";
 
 export const AnalysisRateSchema = z.string().regex(/^[1-9][0-9]*\/[1-9][0-9]*$/);
+export const ModelRefSchema = z.object({ provider: z.string().min(1).max(128), id: z.string().min(1).max(256) }).strict();
+export type ModelRef = z.infer<typeof ModelRefSchema>;
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const requestId = id;
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
@@ -344,6 +346,7 @@ export const JobSnapshotSchema = z
     error: EditorErrorSchema.optional(),
     analysisAssetId: id.optional(),
     analysisRate: AnalysisRateSchema.optional(),
+    model: ModelRefSchema.optional(),
   })
   .strict();
 export type JobSnapshot = z.infer<typeof JobSnapshotSchema>;
@@ -1008,6 +1011,15 @@ export const advanceObjectEditSessionRpc = {
   input: AdvanceObjectEditSessionInputSchema,
   output: ObjectEditSessionResultSchema,
 };
+
+export const RefreshObjectEditCandidatesInputSchema = z
+  .object({ requestId, projectId: id, sessionId: id })
+  .strict();
+export const refreshObjectEditCandidatesRpc = {
+  name: "video.v1.refresh_object_edit_candidates",
+  input: RefreshObjectEditCandidatesInputSchema,
+  output: ObjectEditSessionResultSchema,
+};
 export const createUploadRpc = {
   name: "video.v1.create_upload",
   input: CreateUploadRequestSchema,
@@ -1035,6 +1047,8 @@ export const AnalyzeAssetInputSchema = z
     projectId: id,
     assetId: id,
     rate: AnalysisRateSchema.optional(),
+    // Optional detector model for the detection stage; enforced against model policies.
+    model: ModelRefSchema.optional(),
   })
   .strict();
 export type AnalyzeAssetInput = z.infer<typeof AnalyzeAssetInputSchema>;

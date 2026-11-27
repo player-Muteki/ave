@@ -46,6 +46,7 @@ import {
   type PersonCandidate,
   type ModelPolicy,
   type ModelStage,
+  type ModelRef,
 } from "#video-editor/contracts/v1";
 import { describeEditorError, EditorError, editorFailure } from "./errors.js";
 
@@ -832,45 +833,15 @@ export class EditorStore {
         const project = this.project(projectId, principal);
         const asset = project.assets.find((a) => a.assetId === input.assetId);
         if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset does not exist in this project");
-        let candidates: PersonCandidate[] = cutFrames.slice(0, 8).map((cut, i) => {
-          // Risk from the real scene-cut score: a hard boundary (high score)
-          // means the segment is a clean shot, so removing a person there is
-          // lower risk; a weak boundary raises the risk of visible artifacts.
-          const score = Number(cut.score);
-          const hard = Number.isFinite(score) ? Math.min(1, Math.max(0, score)) : 0.5;
-          const riskScore = Math.round(100 * (1 - hard));
-          const riskReasons = [
-            "detector not wired; scene-cut placeholder",
-            `cut at ${cut.ptsTime}s score ${cut.score}`,
-            hard >= 0.7 ? "强切点，移除风险低" : "弱切点，注意画面跳变",
-          ];
-          return {
-            candidateId: `cand-${i + 1}`,
-            label: `候选人物 ${i + 1}`,
-            role: "uncertain" as const,
-            confidence: hard,
-            evidenceFrames: [String(cut.frameIndex)],
-            riskScore,
-            riskReasons,
-          };
-        });
-        if (!candidates.length)
-          candidates = [{
-            candidateId: "cand-1",
-            label: "候选人物 1",
-            role: "uncertain" as const,
-            confidence: 0,
-            evidenceFrames: [],
-            riskScore: 100,
-            riskReasons: ["no analysis artifacts yet; cannot locate persons"],
-          }];
+        const candidates = this.deriveCandidates(cutFrames);
+        const state: ObjectEditSession["state"] = candidates.length ? "awaiting_selection" : "analyzing";
         const sessionId = `oes-${randomUUID()}`;
         const now = this.now();
         const session: ObjectEditSession = {
           sessionId,
           projectId,
           assetId: input.assetId,
-          state: "awaiting_selection",
+          state,
           boundRevision: project.revision,
           candidates,
           decisions: [],
@@ -1082,6 +1053,83 @@ export class EditorStore {
     );
     if (!policy || !policy.enabled) return false;
     return policy.stages.includes(stage);
+  }
+
+  /**
+   * Derive placeholder candidates from scene cuts. Risk comes from the real
+   * cut score: a hard boundary (high score) is a clean shot, so removing a
+   * person there is lower risk; a weak boundary risks visible jumps.
+   */
+  private deriveCandidates(
+    cutFrames: { frameIndex: number; ptsTime: string; score: string }[],
+  ): PersonCandidate[] {
+    return cutFrames.slice(0, 8).map((cut, i) => {
+      const score = Number(cut.score);
+      const hard = Number.isFinite(score) ? Math.min(1, Math.max(0, score)) : 0.5;
+      return {
+        candidateId: `cand-${i + 1}`,
+        label: `候选人物 ${i + 1}`,
+        role: "uncertain" as const,
+        confidence: hard,
+        evidenceFrames: [String(cut.frameIndex)],
+        riskScore: Math.round(100 * (1 - hard)),
+        riskReasons: [
+          "detector not wired; scene-cut placeholder",
+          `cut at ${cut.ptsTime}s score ${cut.score}`,
+          hard >= 0.7 ? "强切点，移除风险低" : "弱切点，注意画面跳变",
+        ],
+      };
+    });
+  }
+
+  /**
+   * Re-derive a session's candidates from the latest analysis artifacts
+   * (idempotent). analyzing → awaiting_selection once cuts exist; stays
+   * analyzing when the asset has no scene cuts yet.
+   */
+  async refreshObjectEditCandidates(
+    input: { requestId: string; projectId: string; sessionId: string },
+    principal: EditorPrincipal,
+  ) {
+    this.authorize(input.projectId, principal, "operator");
+    let cutFrames: { frameIndex: number; ptsTime: string; score: string }[] = [];
+    try {
+      const cuts = await this.sceneCuts(input.projectId, this.objectEditSession(input.projectId, input.sessionId, principal).assetId, principal);
+      cutFrames = cuts.cuts.map((c) => ({ frameIndex: c.frameIndex, ptsTime: c.ptsTime, score: c.score }));
+    } catch {
+      // no analysis yet: stays analyzing
+    }
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: { ...input, cutFrames },
+      execute: (projectId) => {
+        const session = this.objectEditSession(projectId, input.sessionId, principal);
+        if (session.state === "cancelled" || session.state === "delivered")
+          editorFailure("INVALID_STATE", `The session is ${session.state} and cannot be refreshed`);
+        if (session.boundRevision !== this.projectRow(projectId).revision)
+          editorFailure("REVISION_CONFLICT", "The session is bound to an older project revision; recreate it");
+        const candidates = this.deriveCandidates(cutFrames);
+        const updated: ObjectEditSession = {
+          ...session,
+          candidates,
+          decisions: session.decisions.filter((d) => candidates.some((c) => c.candidateId === d.candidateId)),
+          state: candidates.length ? "awaiting_selection" : session.state === "analyzing" ? "analyzing" : session.state,
+          updatedAt: this.now(),
+        };
+        if (updated.state === "awaiting_selection" && session.state === "analyzing" && candidates.length)
+          updated.state = "awaiting_selection";
+        this.database
+          .prepare("UPDATE object_sessions SET document = ?, updated_at = ? WHERE session_id = ?")
+          .run(JSON.stringify(updated), updated.updatedAt, input.sessionId);
+        this.emit(projectId, "object_edit.candidates_refreshed", {
+          sessionId: input.sessionId,
+          candidateCount: candidates.length,
+          state: updated.state,
+        });
+        return updated;
+      },
+    });
   }
 
   /**
@@ -1894,9 +1942,16 @@ export class EditorStore {
     assetId: string;
     rate?: string;
     tracking?: TrackMaskRequest;
+    model?: ModelRef;
     principal: EditorPrincipal;
   }): JobResult {
     this.authorize(input.projectId, input.principal, "operator");
+    if (input.model && !input.tracking &&
+        !this.modelAllowed(input.projectId, "detection", { provider: input.model.provider, id: input.model.id }, input.principal))
+      editorFailure(
+        "PERMISSION_DENIED",
+        `Model ${input.model.provider}/${input.model.id} is not admitted for stage "detection" by any enabled policy`,
+      );
     return this.mutate({
       projectId: input.projectId,
       requestId: input.requestId,
@@ -1934,6 +1989,7 @@ export class EditorStore {
           // Mask tracking binds its source through the approved revision instead.
           analysisAssetId: track ? undefined : input.assetId,
           analysisRate: track ? undefined : rate,
+          model: !track && input.model ? { provider: input.model.provider, id: input.model.id } : undefined,
         });
         this.database
           .prepare(

@@ -380,6 +380,7 @@ type ExportManifest = {
 | `remove_model_policy` | 删除策略（owner，幂等） | owner；requestId + projectId + provider + modelId |
 | `bind_object_edit_plan` | 把已提议方案绑定到对象编辑会话（幂等，拒绝过期版本） | operator；requestId + projectId + sessionId + planId |
 | `advance_object_edit_session` | 推进会话状态机：mask_review→preview 需绑定方案+该方案的 preview job，preview→delivered 需该方案已完成的 export job，任意非 delivered 可取消；禁止回退 | operator；requestId + projectId + sessionId + target + jobId? |
+| `refresh_object_edit_candidates` | 用最新分析产物重建会话候选（analyzing→awaiting_selection），幂等，过期版本拒绝 | operator；requestId + projectId + sessionId |
 | `cancel_job/pause_job/resume_job` | 控制任务 | operator；独立 Agent abort |
 | `get_qa_report` | 查询 QA | viewer |
 | `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |

@@ -709,6 +709,9 @@
         },
         "rate": {
           "$ref": "urn:video-editor:v1:AnalysisRate"
+        },
+        "model": {
+          "$ref": "urn:video-editor:v1:ModelRef"
         }
       },
       "required": [
@@ -5051,6 +5054,9 @@
         },
         "analysisRate": {
           "$ref": "urn:video-editor:v1:AnalysisRate"
+        },
+        "model": {
+          "$ref": "urn:video-editor:v1:ModelRef"
         }
       },
       "required": [
@@ -5705,6 +5711,28 @@
         "stages",
         "location",
         "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "ModelRef": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ModelRef",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "provider",
+        "id"
       ],
       "additionalProperties": false
     },
@@ -6659,6 +6687,31 @@
         "revision",
         "offset",
         "length"
+      ],
+      "additionalProperties": false
+    },
+    "RefreshObjectEditCandidatesInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RefreshObjectEditCandidatesInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "sessionId"
       ],
       "additionalProperties": false
     },
