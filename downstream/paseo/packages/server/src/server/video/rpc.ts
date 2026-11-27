@@ -85,14 +85,14 @@ export class EditorRpcService {
             "run-events",
             "list-approvals",
             "list-plans",
-            "object-edit-sessions",
+            "object-edit",
+            "object-candidates",
             "run-questions",
-            "object-edit-bind-advance",
             "answer-run-question",
             "model-policies",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
-          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export", "object-edit-session", "decide-candidate", "run-questions"],
+          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export", "open-object-edit", "decide-object-target", "run-questions"],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
             {
@@ -102,6 +102,9 @@ export class EditorRpcService {
             },
           ],
           workerProfiles: await configuredVacePython() ? [{profileId:VACE_PROFILE,engine:"vace",maxFrames:"9",maxWidth:832,maxHeight:480,colorSpaces:["SDR RGB24"]}] : [],
+          // People detection stays on the owner's machine; the server only holds
+          // the Apache-2.0 backend list and never downloads weights.
+          objectProfiles: [{profileId:"people-detector-cpu-v1",backends:[{id:"yolox-onnx",license:"Apache-2.0",weights:"caller-supplied"},{id:"hog",license:"Apache-2.0",weights:"builtin"}],maxCandidates:32,maxEvidenceFrames:12}],
         };
       }
       case "video.v1.create_project":

@@ -314,6 +314,16 @@
 
 新增 16 项测试（5 项纯规则＋11 项存储）：候选哈希与键序/成员序无关、风险分与 protected 覆盖、重复对象与重复决策拒绝、非法区间；存储侧覆盖打开时钉住哈希与区间、陈旧 revision、缺资产、候选只记录一次、remove→掩码评审、全部 keep→完成、越权、幂等重放、换素材后决策作废、数据库重开后停在同一状态、生成闸门拒绝。回归 authorization／store／contracts 25 项通过，worker 离线契约 169 fixtures／116 定义 PASS。检测器、候选卡片与单目标闭环尚未接入，P0-B 起继续。
 
+## 2026-11-27 · Copilot P0-B：人物检测、跨帧关联与候选排序
+
+新增 `plugins/video-editor/worker/people_detector.py`：与 shot_index 相同的“调用方解码、内核只看帧”契约。`yolox-onnx` 后端只做 letterbox、预处理、YOLOX 头解码（含 stride 网格、`exp(w)`、objectness×person 类）与 NMS，权重由调用方以 Apache-2.0 许可自带，内核不下载不缓存；`hog` 后端使用 OpenCV 内置 HOG+SVM，`support()` 会如实报告当前构建是否带 `HOGDescriptor`（本机 OpenCV 5.1 构建缺失，因此该后端在本机不可用，未伪造通过）。跨帧关联用确定性贪心 IoU 匹配并允许两帧滑行，区分连续丢失（coast）与累计丢失（missed），输出轨道的中位框、置信度、面积、中心度、运动、遮挡、可见度与最多 12 个证据帧，不做角色判断。
+
+新增 `packages/server/src/server/video/object-candidates.ts` 作为唯一角色判定点：按 0.5×面积＋0.3×中心度＋0.2×可见度排序，仅当最高分 ≥0.30 且面积 ≥0.03 时才指认一个 protagonist；小面积或边缘人物记为 background，其余保持 uncertain，避免“看起来自信”的猜测替代用户选择。对象 ID 由资产内容哈希与轨道 ID 派生，换素材即换 ID；框裁剪到帧内，退化框（零宽/零高）直接丢弃。
+
+能力清单新增 `objectProfiles`（people-detector-cpu-v1，列出两种 Apache-2.0 后端、最多 32 候选/12 证据帧）与 `open-object-edit`、`decide-object-target` 操作。
+
+验证：Python 内核 36 项检查（帧校验、YOLOX 解码坐标与类别过滤、NMS、短遮挡保持 ID、长间隔新建轨道、单帧轨道丢弃、指标、证据采样、letterbox 反变换）；TS 候选转换 6 项（主角/背景/不确定、稳定 ID、裁剪与证据排序、退化框丢弃、无人可见时不指认主角）。真实权重推理与 GPU 实测不在本轮，候选卡片 UI 随后接入。
+
 ## v0.1.0 · 静音剪切验收
 
 工作台以归一化 RMS ≤ 0.01（−40 dBFS）且选区内连续至少 0.5 秒作为静音条件，选择最长符合条件的连续区间。基线的单测复现了有声误剪和片头零长度段，修复后 7 项剪切单测通过。真实 Chrome、daemon 和 FFmpeg 验证了 2.28 秒的 25 fps 双音样片：选择有声范围没有创建计划，选择中间静音后批准删除 [0.600, 1.600)，下载的成品完整解码为 32 帧、1.28 秒。48 kHz 音轨的两个采样窗口分别保留了前段 440 Hz、后段 880 Hz；源 SHA-256 未变，成品与审批及下载清单的哈希一致。
