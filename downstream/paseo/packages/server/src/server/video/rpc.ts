@@ -27,6 +27,11 @@ import {
   GetRunEventsInputSchema,
   ListApprovalsInputSchema,
   ListPlansInputSchema,
+  CreateObjectEditSessionInputSchema,
+  GetObjectEditSessionInputSchema,
+  ListObjectEditSessionsInputSchema,
+  DecideCandidateInputSchema,
+  GetRunQuestionsInputSchema,
   GetExportSummaryInputSchema,
   VerifyExportInputSchema,
   GetAssetMetadataInputSchema,
@@ -68,9 +73,11 @@ export class EditorRpcService {
             "run-events",
             "list-approvals",
             "list-plans",
+            "object-edit-sessions",
+            "run-questions",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
-          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export"],
+          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export", "object-edit-session", "decide-candidate", "run-questions"],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
             {
@@ -170,6 +177,48 @@ export class EditorRpcService {
         return {
           requestId: request.requestId,
           ...this.editor.store.listPlans(request.projectId, principal, request.afterPlanId),
+        };
+      }
+      case "video.v1.create_object_edit_session": {
+        const request = CreateObjectEditSessionInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...(await this.editor.store.createObjectEditSession(request, principal)),
+        };
+      }
+      case "video.v1.get_object_edit_session": {
+        const request = GetObjectEditSessionInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.objectEditSession(request.projectId, request.sessionId, principal),
+        };
+      }
+      case "video.v1.list_object_edit_sessions": {
+        const request = ListObjectEditSessionsInputSchema.parse(input);
+        const sessions = this.editor.store.listObjectSessions(request.projectId, principal);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          sessionCount: sessions.length,
+          sessions,
+        };
+      }
+      case "video.v1.decide_candidate": {
+        const request = DecideCandidateInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          ...this.editor.store.decideCandidate(request, principal),
+        };
+      }
+      case "video.v1.get_run_questions": {
+        const request = GetRunQuestionsInputSchema.parse(input);
+        const questions = this.editor.store.runQuestions(request.projectId, request.runId, principal);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          runId: request.runId,
+          questionCount: questions.length,
+          questions,
         };
       }
       case "video.v1.get_run_events": {

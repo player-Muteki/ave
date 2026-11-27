@@ -784,6 +784,126 @@ export const listPlansRpc = {
   input: ListPlansInputSchema,
   output: ListPlansResultSchema,
 };
+
+// ---- Object-editing HITL workflow (Copilot loop) ----
+// A session binds candidate persons detected in one asset to user decisions.
+// Decisions are bound to the project revision; stale sessions refuse writes.
+export const CandidateRoleSchema = z.enum(["protagonist", "bystander", "uncertain"]);
+export type CandidateRole = z.infer<typeof CandidateRoleSchema>;
+export const PersonCandidateSchema = z
+  .object({
+    candidateId: id,
+    label: z.string().min(1).max(64),
+    role: CandidateRoleSchema,
+    confidence: z.number().min(0).max(1),
+    evidenceFrames: z.array(uint).max(16),
+    riskScore: z.number().int().min(0).max(100),
+    riskReasons: z.array(z.string().min(1).max(200)).max(8),
+  })
+  .strict();
+export type PersonCandidate = z.infer<typeof PersonCandidateSchema>;
+export const CandidateDecisionSchema = z.enum(["remove", "keep", "skip"]);
+export type CandidateDecision = z.infer<typeof CandidateDecisionSchema>;
+export const ObjectEditStateSchema = z.enum([
+  "analyzing",
+  "awaiting_selection",
+  "mask_review",
+  "preview",
+  "delivered",
+  "cancelled",
+]);
+export type ObjectEditState = z.infer<typeof ObjectEditStateSchema>;
+export const CandidateDecisionRecordSchema = z
+  .object({ candidateId: id, decision: CandidateDecisionSchema })
+  .strict();
+export const ObjectEditSessionSchema = z
+  .object({
+    sessionId: id,
+    projectId: id,
+    assetId: id,
+    state: ObjectEditStateSchema,
+    boundRevision: uint,
+    candidates: z.array(PersonCandidateSchema).max(32),
+    decisions: z.array(CandidateDecisionRecordSchema).max(32),
+    note: z.string().max(512),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict();
+export type ObjectEditSession = z.infer<typeof ObjectEditSessionSchema>;
+
+export const CreateObjectEditSessionInputSchema = z
+  .object({ requestId, projectId: id, assetId: id })
+  .strict();
+export type CreateObjectEditSessionInput = z.infer<typeof CreateObjectEditSessionInputSchema>;
+export const ObjectEditSessionResultSchema = ObjectEditSessionSchema.extend({ requestId }).strict();
+export const createObjectEditSessionRpc = {
+  name: "video.v1.create_object_edit_session",
+  input: CreateObjectEditSessionInputSchema,
+  output: ObjectEditSessionResultSchema,
+};
+export const GetObjectEditSessionInputSchema = z
+  .object({ requestId, projectId: id, sessionId: id })
+  .strict();
+export const getObjectEditSessionRpc = {
+  name: "video.v1.get_object_edit_session",
+  input: GetObjectEditSessionInputSchema,
+  output: ObjectEditSessionResultSchema,
+};
+export const ListObjectEditSessionsInputSchema = z
+  .object({ requestId, projectId: id })
+  .strict();
+export const ListObjectEditSessionsResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    sessionCount: z.number().int().min(0),
+    sessions: z.array(ObjectEditSessionSchema).max(64),
+  })
+  .strict();
+export const listObjectEditSessionsRpc = {
+  name: "video.v1.list_object_edit_sessions",
+  input: ListObjectEditSessionsInputSchema,
+  output: ListObjectEditSessionsResultSchema,
+};
+export const DecideCandidateInputSchema = z
+  .object({ requestId, projectId: id, sessionId: id, candidateId: id, decision: CandidateDecisionSchema })
+  .strict();
+export type DecideCandidateInput = z.infer<typeof DecideCandidateInputSchema>;
+export const decideCandidateRpc = {
+  name: "video.v1.decide_candidate",
+  input: DecideCandidateInputSchema,
+  output: ObjectEditSessionResultSchema,
+};
+// Structured questions a planning run asks the operator (HITL), read from events.
+export const RunQuestionSchema = z
+  .object({
+    eventId: id,
+    seq: uint,
+    runId: id,
+    questionId: id,
+    text: z.string().min(1).max(2000),
+    choices: z.array(z.string().min(1).max(200)).max(8),
+  })
+  .strict();
+export type RunQuestion = z.infer<typeof RunQuestionSchema>;
+export const GetRunQuestionsInputSchema = z
+  .object({ requestId, projectId: id, runId: id })
+  .strict();
+export const GetRunQuestionsResultSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    runId: id,
+    questionCount: z.number().int().min(0),
+    questions: z.array(RunQuestionSchema).max(64),
+  })
+  .strict();
+export const getRunQuestionsRpc = {
+  name: "video.v1.get_run_questions",
+  input: GetRunQuestionsInputSchema,
+  output: GetRunQuestionsResultSchema,
+};
 export const createUploadRpc = {
   name: "video.v1.create_upload",
   input: CreateUploadRequestSchema,

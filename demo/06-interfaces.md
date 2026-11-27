@@ -370,6 +370,10 @@ type ExportManifest = {
 | `get_run_events` | 按 runId 订阅单次规划运行的事件（按项目和 runId 筛选后分页，单页 ≤200；latestSeq 为本页最后已读序号，空页沿用请求游标） | viewer；requestId + projectId + runId + afterSeq? |
 | `list_approvals` | 审批列表，可选 status 过滤（pending/approved/rejected/superseded/expired/revoked），最新 256 条 | viewer；requestId + projectId + status? |
 | `list_plans` | 方案摘要按创建顺序分页，下一页传上一页末条 planId，单页 ≤128；get_plan 支持查询已移出项目快照的历史方案 | viewer；requestId + projectId + afterPlanId? |
+| `create_object_edit_session` | 为某素材创建对象编辑会话（候选人物来自场景切点占位，绑定项目版本，幂等） | operator；requestId + projectId + assetId |
+| `get_object_edit_session/list_object_edit_sessions` | 读取对象编辑会话（状态机 analyzing→awaiting_selection→mask_review→…，候选+决策） | viewer；最新 64 条 |
+| `decide_candidate` | 对候选人物做 移除/保留/暂不处理 决策；幂等，拒绝过期版本与非等待状态，全部决策后进入 mask_review | operator；requestId + projectId + sessionId + candidateId + decision |
+| `get_run_questions` | 读取某次规划 run 发出的结构化 HITL 提问（run.question 事件，≤64 条） | viewer；requestId + projectId + runId |
 | `cancel_job/pause_job/resume_job` | 控制任务 | operator；独立 Agent abort |
 | `get_qa_report` | 查询 QA | viewer |
 | `get_qa_summary` | QA 有界摘要：流/时长/响度/renderRecipeHash/planHash/门禁，完整 probe 不出 CAS | viewer；requestId + projectId + jobId |

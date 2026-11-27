@@ -225,6 +225,8 @@
 
 - FilmCraft 上游 pin 更新到 `7b8e522d`（`research/upstream.json`，craft-libs `a4db7995`），源码审查见 `research/filmcraft-ba6fe105-to-7b8e522d.md`：新遁不启用为产物后端（导出/文档路径/控制桥均变，未构建验收），FFmpeg 继续承担确定性编辑。落地代码：新增离线门禁 `scripts/check_filmcraft_pin.py`（接入 `check_project.py`）固化 pin==审查 commit、审查文档存在且含不启用结论、capabilities 保持 `filmcraft available:false`、preview-profile 拒绝 filmcraft 后端、E13 探针从 upstream.json 读 pin；`get_capabilities` 的 filmcraft reason 改为引用审查 pin。本地 `check_project.py` 全绿。未跑真模型/e2e。
 
+- Copilot 闭环 P0 骨架落地：新增对象编辑会话持久化（`object_sessions` 表，状态机 analyzing→awaiting_selection→mask_review→preview→delivered/cancelled，决策绑定项目版本，过期拒绝 REVISION_CONFLICT，幂等 mutate），RPC `create/get/list_object_edit_session` + `decide_candidate`（operator）与 `get_run_questions`（viewer，读取 run.question 事件）；候选人物先用场景切点占位（接检测器后替换）；edit-desk 新增对象编辑面板（候选卡片+风险+三种决策）与规划提问按钮。contracts 新增 ObjectEdit*/PersonCandidate/RunQuestion 等（v1.schema.json 120 defs），fixtures 177 例，rpc-surface 55 case/51 export/25 read 一致；本地 oes-smoke 全绿（创建幂等/决策幂等/状态与版本门禁/viewer 权限/run questions）。未接真实检测器，未跑真模型/e2e。
+
 ## 环境与错误
 
 | 问题 | 处理 |

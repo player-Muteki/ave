@@ -40,6 +40,9 @@ import {
   type JobSnapshot,
   type ProjectSnapshot,
   type SourceAsset,
+  ObjectEditSessionSchema,
+  type ObjectEditSession,
+  type PersonCandidate,
 } from "#video-editor/contracts/v1";
 import { describeEditorError, EditorError, editorFailure } from "./errors.js";
 
@@ -189,6 +192,10 @@ CREATE TABLE IF NOT EXISTS uploads (
   upload_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, expected_size TEXT NOT NULL,
   expected_sha256 TEXT NOT NULL, display_name TEXT NOT NULL, media_type TEXT NOT NULL,
   next_offset TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS object_sessions (
+  session_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
+  asset_id TEXT NOT NULL, document TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS upload_receipts (
   upload_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, request_id TEXT NOT NULL,
@@ -790,6 +797,172 @@ export class EditorStore {
       })),
       hasMore: plans.length > 128,
     };
+  }
+
+  /**
+   * Create an object-editing session for one asset. Candidates are derived
+   * deterministically from the asset's scene-cut analysis as placeholders
+   * until a real person detector is wired into the worker; the session starts
+   * in awaiting_selection and is bound to the current project revision.
+   */
+  async createObjectEditSession(
+    input: { requestId: string; projectId: string; assetId: string },
+    principal: EditorPrincipal,
+  ) {
+    this.authorize(input.projectId, principal, "operator");
+    let cutFrames: { frameIndex: number; ptsTime: string }[] = [];
+    try {
+      const cuts = await this.sceneCuts(input.projectId, input.assetId, principal);
+      cutFrames = cuts.cuts.map((c) => ({ frameIndex: c.frameIndex, ptsTime: c.ptsTime }));
+    } catch {
+      // no analysis artifacts yet: fall through with a single placeholder
+    }
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: { ...input, cutFrames },
+      execute: (projectId) => {
+        const project = this.project(projectId, principal);
+        const asset = project.assets.find((a) => a.assetId === input.assetId);
+        if (!asset) editorFailure("ASSET_NOT_FOUND", "The asset does not exist in this project");
+        let candidates: PersonCandidate[] = cutFrames.slice(0, 8).map((cut, i) => ({
+          candidateId: `cand-${i + 1}`,
+          label: `候选人物 ${i + 1}`,
+          role: "uncertain" as const,
+          confidence: 0.5,
+          evidenceFrames: [String(cut.frameIndex)],
+          riskScore: 50,
+          riskReasons: ["detector not wired; scene-cut placeholder", `cut at ${cut.ptsTime}s`],
+        }));
+        if (!candidates.length)
+          candidates = [{
+            candidateId: "cand-1",
+            label: "候选人物 1",
+            role: "uncertain" as const,
+            confidence: 0,
+            evidenceFrames: [],
+            riskScore: 100,
+            riskReasons: ["no analysis artifacts yet; cannot locate persons"],
+          }];
+        const sessionId = `oes-${randomUUID()}`;
+        const now = this.now();
+        const session: ObjectEditSession = {
+          sessionId,
+          projectId,
+          assetId: input.assetId,
+          state: "awaiting_selection",
+          boundRevision: project.revision,
+          candidates,
+          decisions: [],
+          note: "candidates are scene-cut placeholders until the detector lands",
+          createdAt: now,
+          updatedAt: now,
+        };
+        this.database
+          .prepare(
+            "INSERT INTO object_sessions(session_id, project_id, asset_id, document, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+          )
+          .run(sessionId, projectId, input.assetId, JSON.stringify(session), now, now);
+        this.emit(projectId, "object_edit.session_created", {
+          sessionId,
+          assetId: input.assetId,
+          candidateCount: candidates.length,
+        });
+        return session;
+      },
+    });
+  }
+
+  objectEditSession(projectId: string, sessionId: string, principal: EditorPrincipal): ObjectEditSession {
+    this.authorize(projectId, principal, "viewer");
+    const row = this.database
+      .prepare("SELECT document FROM object_sessions WHERE project_id = ? AND session_id = ?")
+      .get(projectId, sessionId) as { document: string } | undefined;
+    if (!row) editorFailure("ASSET_NOT_FOUND", "The object-edit session does not exist in this project");
+    return ObjectEditSessionSchema.parse(JSON.parse(row.document));
+  }
+
+  /** Viewer-level listing of object-edit sessions, newest first, bounded. */
+  listObjectSessions(projectId: string, principal: EditorPrincipal): ObjectEditSession[] {
+    this.authorize(projectId, principal, "viewer");
+    return this.rows(
+      "SELECT document FROM object_sessions WHERE project_id = ? ORDER BY created_at DESC, session_id LIMIT 64",
+      projectId,
+    ).map((document) => ObjectEditSessionSchema.parse(JSON.parse(document)));
+  }
+
+  /**
+   * Record one candidate decision (idempotent per requestId). Refuses when the
+   * session is not awaiting selection or is bound to an older project revision.
+   * When every candidate has a decision the session advances to mask_review.
+   */
+  decideCandidate(
+    input: { requestId: string; projectId: string; sessionId: string; candidateId: string; decision: "remove" | "keep" | "skip" },
+    principal: EditorPrincipal,
+  ) {
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: input,
+      execute: (projectId) => {
+        this.authorize(projectId, principal, "operator");
+        const session = this.objectEditSession(projectId, input.sessionId, principal);
+        if (session.state !== "awaiting_selection")
+          editorFailure("INVALID_STATE", `The session is ${session.state}, not awaiting_selection`);
+        const current = this.projectRow(projectId);
+        if (session.boundRevision !== current.revision)
+          editorFailure("REVISION_CONFLICT", "The session is bound to an older project revision; recreate it");
+        if (!session.candidates.some((c) => c.candidateId === input.candidateId))
+          editorFailure("ASSET_NOT_FOUND", "No such candidate in this session");
+        const decisions = session.decisions.filter((d) => d.candidateId !== input.candidateId);
+        decisions.push({ candidateId: input.candidateId, decision: input.decision });
+        const updated: ObjectEditSession = { ...session, decisions, updatedAt: this.now() };
+        if (updated.candidates.every((c) => updated.decisions.some((d) => d.candidateId === c.candidateId)))
+          updated.state = "mask_review";
+        this.database
+          .prepare("UPDATE object_sessions SET document = ?, updated_at = ? WHERE session_id = ?")
+          .run(JSON.stringify(updated), updated.updatedAt, input.sessionId);
+        this.emit(projectId, "object_edit.decision", {
+          sessionId: input.sessionId,
+          candidateId: input.candidateId,
+          decision: input.decision,
+          state: updated.state,
+        });
+        return updated;
+      },
+    });
+  }
+
+  /**
+   * Structured HITL questions a planning run asked (events of type run.question
+   * scoped to the run), newest first, bounded to 64.
+   */
+  runQuestions(projectId: string, runId: string, principal: EditorPrincipal) {
+    this.authorize(projectId, principal, "viewer");
+    const documents = this.rows(
+      `SELECT document FROM events
+       WHERE project_id = ? AND json_extract(document, '$.runId') = ?
+         AND json_extract(document, '$.type') = 'run.question'
+       ORDER BY CAST(seq AS INTEGER) DESC LIMIT 64`,
+      projectId,
+      runId,
+    );
+    return documents
+      .map((document) => EditorEventSchema.parse(JSON.parse(document)))
+      .map((event) => {
+        const payload = (event.payload ?? {}) as { questionId?: string; text?: string; choices?: unknown };
+        return {
+          eventId: event.eventId,
+          seq: event.seq,
+          runId: event.runId ?? runId,
+          questionId: typeof payload.questionId === "string" ? payload.questionId : event.eventId,
+          text: typeof payload.text === "string" ? payload.text : "",
+          choices: Array.isArray(payload.choices)
+            ? payload.choices.filter((c): c is string => typeof c === "string").slice(0, 8)
+            : [],
+        };
+      })
+      .filter((q) => q.text.length > 0);
   }
 
   validateProposal(draft: EditPlanDraftV1, principal: EditorPrincipal): void {
