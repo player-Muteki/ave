@@ -2828,6 +2828,21 @@ export class EditorStore {
     });
   }
 
+  /** Latest-first workflows for an asset, so a reload lands on the same step. */
+  listObjectEdits(projectId: string, assetId: string | undefined, principal: EditorPrincipal): ObjectEditWorkflow[] {
+    this.authorize(projectId, principal, "viewer");
+    const rows = (
+      assetId === undefined
+        ? this.rows("SELECT document FROM object_edits WHERE project_id = ?", projectId)
+        : this.rows(
+            "SELECT document FROM object_edits WHERE project_id = ? AND asset_id = ?",
+            projectId,
+            assetId,
+          )
+    ).map((document) => ObjectEditWorkflowSchema.parse(JSON.parse(document)) as ObjectEditWorkflow);
+    return rows.sort((left, right) => (left.createdAt < right.createdAt ? 1 : -1));
+  }
+
   getObjectEdit(projectId: string, workflowId: string, principal: EditorPrincipal): ObjectEditWorkflow {
     this.authorize(projectId, principal, "viewer");
     return this.objectEdit(projectId, workflowId);

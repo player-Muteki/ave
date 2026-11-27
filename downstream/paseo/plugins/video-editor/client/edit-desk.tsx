@@ -16,6 +16,7 @@ import {
   type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot, type ObjectEditSession, type RunQuestion, type ModelPolicy, type ModelStage,
 } from "../shared/contracts/v1.js";
 import { FrameInspector } from "./frame-inspector.js";
+import { ObjectEditPanel } from "./object-edit-panel.js";
 import { TrackedMaskReview } from "./tracked-mask-review.js";
 import { ReviewPlayer } from "./review-player.js";
 import { proposeCut, proposeCutOut, proposeConcat, proposeOverlay, findSilentRange } from "./cut.js";
@@ -611,7 +612,10 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
             <>
               {mediaControl("查看源素材代理（无声）", selected, project.revision, project.assets.find(a => a.assetId === selected)?.proxy)}
               {project.assets.filter(a => a.assetId === selected && a.streams.some(s => s.kind === "video")).map(asset =>
-                <FrameInspector key={project.projectId + asset.assetId} project={project} refresh={refreshMaskApprovals} asset={asset} theme={theme} />)}
+                <View key={project.projectId + asset.assetId}>
+                  <FrameInspector project={project} refresh={refreshMaskApprovals} asset={asset} theme={theme} />
+                  <ObjectEditPanel project={project} asset={asset} theme={theme} />
+                </View>)}
               <Text style={heading}>单段裁剪</Text>
               <View style={row}>
                 {field("入点（秒，含）", start, setStart)}

@@ -1749,3 +1749,19 @@ export const recordObjectQaRpc = {
   input: RecordObjectQaRequestSchema,
   output: ObjectEditResultSchema,
 };
+
+export const ListObjectEditsRequestSchema = z
+  .object({ projectId: id, assetId: id.optional() })
+  .strict();
+export type ListObjectEditsRequest = z.infer<typeof ListObjectEditsRequestSchema>;
+
+export const ObjectEditListResultSchema = z
+  .object({ workflows: z.array(ObjectEditWorkflowSchema).max(64) })
+  .strict();
+export type ObjectEditListResult = z.infer<typeof ObjectEditListResultSchema>;
+
+export const listObjectEditsRpc = {
+  name: "video.v1.list_object_edits",
+  input: ListObjectEditsRequestSchema,
+  output: ObjectEditListResultSchema,
+};

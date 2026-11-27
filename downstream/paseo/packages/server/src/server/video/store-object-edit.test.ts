@@ -606,3 +606,43 @@ describe("EditorStore object edit mask and removal QA gates", () => {
     ).toBe("PERMISSION_DENIED");
   });
 });
+
+describe("EditorStore object edit listing", () => {
+  it("finds workflows for one asset and excludes other assets", async () => {
+    const context = await fixture();
+    const first = await opened(context);
+    const second = context.store.openObjectEdit({
+      requestId: "open-2",
+      projectId: context.projectId,
+      assetId: context.asset.assetId,
+      expectedRevision: context.store.project(context.projectId, owner).revision,
+      sourceRange: range,
+      actor: owner,
+    });
+    const otherBytes = await context.cas.writeBytes(Uint8Array.of(4, 4), "video/x-matroska");
+    context.store.addAsset(
+      context.projectId,
+      { ...context.asset, assetId: "clip-b", original: otherBytes, presentationIndex: otherBytes, probe: otherBytes },
+      "add-b",
+      owner,
+    );
+    const other = context.store.openObjectEdit({
+      requestId: "open-b",
+      projectId: context.projectId,
+      assetId: "clip-b",
+      expectedRevision: context.store.project(context.projectId, owner).revision,
+      sourceRange: range,
+      actor: owner,
+    });
+    const listed = context.store.listObjectEdits(context.projectId, context.asset.assetId, owner);
+    expect(listed.map((workflow) => workflow.workflowId).sort()).toEqual(
+      [first.workflowId, second.workflowId].sort(),
+    );
+    expect(listed.every((workflow) => workflow.assetId === context.asset.assetId)).toBe(true);
+    expect(context.store.listObjectEdits(context.projectId, undefined, owner)).toHaveLength(3);
+    expect(
+      context.store.listObjectEdits(context.projectId, "clip-b", owner).map((workflow) => workflow.assetId),
+    ).toEqual(["clip-b"]);
+    expect(other.state).toBe("analyzing");
+  });
+});

@@ -54,6 +54,7 @@ import {
   DecideObjectTargetRequestSchema,
   ReviewObjectMaskRequestSchema,
   RecordObjectQaRequestSchema,
+  ListObjectEditsRequestSchema,
   TrackMaskRequestSchema, RequestTrackedMaskReviewSchema, ProposeVacePreviewSchema, VACE_PROFILE,
   type EditorPrincipal,
 } from "#video-editor/contracts/v1";
@@ -477,6 +478,16 @@ export class EditorRpcService {
         const request = RecordObjectQaRequestSchema.parse(input);
         return {
           workflow: this.editor.store.recordObjectQa({ ...request, actor: principal }),
+        };
+      }
+      case "video.v1.list_object_edits": {
+        const request = ListObjectEditsRequestSchema.parse(input);
+        return {
+          workflows: this.editor.store.listObjectEdits(
+            request.projectId,
+            request.assetId,
+            principal,
+          ),
         };
       }
       case "video.v1.get_object_edit": {

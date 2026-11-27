@@ -4994,6 +4994,25 @@
       ],
       "additionalProperties": false
     },
+    "ListObjectEditsRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ListObjectEditsRequest",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "assetId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
     "ListPlansInput": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:ListPlansInput",
@@ -5363,6 +5382,24 @@
       "required": [
         "objectId",
         "decision"
+      ],
+      "additionalProperties": false
+    },
+    "ObjectEditListResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ObjectEditListResult",
+      "type": "object",
+      "properties": {
+        "workflows": {
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "$ref": "urn:video-editor:v1:ObjectEditWorkflow"
+          }
+        }
+      },
+      "required": [
+        "workflows"
       ],
       "additionalProperties": false
     },
