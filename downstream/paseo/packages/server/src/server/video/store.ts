@@ -1349,6 +1349,13 @@ export class EditorStore {
       requestId: request.requestId,
       payload: request,
       execute: () => {
+        if (request.objectEditSessionId) {
+          const session = this.objectEditSession(projectId, request.objectEditSessionId, principal);
+          if (session.state !== "mask_review" && session.state !== "preview")
+            editorFailure("INVALID_STATE", `The object-edit session is ${session.state}, not mask_review`);
+          if (session.boundRevision !== this.projectRow(projectId).revision)
+            editorFailure("REVISION_CONFLICT", "The object-edit session is bound to an older project revision");
+        }
         const { tracking, manifest, proxy } = this.trackingReviewInputs(
           projectId,
           jobId,
@@ -1378,6 +1385,7 @@ export class EditorStore {
         const approval = ApprovalRequestSchema.parse({
           projectId,
           approvalId: randomUUID(),
+          ...(request.objectEditSessionId ? { objectEditSessionId: request.objectEditSessionId } : {}),
           subjectType: "mask_revision",
           subjectId: manifest.artifactId,
           subjectRevision: manifest.revision,

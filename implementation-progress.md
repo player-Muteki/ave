@@ -231,6 +231,8 @@
 
 - Copilot 闭环再补两块：① 候选风险评分改用真实分析信号——create_object_edit_session 读取 scene-cuts 的 score，强切点（score 高）风险低、弱切点风险高并提示画面跳变，confidence=归一化 score；② run 结构化问题的回答闭环——新增 `video.v1.answer_run_question`（operator，幂等，emit run.answer 事件），edit-desk 每条问题可点选项回答。fixtures 185 例/125 defs，rpc-surface 58 case/54 export 一致；oes-smoke 新增 RUN_ANSWER（幂等+事件落库）与 OES_RISK（强切点 risk 5 / 弱切点 risk 80）全绿。
 
+- mask 审批可关联对象编辑会话：`RequestTrackedMaskReview`/`ApprovalRequest` 新增可选 `objectEditSessionId`，store 在 request_tracked_mask_review 时校验会话存在且处于 mask_review/preview 且版本未过期（否则 INVALID_STATE/REVISION_CONFLICT），审批单上记录关联；edit-desk 审批行显示会话 ID，会话面板在 mask_review 时提示关联入口。fixtures 187 例/125 defs；oes-smoke 新增 OES_MASK_LINK_GUARD 全绿。
+
 ## 环境与错误
 
 | 问题 | 处理 |

@@ -249,6 +249,7 @@ export const ApprovalRequestSchema = z
     externalDestinations: z.array(z.string()),
     status: z.enum(["pending", "approved", "rejected", "superseded", "expired", "revoked"]),
     expiresAt: z.string().datetime(),
+    objectEditSessionId: id.optional(),
   })
   .strict();
 export type ApprovalRequest = z.infer<typeof ApprovalRequestSchema>;
@@ -1097,6 +1098,8 @@ export const proposeVacePreviewRpc = {name:"video.v1.propose_vace_preview",input
 
 export const RequestTrackedMaskReviewSchema = z.object({
   projectId: id, requestId, jobId: id, expectedRevision: uint, manifestHash: sha256, reviewHash: sha256,
+  // Link the mask review to an object-edit session so the Copilot loop tracks it.
+  objectEditSessionId: id.optional(),
 }).strict();
 export type RequestTrackedMaskReview = z.infer<typeof RequestTrackedMaskReviewSchema>;
 export const requestTrackedMaskReviewRpc = {

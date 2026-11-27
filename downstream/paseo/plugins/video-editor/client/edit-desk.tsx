@@ -932,6 +932,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
                   </View>
                 );
               })}
+              {oes.state === "mask_review" && <Text style={muted}>已完成候选决策；可在下方任务的审片中通过 objectEditSessionId 关联本会话</Text>}
               {oes.planId && <Text style={muted}>已绑定方案 {oes.planId.slice(0, 12)}{oes.jobId ? ` · 任务 ${oes.jobId.slice(0, 12)}` : ""}</Text>}
               {!oes.planId && oes.state === "mask_review" && project && project.plans.length > 0 && button("绑定最新方案", async () => {
                 const plan = project.plans.at(-1)!;
@@ -1036,7 +1037,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
               setNotice(`待审批 ${r.approvalCount} 条${r.approvals.length ? ` · 最新 ${r.approvals.at(-1)?.subjectType}/${r.approvals.at(-1)?.purpose}` : ""}`);
             })}
             <Text style={ink}>{approval.diffSummary.intent}</Text>
-            <Text selectable style={muted}>项目版本 {approval.baseTimelineRevision} · 方案 {approval.subjectHash}</Text>
+            <Text selectable style={muted}>项目版本 {approval.baseTimelineRevision} · 方案 {approval.subjectHash}{approval.objectEditSessionId ? ` · 对象会话 ${approval.objectEditSessionId.slice(0, 12)}` : ""}</Text>
             <Text style={muted}>{approval.diffSummary.operationCount} 项编辑 · {approval.diffSummary.summary}</Text>
             <Text style={muted}>只渲染预览，不批准成品或导出。</Text>
             {button("拒绝预览方案", async () => {
