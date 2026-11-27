@@ -45,8 +45,9 @@ const MANAGE_METHODS = new Set([
   "video.v1.revoke_device",
   "video.v1.configure_worker",
   "video.v1.import_asset",
-  // Detector output is recorded by the owner's daemon, never by a paired device.
+  // Detector output and removal QA are recorded by the owner's daemon.
   "video.v1.record_object_candidates",
+  "video.v1.record_object_qa",
 ]);
 
 export function editorPrincipalForCaller(caller: EditorCaller): EditorPrincipal {

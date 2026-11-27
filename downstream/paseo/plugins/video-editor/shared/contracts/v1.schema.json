@@ -5459,6 +5459,13 @@
             "$ref": "urn:video-editor:v1:ObjectDecision"
           }
         },
+        "maskRevisionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "qa": {
+          "$ref": "urn:video-editor:v1:ObjectQaReport"
+        },
         "state": {
           "$ref": "urn:video-editor:v1:ObjectEditState"
         },
@@ -5485,6 +5492,39 @@
         "state",
         "workflowRevision",
         "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "ObjectQaReport": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ObjectQaReport",
+      "type": "object",
+      "properties": {
+        "frames": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "residualRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "completeRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "flickerRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "frames",
+        "residualRatio",
+        "completeRatio",
+        "flickerRatio"
       ],
       "additionalProperties": false
     },
@@ -6325,6 +6365,40 @@
       ],
       "additionalProperties": false
     },
+    "RecordObjectQaRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:RecordObjectQaRequest",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "workflowId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "expectedWorkflowRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "qa": {
+          "$ref": "urn:video-editor:v1:ObjectQaReport"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "workflowId",
+        "expectedWorkflowRevision",
+        "qa"
+      ],
+      "additionalProperties": false
+    },
     "RequestTrackedMaskReview": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "urn:video-editor:v1:RequestTrackedMaskReview",
@@ -6362,6 +6436,45 @@
         "expectedRevision",
         "manifestHash",
         "reviewHash"
+      ],
+      "additionalProperties": false
+    },
+    "ReviewObjectMaskRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ReviewObjectMaskRequest",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "workflowId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "expectedWorkflowRevision": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "maskRevisionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "approved": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "workflowId",
+        "expectedWorkflowRevision",
+        "maskRevisionId",
+        "approved"
       ],
       "additionalProperties": false
     },

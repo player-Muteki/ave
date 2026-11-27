@@ -30,7 +30,7 @@ import {
   TrackMaskRequestSchema, type TrackMaskRequest,
   type InspectFrameHeader,
   MaskAnchorRevisionSchema, type MaskAnchorRevision,
-  ObjectEditWorkflowSchema, type ObjectEditWorkflow,
+  ObjectEditWorkflowSchema, type ObjectEditWorkflow, type ObjectQaReport,
   type ObjectCandidate, type ObjectDecision, type TimeRange,
   type ApprovalGrant,
   type ApprovalRequest,
@@ -51,6 +51,7 @@ import {
   type ModelRef,
 } from "#video-editor/contracts/v1";
 import { describeEditorError, EditorError, editorFailure } from "./errors.js";
+import { evaluateObjectQa, parseObjectQa } from "./object-qa.js";
 import {
   candidateManifestHash,
   parseCandidates,
@@ -2843,6 +2844,82 @@ export class EditorStore {
     if (removalTargets(workflow.candidates, workflow.decisions).length === 0)
       editorFailure("WORKFLOW_STATE", "No removal target was selected");
     return workflow;
+  }
+
+  reviewObjectMask(input: {
+    requestId: string;
+    projectId: string;
+    workflowId: string;
+    expectedWorkflowRevision: string;
+    maskRevisionId: string;
+    approved: boolean;
+    actor: EditorPrincipal;
+  }): ObjectEditWorkflow {
+    this.authorize(input.projectId, input.actor, "operator");
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: {
+        workflowId: input.workflowId,
+        expectedWorkflowRevision: input.expectedWorkflowRevision,
+        maskRevisionId: input.maskRevisionId,
+        approved: input.approved,
+      },
+      execute: () => {
+        const workflow = this.objectEdit(input.projectId, input.workflowId);
+        if (workflow.workflowRevision !== input.expectedWorkflowRevision)
+          editorFailure("REVISION_CONFLICT", "The object edit moved on; reload before reviewing");
+        if (workflow.state !== "awaiting_mask_review")
+          editorFailure("WORKFLOW_STATE", "This object edit is not waiting for a mask review");
+        const next: ObjectEditWorkflow = {
+          ...workflow,
+          maskRevisionId: input.maskRevisionId,
+          // A rejection keeps the workflow on the same step so a new mask can be
+          // reviewed; only approval opens generation.
+          state: input.approved ? "awaiting_generation_review" : "awaiting_mask_review",
+          workflowRevision: (BigInt(workflow.workflowRevision) + 1n).toString(),
+        };
+        this.saveObjectEdit(next);
+        return next;
+      },
+    });
+  }
+
+  recordObjectQa(input: {
+    requestId: string;
+    projectId: string;
+    workflowId: string;
+    expectedWorkflowRevision: string;
+    qa: ObjectQaReport;
+    actor: EditorPrincipal;
+  }): ObjectEditWorkflow {
+    this.authorize(input.projectId, input.actor, "owner");
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: {
+        workflowId: input.workflowId,
+        expectedWorkflowRevision: input.expectedWorkflowRevision,
+        qa: input.qa,
+      },
+      execute: () => {
+        const workflow = this.objectEdit(input.projectId, input.workflowId);
+        if (workflow.workflowRevision !== input.expectedWorkflowRevision)
+          editorFailure("REVISION_CONFLICT", "The object edit moved on; reload before recording QA");
+        if (workflow.state !== "awaiting_generation_review")
+          editorFailure("WORKFLOW_STATE", "This object edit is not waiting for removal QA");
+        const qa = parseObjectQa(input.qa);
+        const verdict = evaluateObjectQa(qa);
+        const next: ObjectEditWorkflow = {
+          ...workflow,
+          qa,
+          state: verdict.passed ? "completed" : "failed",
+          workflowRevision: (BigInt(workflow.workflowRevision) + 1n).toString(),
+        };
+        this.saveObjectEdit(next);
+        return next;
+      },
+    });
   }
 
   private sourceAsset(projectId: string, assetId: string): SourceAsset {

@@ -1617,6 +1617,22 @@ export const ObjectDecisionSchema = z
   .strict();
 export type ObjectDecision = z.infer<typeof ObjectDecisionSchema>;
 
+export const OBJECT_EDIT_QA_LIMITS = {
+  residualRatioMax: 0.02,
+  completeRatioMin: 0.98,
+  flickerRatioMax: 0.05,
+} as const;
+
+export const ObjectQaReportSchema = z
+  .object({
+    frames: uint,
+    residualRatio: z.number().min(0).max(1),
+    completeRatio: z.number().min(0).max(1),
+    flickerRatio: z.number().min(0).max(1),
+  })
+  .strict();
+export type ObjectQaReport = z.infer<typeof ObjectQaReportSchema>;
+
 export const ObjectEditWorkflowSchema = z
   .object({
     workflowId: id,
@@ -1628,6 +1644,8 @@ export const ObjectEditWorkflowSchema = z
     candidateManifestHash: sha256,
     candidates: z.array(ObjectCandidateSchema).max(32),
     decisions: z.array(ObjectDecisionSchema).max(32),
+    maskRevisionId: id.optional(),
+    qa: ObjectQaReportSchema.optional(),
     state: ObjectEditStateSchema,
     workflowRevision: uint,
     createdAt: z.string().datetime(),
@@ -1692,5 +1710,42 @@ export const decideObjectTargetRpc = {
 export const getObjectEditRpc = {
   name: "video.v1.get_object_edit",
   input: ObjectEditRequestSchema,
+  output: ObjectEditResultSchema,
+};
+
+// --- Copilot object edit (P0-C): mask review and removal QA -----------------
+// The server owns the pass/fail thresholds; worker-supplied ratios are only
+// evidence. A workflow cannot complete until every threshold holds.
+export const ReviewObjectMaskRequestSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    workflowId: id,
+    expectedWorkflowRevision: uint,
+    maskRevisionId: id,
+    approved: z.boolean(),
+  })
+  .strict();
+export type ReviewObjectMaskRequest = z.infer<typeof ReviewObjectMaskRequestSchema>;
+
+export const RecordObjectQaRequestSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    workflowId: id,
+    expectedWorkflowRevision: uint,
+    qa: ObjectQaReportSchema,
+  })
+  .strict();
+export type RecordObjectQaRequest = z.infer<typeof RecordObjectQaRequestSchema>;
+
+export const reviewObjectMaskRpc = {
+  name: "video.v1.review_object_mask",
+  input: ReviewObjectMaskRequestSchema,
+  output: ObjectEditResultSchema,
+};
+export const recordObjectQaRpc = {
+  name: "video.v1.record_object_qa",
+  input: RecordObjectQaRequestSchema,
   output: ObjectEditResultSchema,
 };

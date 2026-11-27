@@ -52,6 +52,8 @@ import {
   OpenObjectEditRequestSchema,
   RecordObjectCandidatesRequestSchema,
   DecideObjectTargetRequestSchema,
+  ReviewObjectMaskRequestSchema,
+  RecordObjectQaRequestSchema,
   TrackMaskRequestSchema, RequestTrackedMaskReviewSchema, ProposeVacePreviewSchema, VACE_PROFILE,
   type EditorPrincipal,
 } from "#video-editor/contracts/v1";
@@ -92,7 +94,7 @@ export class EditorRpcService {
             "model-policies",
             ...(burnIn ? ["burn-in-subtitles"] : []),
           ],
-          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export", "open-object-edit", "decide-object-target", "run-questions"],
+          operations: ["trim", "list-projects", "concat", "transition", "overlay", "transform", "audio", "subtitle", "analyze", "contact-sheet", "preview-frames", "estimate-timeline", "list-artifacts", "upload", "cancel-upload", "verify-export", "open-object-edit", "decide-object-target", "review-object-mask", "record-object-qa", "run-questions"],
           deterministicBackends: [
             { id: "ffmpeg", available: true, version: "system" },
             {
@@ -459,6 +461,18 @@ export class EditorRpcService {
         const request = DecideObjectTargetRequestSchema.parse(input);
         return {
           workflow: this.editor.store.decideObjectTarget({ ...request, actor: principal }),
+        };
+      }
+      case "video.v1.review_object_mask": {
+        const request = ReviewObjectMaskRequestSchema.parse(input);
+        return {
+          workflow: this.editor.store.reviewObjectMask({ ...request, actor: principal }),
+        };
+      }
+      case "video.v1.record_object_qa": {
+        const request = RecordObjectQaRequestSchema.parse(input);
+        return {
+          workflow: this.editor.store.recordObjectQa({ ...request, actor: principal }),
         };
       }
       case "video.v1.get_object_edit": {

@@ -324,6 +324,16 @@
 
 验证：Python 内核 36 项检查（帧校验、YOLOX 解码坐标与类别过滤、NMS、短遮挡保持 ID、长间隔新建轨道、单帧轨道丢弃、指标、证据采样、letterbox 反变换）；TS 候选转换 6 项（主角/背景/不确定、稳定 ID、裁剪与证据排序、退化框丢弃、无人可见时不指认主角）。真实权重推理与 GPU 实测不在本轮，候选卡片 UI 随后接入。
 
+## 2026-11-27 · Copilot P0-C：单镜头单目标去人闭环
+
+候选框现在能自动变成 SAM2 点提示：`object-anchor-seed.ts` 在框内取 3×3 整数像素网格，裁剪到帧边界并去重，输出与既有 `InspectFrameRequest` 完全同形，复用原有的掩码版本、审批与传播流程，不再需要手点九个点。锚点请求在服务端就用 wire schema 解析，越界或空框在入口失败。
+
+状态机补上后半程：`awaiting_mask_review` 批准后进入 `awaiting_generation_review`，QA 通过才 `completed`，QA 不通过进入 `failed`。拒绝掩码时仍停在 `awaiting_mask_review`，只把 `workflowRevision` 前进一步并记下被拒掩码 ID，用户可换一版掩码重审；生成闸门在掩码批准前与无 remove 目标时都拒绝，批准后才放行。
+
+去人 QA 阈值由服务端唯一持有：残留 ≤2%、完整 ≥98%、闪烁 ≤5%，daemon 只报 `frames/residualRatio/completeRatio/flickerRatio` 四项测量值，不能自带通过结论；任一指标越界整体即 `failed`。生成计划 `object-generation.ts` 落实首版 profile：单镜头九帧、偶数宽高、≤832×480、无旋转、方像素、SDR、单目标；多目标与长段明确留给 P1，避免在首版偷偷放宽。
+
+验证：新增 14 项测试（4 锚点种子、3 QA 阈值、3 生成门禁、4 持久状态转换），加上 P0-A 的 16 项共 30 项对象编辑测试通过；回归 authorization／store 29 项通过；契约 bundle 119 个定义同步，worker 离线契约 169 fixtures PASS。真实 RTX 上的 SAM2 传播与 VACE 生成验收仍不在本轮（本机无 GPU），代码在闸门与幂等层面已闭合。
+
 ## v0.1.0 · 静音剪切验收
 
 工作台以归一化 RMS ≤ 0.01（−40 dBFS）且选区内连续至少 0.5 秒作为静音条件，选择最长符合条件的连续区间。基线的单测复现了有声误剪和片头零长度段，修复后 7 项剪切单测通过。真实 Chrome、daemon 和 FFmpeg 验证了 2.28 秒的 25 fps 双音样片：选择有声范围没有创建计划，选择中间静音后批准删除 [0.600, 1.600)，下载的成品完整解码为 32 帧、1.28 秒。48 kHz 音轨的两个采样窗口分别保留了前段 440 Hz、后段 880 Hz；源 SHA-256 未变，成品与审批及下载清单的哈希一致。

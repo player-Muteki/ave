@@ -440,3 +440,169 @@ describe("EditorStore object edit workflow", () => {
     reopened.close();
   });
 });
+
+describe("EditorStore object edit mask and removal QA gates", () => {
+  async function untilMaskReview(context: Awaited<ReturnType<typeof fixture>>) {
+    const workflow = await opened(context);
+    const recorded = context.store.recordObjectCandidates({
+      requestId: "record",
+      projectId: context.projectId,
+      workflowId: workflow.workflowId,
+      expectedWorkflowRevision: "0",
+      candidates: [candidate("a")],
+      actor: owner,
+    });
+    return context.store.decideObjectTarget({
+      requestId: "decide",
+      projectId: context.projectId,
+      workflowId: workflow.workflowId,
+      expectedWorkflowRevision: recorded.workflowRevision,
+      decisions: [{ objectId: "a", decision: "remove" }],
+      actor: owner,
+    });
+  }
+
+  it("opens generation only after an approved mask and completes on passing QA", async () => {
+    const context = await fixture();
+    const masked = await untilMaskReview(context);
+    expect(masked.state).toBe("awaiting_mask_review");
+    expect(
+      codeOf(() => context.store.objectEditGenerationGuard(context.projectId, masked.workflowId)),
+    ).toBe("WORKFLOW_STATE");
+    const approved = context.store.reviewObjectMask({
+      requestId: "review",
+      projectId: context.projectId,
+      workflowId: masked.workflowId,
+      expectedWorkflowRevision: masked.workflowRevision,
+      maskRevisionId: "mask-1",
+      approved: true,
+      actor: owner,
+    });
+    expect(approved.state).toBe("awaiting_generation_review");
+    expect(approved.maskRevisionId).toBe("mask-1");
+    expect(
+      context.store.objectEditGenerationGuard(context.projectId, masked.workflowId).state,
+    ).toBe("awaiting_generation_review");
+    const complete = context.store.recordObjectQa({
+      requestId: "qa",
+      projectId: context.projectId,
+      workflowId: masked.workflowId,
+      expectedWorkflowRevision: approved.workflowRevision,
+      qa: { frames: "9", residualRatio: 0.01, completeRatio: 0.99, flickerRatio: 0.03 },
+      actor: owner,
+    });
+    expect(complete.state).toBe("completed");
+    expect(complete.qa).toEqual({
+      frames: "9",
+      residualRatio: 0.01,
+      completeRatio: 0.99,
+      flickerRatio: 0.03,
+    });
+  });
+
+  it("stays on the mask step after a rejection so a new mask can be reviewed", async () => {
+    const context = await fixture();
+    const masked = await untilMaskReview(context);
+    const rejected = context.store.reviewObjectMask({
+      requestId: "reject",
+      projectId: context.projectId,
+      workflowId: masked.workflowId,
+      expectedWorkflowRevision: masked.workflowRevision,
+      maskRevisionId: "mask-bad",
+      approved: false,
+      actor: owner,
+    });
+    expect(rejected.state).toBe("awaiting_mask_review");
+    expect(rejected.workflowRevision).toBe("3");
+    expect(
+      codeOf(() => context.store.objectEditGenerationGuard(context.projectId, masked.workflowId)),
+    ).toBe("WORKFLOW_STATE");
+    const approved = context.store.reviewObjectMask({
+      requestId: "approve-again",
+      projectId: context.projectId,
+      workflowId: masked.workflowId,
+      expectedWorkflowRevision: rejected.workflowRevision,
+      maskRevisionId: "mask-new",
+      approved: true,
+      actor: owner,
+    });
+    expect(approved.state).toBe("awaiting_generation_review");
+    expect(approved.maskRevisionId).toBe("mask-new");
+  });
+
+  it("refuses QA before mask approval, out-of-range metrics, and failed QA fails closed", async () => {
+    const context = await fixture();
+    const masked = await untilMaskReview(context);
+    expect(
+      codeOf(() =>
+        context.store.recordObjectQa({
+          requestId: "qa-early",
+          projectId: context.projectId,
+          workflowId: masked.workflowId,
+          expectedWorkflowRevision: masked.workflowRevision,
+          qa: { frames: "9", residualRatio: 0.01, completeRatio: 0.99, flickerRatio: 0.03 },
+          actor: owner,
+        }),
+      ),
+    ).toBe("WORKFLOW_STATE");
+    const approved = context.store.reviewObjectMask({
+      requestId: "review",
+      projectId: context.projectId,
+      workflowId: masked.workflowId,
+      expectedWorkflowRevision: masked.workflowRevision,
+      maskRevisionId: "mask-1",
+      approved: true,
+      actor: owner,
+    });
+    expect(
+      codeOf(() =>
+        context.store.recordObjectQa({
+          requestId: "qa-malformed",
+          projectId: context.projectId,
+          workflowId: masked.workflowId,
+          expectedWorkflowRevision: approved.workflowRevision,
+          qa: { frames: "9", residualRatio: 1.5, completeRatio: 0.99, flickerRatio: 0.03 },
+          actor: owner,
+        }),
+      ),
+    ).toBe("INVALID_ARGUMENT");
+    const failed = context.store.recordObjectQa({
+      requestId: "qa",
+      projectId: context.projectId,
+      workflowId: masked.workflowId,
+      expectedWorkflowRevision: approved.workflowRevision,
+      qa: { frames: "9", residualRatio: 0.04, completeRatio: 0.99, flickerRatio: 0.03 },
+      actor: owner,
+    });
+    expect(failed.state).toBe("failed");
+  });
+
+  it("keeps mask review operator-only for a paired viewer", async () => {
+    const context = await fixture();
+    const masked = await untilMaskReview(context);
+    context.store.registerDevice({
+      projectId: context.projectId,
+      principalId: "viewer-1",
+      role: "viewer",
+      actor: owner,
+    });
+    const viewer: EditorPrincipal = {
+      principalId: "viewer-1",
+      role: "viewer",
+      projectIds: [context.projectId],
+    };
+    expect(
+      codeOf(() =>
+        context.store.reviewObjectMask({
+          requestId: "viewer-review",
+          projectId: context.projectId,
+          workflowId: masked.workflowId,
+          expectedWorkflowRevision: masked.workflowRevision,
+          maskRevisionId: "mask-1",
+          approved: true,
+          actor: viewer,
+        }),
+      ),
+    ).toBe("PERMISSION_DENIED");
+  });
+});
