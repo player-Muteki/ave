@@ -14,7 +14,7 @@
 | 004 | Plan 用 strict structured tool，审批由 daemon | 接受（待 provider 矩阵） | 目标模型均不支持严格 constrained sampling |
 | 005 | EditGraph + Rational + SamplingMap 为内部时间事实源 | 接受 | 探针证明无法覆盖 VFR/音频；不得退回浮点秒 |
 | 006 | FilmCraft/FFmpeg 可插拔确定性后端；VACE 只负责短镜头生成候选 | 接受（待 benchmark） | FilmCraft conformance 不达标则该操作留在 FFmpeg；VACE 不达标不启用生成 |
-| 011 | GUI/Agent 共享 EditCommand，FilmCraft 仅独立后端，不直暴露 MCP/egui | 接受（E13 已落档，仅 CFR A/V 白名单开放） | 无法维持单写者、路径限制、时间/媒体保真时退出 FilmCraft |
+| 011 | GUI/Agent 共享 EditCommand，FilmCraft 仅独立后端，不直暴露 MCP/egui | 接受（旧 CLI 的部分样本达标；产品未启用 FilmCraft） | 无法维持单写者、路径限制、时间/媒体保真时退出 FilmCraft |
 | 007 | SQLite WAL + CAS + outbox + lease fencing | 接受（待 packaged 探针） | node:sqlite 打包/并发不满足要求，替换 DB 实现而协议不变 |
 | 008 | Paseo 内置视频插件 + 独立 Python Worker | 接受（待插件探针） | 内置插件所有权/依赖限制无法承载领域服务 |
 | 009 | 根 superproject 管精确上游 commit，各自保留 lockfile | 接受 | M1 fork 和 gitlink 工作流实测失败 |
@@ -37,9 +37,9 @@
 | E11 安装包 | Pi/FFmpeg/Worker 的签名闭包与启动是否正常 | 三桌面最终包 + Android 真机 | 任一平台未验证则该平台不发布 |
 | E12 自动 QA | 时序/身份/语义指标是否能作硬门 | 人工标注集标定阈值和误报/漏报 | 未标定只报告，最终人工审批不可移除 |
 | E13 FilmCraft 适配 | headless 操作、时间/媒体保真、取消恢复与打包是否可复用 | 固定 commit 构建 CLI；白名单命令与 FFmpeg 双跑 CFR/VFR/多流/音频/字幕样本；kill/restart/离线素材测试 | 仅合格能力开放；双事实源、路径逃逸、占位成功或关键样本不符则不采用该后端 |
-> E13 已于 2026-11-25 在 Linux headless 实跑落档：[research/e13-filmcraft.md](../research/e13-filmcraft.md)（CFR A/V 白名单达标；VFR/字幕/多音轨不达标，不采用该后端）。
-
 | E14 专家窗口 | 派生副本的人工 FilmCraft 精修是否有价值 | 独立项目副本 + token + 显式重导入，检查主 Revision/源 hash | 首版非必需；无法封闭文件/状态边界则不提供 |
+
+2026-11-25 的[旧锁 E13](../research/e13-filmcraft.md)只验证了 `ba6fe105` 的 Linux headless CLI：单段 CFR trim/H.264+AAC 及纯音频导出达标，VFR 时间保真、字幕与多音轨透传不达标。[新锁升级审查](../research/filmcraft-ba6fe105-to-7b8e522d.md)是源码审查，新构建待复验。
 
 ## 3. 模型与组件许可
 
@@ -47,7 +47,7 @@
 | --- | --- | --- |
 | Pi | 本地锁定仓库 MIT | 保留 LICENSE；升级重新审计 |
 | Paseo | Apache-2.0，第三方各自许可 | downstream fork 保留 NOTICE/版权与修改说明 |
-| FilmCraft | 固定 `ba6fe105…`，MIT OR Apache-2.0；Cargo/craft-libs 锁定 | 保留 LICENSE/NOTICE/ATTRIBUTION；移除 ArtCraft 品牌，不继承其性能/成熟度声明 |
+| FilmCraft | [当前锁](../research/upstream.json)，MIT OR Apache-2.0；新锁增加 nightly 图标等署名项 | 保留 LICENSE/NOTICE/ATTRIBUTION；移除 ArtCraft 品牌，不继承其性能/成熟度声明 |
 | Photo/Effect/SoundCraft | 官方分别为 early alpha/alpha/pre-alpha | 首版不打包；未来独立评估各自版本、依赖和命令/文件安全 |
 | VACE 代码 | `LICENSE.txt` Apache-2.0 | 固定 commit，审计全部依赖 |
 | Wan2.1-VACE 权重 | 模型表指向 Wan Apache-2.0 | 按实际权重 URL/hash 审计，不从代码许可证外推 |

@@ -129,7 +129,7 @@ Android 通过配对后的直连或 E2EE relay 连接同一 daemon。手机退�
 
 ## 9. 上游与代码边界
 
-M0 根仓库以 `research/upstream.json` 锁定 Pi/Paseo/FilmCraft，参考 checkout 被忽略，避免将嵌套仓库误提交为空目录。FilmCraft 锁 `ba6fe105…`，其 Cargo.lock 和 craft-libs 依赖也必须完整锁定、审计和生成 SBOM。
+M0 根仓库以[上游清单](../research/upstream.json)锁定 Pi/Paseo/FilmCraft，参考 checkout 被忽略，避免将嵌套仓库误提交为空目录。FilmCraft 的两个提交虽同为 0.20.1，源码与依赖却不同（见[升级审查](../research/filmcraft-ba6fe105-to-7b8e522d.md)）；发行前须按实际构建审计 Cargo.lock、依赖与 SBOM，不按版本字符串继承验收。
 
 M1 若按当前设计实现 Paseo 内置插件，需要建立团队可访问的 Paseo downstream fork，并由根 superproject 以精确 gitlink 管理；Pi 默认上游只读，FilmCraft 优先保持无修改的独立二进制/库依赖。两套 Node 上游分别保留自己的 lockfile 和 `npm ci`，FilmCraft 保留 Cargo workspace，不强行合并构建系统。上游 bump 是独立 PR，必须通过兼容和发布矩阵。
 

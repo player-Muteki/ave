@@ -18,7 +18,7 @@
     {
       "path": "filmcraft",
       "url": "https://github.com/storytold/filmcraft.git",
-      "commit": "ba6fe10529c7bf5d2a9283f9de2e35c0ccff926c",
+      "commit": "7b8e522d63f2e2c1617dea4939feb48e769d6f2f",
       "versionAtResearch": "0.20.1",
       "licenseAtResearch": "MIT OR Apache-2.0",
       "integration": "candidate deterministic backend; benchmark and conformance gates required",
@@ -41,7 +41,7 @@
         "/apps/filmcraft/src/control_server.rs"
       ],
       "dependencyPins": {
-        "craft-libs": "33be35625e252cc4f06aa375b3b428521faea37d",
+        "craft-libs": "a4db799563c9ccd7217e1731ec34c58f6ba57248",
         "craft-fcproj-format": "3af2280ee3434a2c860012df2f440652621c2c81"
       }
     }

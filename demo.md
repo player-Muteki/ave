@@ -42,7 +42,7 @@
 7. **权限在服务端执行**：配对和 E2EE 不替代逐 RPC principal、项目、操作、revision 和预算校验。
 8. **无 GPU 仍有真实价值**：确定性导入、编辑和导出可用；生成后端不可用时明确未配置，不生成伪结果。
 9. **契约先行、四人并行**：Paseo downstream fork 中 `plugins/video-editor/shared/contracts` 是唯一跨端事实源，按后端、桌面、Android 分工作业，跨端变更走同一 contract PR。
-10. **FilmCraft 有边界地复用**：固定 `ba6fe105…` 作为候选 Rust 编辑后端；原生 MCP/控制端口不进生产，离线占位导出视为失败，后端切换必须新审批。Photo/Effect/SoundCraft 不进入首版。
+10. **FilmCraft 有边界地复用**：[当前锁](research/upstream.json)只标识候选 Rust 编辑后端的源码；[本次升级](research/filmcraft-ba6fe105-to-7b8e522d.md)未复验媒体，产品仍使用 FFmpeg。原生 MCP/控制端口不进生产，离线占位导出视为失败，后端切换必须新审批。Photo/Effect/SoundCraft 不进入首版。
 
 ## 当前状态与下一阶段
 
