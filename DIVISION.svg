@@ -3,7 +3,7 @@
 <desc id="desc">成员职责、里程碑完成度、Git 提交数和当前有效代码行。图形由 scripts/update_division.py 生成。</desc>
 <g font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans CJK SC, sans-serif" fill="currentColor">
 <text x="40" y="48" font-size="28" font-weight="700" text-anchor="start" opacity="1">团队分工与交付进度</text>
-<text x="40" y="76" font-size="13" font-weight="400" text-anchor="start" opacity="0.68">统计快照 befa67d261ec · 数据时点 2026-11-27T14:11:52+00:00</text>
+<text x="40" y="76" font-size="13" font-weight="400" text-anchor="start" opacity="0.68">统计快照 a48a4f4dde73 · 数据时点 2026-11-27T14:19:34+00:00</text>
 <text x="40" y="106" font-size="13" font-weight="400" text-anchor="start" opacity="0.76">进度 = 已完成工作流 / 已分配工作流；代码量与提交量仅作活动记录，不代表质量或完成度。</text>
 <path d="M40 126H960" stroke="currentColor" opacity="0.18"/>
 <rect x="40" y="150" width="920" height="108" rx="12" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.22"/>
@@ -11,41 +11,41 @@
 <text x="250" y="178" font-size="14" font-weight="400" text-anchor="start" opacity="0.78">总体架构、后端、跨端集成</text>
 <text x="932" y="178" font-size="13" font-weight="600" text-anchor="end" opacity="0.76">进行中</text>
 <rect x="62" y="197" width="420" height="10" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.25"/>
-<rect x="62" y="197" width="210.0" height="10" rx="5" fill="currentColor" opacity="0.78"/>
-<text x="498" y="208" font-size="13" font-weight="600" text-anchor="start" opacity="1">50%（3/6 项）</text>
-<text x="62" y="234" font-size="13" font-weight="500" text-anchor="start" opacity="1">提交 295</text>
-<text x="166" y="234" font-size="13" font-weight="500" text-anchor="start" opacity="1">有效代码 40383 行</text>
-<text x="380" y="234" font-size="12" font-weight="400" text-anchor="start" opacity="0.7">◐ Pi/Paseo 集成探针与跨域 ADR 评审；○ 项目存储、JobRunner、…</text>
+<rect x="62" y="197" width="348.6" height="10" rx="5" fill="currentColor" opacity="0.78"/>
+<text x="498" y="208" font-size="13" font-weight="600" text-anchor="start" opacity="1">83%（5/6 项）</text>
+<text x="62" y="234" font-size="13" font-weight="500" text-anchor="start" opacity="1">提交 296</text>
+<text x="166" y="234" font-size="13" font-weight="500" text-anchor="start" opacity="1">有效代码 21195 行</text>
+<text x="380" y="234" font-size="12" font-weight="400" text-anchor="start" opacity="0.7">◐ 三桌面平台与 Android 真机及真实 GPU 权重发布验收</text>
 <rect x="40" y="276" width="920" height="108" rx="12" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.22"/>
 <text x="62" y="305" font-size="19" font-weight="700" text-anchor="start" opacity="1">L</text>
 <text x="250" y="304" font-size="14" font-weight="400" text-anchor="start" opacity="0.78">后端、媒体 Worker 与任务运行时</text>
 <text x="932" y="304" font-size="13" font-weight="600" text-anchor="end" opacity="0.76">进行中</text>
 <rect x="62" y="323" width="420" height="10" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.25"/>
-<rect x="62" y="323" width="84.0" height="10" rx="5" fill="currentColor" opacity="0.78"/>
-<text x="498" y="334" font-size="13" font-weight="600" text-anchor="start" opacity="1">20%（1/5 项）</text>
+<rect x="62" y="323" width="336.0" height="10" rx="5" fill="currentColor" opacity="0.78"/>
+<text x="498" y="334" font-size="13" font-weight="600" text-anchor="start" opacity="1">80%（4/5 项）</text>
 <text x="62" y="360" font-size="13" font-weight="500" text-anchor="start" opacity="1">提交 41</text>
-<text x="166" y="360" font-size="13" font-weight="500" text-anchor="start" opacity="1">有效代码 1572 行</text>
-<text x="380" y="360" font-size="12" font-weight="400" text-anchor="start" opacity="0.7">◐ Pi/Paseo 集成探针与跨域 ADR 评审；○ 项目存储、JobRunner、…</text>
+<text x="166" y="360" font-size="13" font-weight="500" text-anchor="start" opacity="1">有效代码 318 行</text>
+<text x="380" y="360" font-size="12" font-weight="400" text-anchor="start" opacity="0.7">◐ 三桌面平台与 Android 真机及真实 GPU 权重发布验收</text>
 <rect x="40" y="402" width="920" height="108" rx="12" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.22"/>
 <text x="62" y="431" font-size="19" font-weight="700" text-anchor="start" opacity="1">J</text>
 <text x="250" y="430" font-size="14" font-weight="400" text-anchor="start" opacity="0.78">Android、远程控制与移动端验收</text>
 <text x="932" y="430" font-size="13" font-weight="600" text-anchor="end" opacity="0.76">进行中</text>
 <rect x="62" y="449" width="420" height="10" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.25"/>
-<rect x="62" y="449" width="0.0" height="10" rx="5" fill="currentColor" opacity="0.78"/>
-<text x="498" y="460" font-size="13" font-weight="600" text-anchor="start" opacity="1">0%（0/4 项）</text>
+<rect x="62" y="449" width="315.0" height="10" rx="5" fill="currentColor" opacity="0.78"/>
+<text x="498" y="460" font-size="13" font-weight="600" text-anchor="start" opacity="1">75%（3/4 项）</text>
 <text x="62" y="486" font-size="13" font-weight="500" text-anchor="start" opacity="1">提交 2</text>
-<text x="166" y="486" font-size="13" font-weight="500" text-anchor="start" opacity="1">有效代码 465 行</text>
-<text x="380" y="486" font-size="12" font-weight="400" text-anchor="start" opacity="0.7">◐ Pi/Paseo 集成探针与跨域 ADR 评审；○ Android 会话、预览、审…</text>
+<text x="166" y="486" font-size="13" font-weight="500" text-anchor="start" opacity="1">有效代码 0 行</text>
+<text x="380" y="486" font-size="12" font-weight="400" text-anchor="start" opacity="0.7">◐ 三桌面平台与 Android 真机及真实 GPU 权重发布验收</text>
 <rect x="40" y="528" width="920" height="108" rx="12" fill="var(--surface)" fill-opacity="0.04" stroke="currentColor" stroke-opacity="0.22"/>
 <text x="62" y="557" font-size="19" font-weight="700" text-anchor="start" opacity="1">C</text>
 <text x="250" y="556" font-size="14" font-weight="400" text-anchor="start" opacity="0.78">桌面端、远程控制与桌面端验收</text>
 <text x="932" y="556" font-size="13" font-weight="600" text-anchor="end" opacity="0.76">进行中</text>
 <rect x="62" y="575" width="420" height="10" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.25"/>
-<rect x="62" y="575" width="0.0" height="10" rx="5" fill="currentColor" opacity="0.78"/>
-<text x="498" y="586" font-size="13" font-weight="600" text-anchor="start" opacity="1">0%（0/4 项）</text>
+<rect x="62" y="575" width="315.0" height="10" rx="5" fill="currentColor" opacity="0.78"/>
+<text x="498" y="586" font-size="13" font-weight="600" text-anchor="start" opacity="1">75%（3/4 项）</text>
 <text x="62" y="612" font-size="13" font-weight="500" text-anchor="start" opacity="1">提交 5</text>
-<text x="166" y="612" font-size="13" font-weight="500" text-anchor="start" opacity="1">有效代码 185 行</text>
-<text x="380" y="612" font-size="12" font-weight="400" text-anchor="start" opacity="0.7">◐ Pi/Paseo 集成探针与跨域 ADR 评审；◐ Electron 桌面工作台、…</text>
+<text x="166" y="612" font-size="13" font-weight="500" text-anchor="start" opacity="1">有效代码 0 行</text>
+<text x="380" y="612" font-size="12" font-weight="400" text-anchor="start" opacity="0.7">◐ 三桌面平台与 Android 真机及真实 GPU 权重发布验收</text>
 <path d="M40 156H960" stroke="currentColor" opacity="0.08"/>
 <text x="40" y="687" font-size="12" font-weight="400" text-anchor="start" opacity="0.64">有效代码：统计快照中仍存活、git blame 归属的非空非注释源码行；排除文档、生成物、锁文件、依赖与参考仓库。</text>
 <text x="40" y="710" font-size="12" font-weight="500" text-anchor="start" opacity="0.72">更新：python3 scripts/update_division.py · 校验：python3 scripts/update_division.py --check</text>
