@@ -100,8 +100,8 @@ python3 scripts/update_division.py --check
 统计口径：
 
 - **工作情况/进度**：workstream 的 `status` 和完成数；状态只能由证据改变。
-- **提交数**：匹配成员 identities 的非 `chore(stats):` 提交。
-- **有效代码数**：最新非统计快照中仍存活、git blame 归属的非空非注释源码行；含测试，排除文档、锁文件、生成物、依赖和参考仓库。M1 的 `vendor/paseo` gitlink 初始化且 HEAD 一致时，脚本会聚合 downstream fork 的提交和源码，因此 J/C/L 的产品活动不会只显示根文档仓库数据。
+- **提交数**：按 Git 作者名或邮箱匹配成员 identities 的非合并、非 `chore(stats):` 提交。
+- **有效代码数**：最新非统计快照中仍存活、git blame 归属的非空非注释源码行；含测试，排除文档、锁文件、生成物、依赖和参考仓库。当前根仓库的 `downstream/paseo/` 统计相对锁定 Paseo 基线的新增/修改行，再按根仓库 blame 归属，不把复制的上游原文计给导入者。M1 的 `vendor/paseo` gitlink 初始化且 HEAD 一致时，脚本会聚合 downstream fork 的提交和源码，因此 J/C/L 的产品活动不会只显示根文档仓库数据。
 
 功能提交后单独以 `chore(stats): refresh division` 提交 SVG。统计提交不重复计数，避免图记录自身造成无限变化。提交数和代码行只表示活动，不用于排名、绩效或完成度。
 

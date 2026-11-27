@@ -18,15 +18,17 @@ import json
 import subprocess
 import sys
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parents[1]
 TEAM_FILE = ROOT / "research" / "team.json"
 OUTPUT_FILE = ROOT / "DIVISION.svg"
+OVERLAY = "downstream/paseo/"
 SOURCE_SUFFIXES = {
     ".c", ".cc", ".cpp", ".cs", ".css", ".cxx", ".go", ".h", ".hpp",
-    ".java", ".js", ".jsx", ".kt", ".kts", ".lua", ".php", ".py", ".rb",
+    ".java", ".js", ".jsx", ".mjs", ".cjs", ".kt", ".kts", ".lua", ".php", ".py", ".rb",
     ".rs", ".scss", ".sh", ".sql", ".swift", ".ts", ".tsx",
 }
 EXCLUDED_PARTS = {
@@ -94,8 +96,8 @@ def matches(author: str, email: str, member: dict) -> bool:
 
 
 def is_source(path: str) -> bool:
-    candidate = Path(path)
-    normalized = path.replace("\\", "/")
+    normalized = path.replace("\\", "/").removeprefix(OVERLAY)
+    candidate = Path(normalized)
     if any(part in EXCLUDED_PARTS for part in candidate.parts):
         return False
     if any(part in normalized for part in ("package-lock.json", "pnpm-lock.yaml", ".min.", "/generated/")):
@@ -117,6 +119,30 @@ def is_code_line(path: str, line: str) -> bool:
     return not stripped.startswith(("//", "/*", "*", "*/", "#"))
 
 
+def overlay_delta(repo: Path, revision: str, tracked: list[str]) -> dict[str, set[int]]:
+    """For files inherited from Paseo, allow only changed/new output line numbers."""
+    overlay = [path for path in tracked if path.startswith(OVERLAY)]
+    if not overlay:
+        return {}
+    refs = json.loads(run_git(repo, "show", f"{revision}:research/upstream.json"))["references"]
+    pin = next(ref["commit"] for ref in refs if ref["path"] == "paseo")
+    upstream = repo / "paseo"
+    if not (upstream / ".git").exists():
+        raise RuntimeError("统计 downstream 需要锁定的 paseo 参考库：请先运行 scripts/bootstrap_references.py --restore")
+    base_files = set(run_git(upstream, "ls-tree", "-r", "--name-only", pin).splitlines())
+    delta = {}
+    for path in overlay:
+        relative = path.removeprefix(OVERLAY)
+        if relative not in base_files:  # New product file: ordinary root blame applies.
+            continue
+        before = run_git(upstream, "show", f"{pin}:{relative}").splitlines()
+        after = run_git(repo, "show", f"{revision}:{path}").splitlines()
+        matcher = SequenceMatcher(None, [s.strip() for s in before], [s.strip() for s in after], autojunk=False)
+        delta[path] = {n for op, _, _, start, end in matcher.get_opcodes() if op != "equal"
+                       for n in range(start + 1, end + 1)}
+    return delta
+
+
 def repo_snapshot(repo: Path, revision: str, members: list[dict]) -> tuple[dict, dict]:
     commits = {member["id"]: 0 for member in members}
     lines = {member["id"]: 0 for member in members}
@@ -133,7 +159,10 @@ def repo_snapshot(repo: Path, revision: str, members: list[dict]) -> tuple[dict,
         path for path in run_git(repo, "ls-tree", "-r", "--name-only", revision).splitlines()
         if is_source(path)
     ]
+    delta = overlay_delta(repo, revision, tracked)
     for path in tracked:
+        eligible = delta.get(path)
+        line_number = 0
         blame = run_git(repo, "blame", "--line-porcelain", "-w", revision, "--", path)
         author = ""
         email = ""
@@ -142,7 +171,10 @@ def repo_snapshot(repo: Path, revision: str, members: list[dict]) -> tuple[dict,
                 author = raw[7:]
             elif raw.startswith("author-mail "):
                 email = raw[12:].strip("<>")
-            elif raw.startswith("\t") and is_code_line(path, raw[1:]):
+            elif raw.startswith("\t"):
+                line_number += 1
+                if (eligible is not None and line_number not in eligible) or not is_code_line(path, raw[1:]):
+                    continue
                 for member in members:
                     if matches(author, email, member):
                         lines[member["id"]] += 1

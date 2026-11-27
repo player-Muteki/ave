@@ -60,8 +60,8 @@ python3 scripts/update_division.py --check
 ```
 
 - **进度**：已完成工作流数 / 分配给该成员的工作流数；不能由代码行推导。
-- **提交数**：最新非 `chore(stats):` 提交历史中，匹配 `research/team.json` 姓名的提交。
-- **有效代码数**：该快照中仍存活、经 `git blame` 归属的非空非注释源码行；含测试源码，排除文档、生成物、锁文件、依赖和参考仓库。M1 若根仓库以 `vendor/paseo` gitlink 管理 downstream，脚本会同时聚合该已初始化且 HEAD 与 gitlink 一致的 fork 的提交和 blame；未初始化或指针不一致时不计入。
+- **提交数**：当前分支可达的非合并、非 `chore(stats):` 提交，按 `research/team.json` 中的 Git 作者名或邮箱匹配。
+- **有效代码数**：该快照中仍存活、经 `git blame` 归属的非空非注释源码行；含测试源码，排除文档、生成物、锁文件、依赖和参考仓库。对根仓库交付的 `downstream/paseo/`，与 `research/upstream.json` 固定的 Paseo 提交逐文件比较：新文件按根仓库 blame，已有文件只计新增/修改行，不把随文件复制的上游行归给导入者。运行统计前需按上节恢复 `paseo/`；不读取本地 `vendor/paseo/` 的未提交改动。M1 若根仓库以 `vendor/paseo` gitlink 管理 downstream，脚本会同时聚合该已初始化且 HEAD 与 gitlink 一致的 fork 的提交和 blame；未初始化或指针不一致时不计入。
 - 提交功能改动后重新生成图，再以 `chore(stats): refresh division` 单独提交；统计提交不重复计数，避免自引用导致永远无法稳定。
 - L、J、C 开始提交前必须补全各自 Git `names` / `emails`，否则只显示人工里程碑，不会冒领他人提交。
 
