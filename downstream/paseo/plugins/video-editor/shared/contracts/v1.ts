@@ -498,6 +498,8 @@ export const CreateJobRequestSchema = z
     approvalId: id,
     grantId: id,
     expectedRevision: uint,
+    // Optional model for generation-bearing renders; enforced against model policies.
+    model: ModelRefSchema.optional(),
   })
   .strict();
 export const CreateJobResultSchema = z
@@ -978,6 +980,7 @@ export const ModelPolicyListResultSchema = z
     projectId: id,
     policyCount: z.number().int().min(0),
     policies: z.array(ModelPolicySchema).max(64),
+    allowCloudModels: z.boolean(),
   })
   .strict();
 export const getModelPoliciesRpc = {
@@ -992,6 +995,18 @@ export const removeModelPolicyRpc = {
   name: "video.v1.remove_model_policy",
   input: RemoveModelPolicyInputSchema,
   output: z.object({ requestId, projectId: id, removed: z.boolean() }).strict(),
+};
+
+export const SetProjectCloudPolicyInputSchema = z
+  .object({ requestId, projectId: id, allowCloudModels: z.boolean() })
+  .strict();
+export const ProjectCloudPolicyResultSchema = z
+  .object({ requestId, projectId: id, allowCloudModels: z.boolean() })
+  .strict();
+export const setProjectCloudPolicyRpc = {
+  name: "video.v1.set_project_cloud_policy",
+  input: SetProjectCloudPolicyInputSchema,
+  output: ProjectCloudPolicyResultSchema,
 };
 
 export const BindObjectEditPlanInputSchema = z

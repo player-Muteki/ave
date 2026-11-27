@@ -94,6 +94,7 @@ export interface CreateJobInput {
   approvalId: string;
   grantId: string;
   expectedRevision: string;
+  model?: ModelRef;
   principal: EditorPrincipal;
 }
 
@@ -204,6 +205,9 @@ CREATE TABLE IF NOT EXISTS object_sessions (
 CREATE TABLE IF NOT EXISTS model_policies (
   project_id TEXT NOT NULL REFERENCES projects(project_id), provider TEXT NOT NULL, model_id TEXT NOT NULL,
   document TEXT NOT NULL, PRIMARY KEY(project_id, provider, model_id)
+);
+CREATE TABLE IF NOT EXISTS project_settings (
+  project_id TEXT PRIMARY KEY REFERENCES projects(project_id), document TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS upload_receipts (
   upload_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, request_id TEXT NOT NULL,
@@ -1052,7 +1056,35 @@ export class EditorStore {
       (p) => p.provider === model.provider && p.modelId === model.id,
     );
     if (!policy || !policy.enabled) return false;
+    if (policy.location === "cloud" && !this.cloudModelsAllowed(projectId)) return false;
     return policy.stages.includes(stage);
+  }
+
+  /** Whether the project authorizes cloud models at all (default: no). */
+  cloudModelsAllowed(projectId: string): boolean {
+    const row = this.database
+      .prepare("SELECT document FROM project_settings WHERE project_id = ?")
+      .get(projectId) as { document: string } | undefined;
+    if (!row) return false;
+    return (JSON.parse(row.document) as { allowCloudModels?: boolean }).allowCloudModels === true;
+  }
+
+  setProjectCloudPolicy(input: { requestId: string; projectId: string; allowCloudModels: boolean }, principal: EditorPrincipal) {
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: input,
+      execute: (projectId) => {
+        this.authorize(projectId, principal, "owner");
+        this.database
+          .prepare(
+            "INSERT INTO project_settings(project_id, document) VALUES (?, ?) ON CONFLICT(project_id) DO UPDATE SET document = excluded.document",
+          )
+          .run(projectId, JSON.stringify({ allowCloudModels: input.allowCloudModels }));
+        this.emit(projectId, "project.cloud_policy", { allowCloudModels: input.allowCloudModels });
+        return { allowCloudModels: input.allowCloudModels };
+      },
+    });
   }
 
   /**
@@ -1866,6 +1898,14 @@ export class EditorStore {
         if (grant.purpose !== approval.purpose || grant.subjectHash !== approval.subjectHash)
           editorFailure("PERMISSION_DENIED", "Grant subject mismatch");
         if (grant.purpose !== "preview") this.reviewedCandidate(approval);
+        if (input.model) {
+          const stage: ModelStage = plan.generationRequests.length ? "inpainting" : grant.purpose === "export" ? "qa" : "planning";
+          if (!this.modelAllowed(input.projectId, stage, { provider: input.model.provider, id: input.model.id }, input.principal))
+            editorFailure(
+              "PERMISSION_DENIED",
+              `Model ${input.model.provider}/${input.model.id} is not admitted for stage "${stage}" by any enabled policy`,
+            );
+        }
         const state = JOB_START_STATE[grant.purpose];
         const existing = this.database
           .prepare(
@@ -1892,6 +1932,7 @@ export class EditorStore {
           phaseDetail: "queued",
           progress: { completedUnits: "0" },
           artifacts: [],
+          model: input.model ? { provider: input.model.provider, id: input.model.id } : undefined,
         });
         this.database
           .prepare(

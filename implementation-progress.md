@@ -237,6 +237,8 @@
 
 - Copilot 闭环状态流转补齐：无分析产物时会话以 `analyzing` 创建（空候选），新增 `video.v1.refresh_object_edit_candidates`（operator，幂等）在分析完成后重建候选并推进到 awaiting_selection，候选派生逻辑抽成 `deriveCandidates` 复用；`analyze_asset` 新增可选 `model`，createAnalysisJob 按 detection 阶段策略强校验（未准入 → PERMISSION_DENIED）并把 model 记录到 JobSnapshot；edit-desk 会话面板新增“刷新候选”按钮。fixtures 195 例/134 defs，rpc-surface 62 case/58 export/26 read 一致；oes-smoke 重写为完整流（analyzing→refresh→2 候选 risk 5/80→双决策→mask_review→绑定→preview→delivered→门禁全绿）。
 
+- 模型网关再补齐：`create_job` 可带可选 `model`，按任务映射阶段强校验（有 generationRequests 的 preview/final → inpainting，export → qa，其余 → planning），校验通过后 model 记录到 JobSnapshot；新增项目级云端开关 `video.v1.set_project_cloud_policy`（owner，默认关闭），`modelAllowed` 对 location=cloud 的策略要求项目显式授权；`get_model_policies` 返回 allowCloudModels；edit-desk 策略面板新增云端授权开关。fixtures 199 例/136 defs，rpc-surface 63 case/59 export/26 read 一致；oes-smoke 新增 CLOUD_GATE（默认拒绝云端 → opt-in 后放行）全绿。
+
 ## 环境与错误
 
 | 问题 | 处理 |

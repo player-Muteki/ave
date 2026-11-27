@@ -378,6 +378,7 @@ type ExportManifest = {
 | `set_model_policy` | 登记/更新模型网关策略（provider+modelId → 可服务阶段 stages、local/cloud、启用与否），owner 幂等 upsert | owner；requestId + projectId + policy |
 | `get_model_policies` | 查看项目模型策略（≤64 条） | viewer；requestId + projectId |
 | `remove_model_policy` | 删除策略（owner，幂等） | owner；requestId + projectId + provider + modelId |
+| `set_project_cloud_policy` | 项目级云端模型授权开关（owner，幂等；默认关闭，云端策略一律拒绝） | owner；requestId + projectId + allowCloudModels |
 | `bind_object_edit_plan` | 把已提议方案绑定到对象编辑会话（幂等，拒绝过期版本） | operator；requestId + projectId + sessionId + planId |
 | `advance_object_edit_session` | 推进会话状态机：mask_review→preview 需绑定方案+该方案的 preview job，preview→delivered 需该方案已完成的 export job，任意非 delivered 可取消；禁止回退 | operator；requestId + projectId + sessionId + target + jobId? |
 | `refresh_object_edit_candidates` | 用最新分析产物重建会话候选（analyzing→awaiting_selection），幂等，过期版本拒绝 | operator；requestId + projectId + sessionId |

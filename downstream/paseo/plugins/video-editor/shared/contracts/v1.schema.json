@@ -1614,6 +1614,9 @@
         "expectedRevision": {
           "type": "string",
           "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "model": {
+          "$ref": "urn:video-editor:v1:ModelRef"
         }
       },
       "required": [
@@ -5592,13 +5595,17 @@
           "items": {
             "$ref": "urn:video-editor:v1:ModelPolicy"
           }
+        },
+        "allowCloudModels": {
+          "type": "boolean"
         }
       },
       "required": [
         "requestId",
         "projectId",
         "policyCount",
-        "policies"
+        "policies",
+        "allowCloudModels"
       ],
       "additionalProperties": false
     },
@@ -6264,6 +6271,30 @@
         "requestId",
         "projectId",
         "jobId"
+      ],
+      "additionalProperties": false
+    },
+    "ProjectCloudPolicyResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:ProjectCloudPolicyResult",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "allowCloudModels": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "allowCloudModels"
       ],
       "additionalProperties": false
     },
@@ -7210,6 +7241,30 @@
         "requestId",
         "projectId",
         "policy"
+      ],
+      "additionalProperties": false
+    },
+    "SetProjectCloudPolicyInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:video-editor:v1:SetProjectCloudPolicyInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "allowCloudModels": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requestId",
+        "projectId",
+        "allowCloudModels"
       ],
       "additionalProperties": false
     },

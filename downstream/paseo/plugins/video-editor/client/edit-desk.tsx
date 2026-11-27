@@ -11,7 +11,7 @@ import {
   decideApprovalRpc, revokeApprovalRpc,
   createJobRpc,
   createUploadRpc, getUploadStatusRpc, writeUploadChunkRpc, commitUploadRpc, cancelUploadRpc, getMutationResultRpc,
-  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, answerRunQuestionRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc, setModelPolicyRpc, getModelPoliciesRpc, removeModelPolicyRpc, refreshObjectEditCandidatesRpc,
+  startPlanningRunRpc, followUpPlanningRunRpc, stopPlanningRunRpc, getEventsRpc, getRunEventsRpc, listApprovalsRpc, listPlansRpc, createObjectEditSessionRpc, listObjectEditSessionsRpc, decideCandidateRpc, getRunQuestionsRpc, answerRunQuestionRpc, bindObjectEditPlanRpc, advanceObjectEditSessionRpc, setModelPolicyRpc, getModelPoliciesRpc, removeModelPolicyRpc, refreshObjectEditCandidatesRpc, setProjectCloudPolicyRpc,
   analyzeAssetRpc, getAnalysisRpc, getQaSummaryRpc, getSceneCutsRpc, getWaveformRpc, getPlanRpc, listArtifactsRpc, getExportSummaryRpc, verifyExportRpc, getAssetMetadataRpc, contactSheetRpc, previewFramesRpc, controlJobRpc,
   type ApprovalRequest, type SourceAsset, type BlobRef, type CapabilitySet, type EditorEvent, type PlanningRunStatus, type ProjectSnapshot, type ObjectEditSession, type RunQuestion, type ModelPolicy, type ModelStage,
 } from "../shared/contracts/v1.js";
@@ -81,6 +81,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const readPolicies = useRpc(getModelPoliciesRpc);
   const removePolicy = useRpc(removeModelPolicyRpc);
   const refreshOes = useRpc(refreshObjectEditCandidatesRpc);
+  const setCloudPolicy = useRpc(setProjectCloudPolicyRpc);
   const analyze = useRpc(analyzeAssetRpc);
   const readAnalysis = useRpc(getAnalysisRpc);
   const readQaSummary = useRpc(getQaSummaryRpc);
@@ -143,6 +144,7 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
   const [policyProvider, setPolicyProvider] = useState("local");
   const [policyModel, setPolicyModel] = useState("");
   const [policyStage, setPolicyStage] = useState<ModelStage>("planning");
+  const [allowCloud, setAllowCloud] = useState(false);
   const runActive = run?.state === "running" || run?.state === "awaiting_input";
   const afterSeq = useRef("0");
   const runSeq = useRef("0");
@@ -917,7 +919,13 @@ export function EditDesk({ theme, layout }: PluginSurfaceProps) {
           {project && button("刷新策略", async () => {
             const l = await readPolicies({ requestId: requestId("policies"), projectId: project.projectId });
             setPolicies(l.policies);
-            setNotice(`模型策略 ${l.policyCount} 条`);
+            setAllowCloud(l.allowCloudModels);
+            setNotice(`模型策略 ${l.policyCount} 条 · 云端模型 ${l.allowCloudModels ? "已授权" : "未授权"}`);
+          })}
+          {project && button(allowCloud ? "关闭云端模型授权" : "开启云端模型授权", async () => {
+            const r = await setCloudPolicy({ requestId: requestId(`cloud:${!allowCloud}`), projectId: project.projectId, allowCloudModels: !allowCloud });
+            setAllowCloud(r.allowCloudModels);
+            setNotice(`云端模型授权已${r.allowCloudModels ? "开启" : "关闭"}`);
           })}
           {policies.map((p) => (
             <View key={`${p.provider}/${p.modelId}`} style={styles.timelineRow}>

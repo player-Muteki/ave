@@ -39,6 +39,7 @@ import {
   SetModelPolicyInputSchema,
   GetModelPoliciesInputSchema,
   RemoveModelPolicyInputSchema,
+  SetProjectCloudPolicyInputSchema,
   GetExportSummaryInputSchema,
   VerifyExportInputSchema,
   GetAssetMetadataInputSchema,
@@ -272,6 +273,15 @@ export class EditorRpcService {
           projectId: request.projectId,
           policyCount: policies.length,
           policies,
+          allowCloudModels: this.editor.store.cloudModelsAllowed(request.projectId),
+        };
+      }
+      case "video.v1.set_project_cloud_policy": {
+        const request = SetProjectCloudPolicyInputSchema.parse(input);
+        return {
+          requestId: request.requestId,
+          projectId: request.projectId,
+          ...this.editor.store.setProjectCloudPolicy(request, principal),
         };
       }
       case "video.v1.remove_model_policy": {
