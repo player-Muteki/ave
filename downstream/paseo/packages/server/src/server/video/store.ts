@@ -30,6 +30,8 @@ import {
   TrackMaskRequestSchema, type TrackMaskRequest,
   type InspectFrameHeader,
   MaskAnchorRevisionSchema, type MaskAnchorRevision,
+  ObjectEditWorkflowSchema, type ObjectEditWorkflow,
+  type ObjectCandidate, type ObjectDecision, type TimeRange,
   type ApprovalGrant,
   type ApprovalRequest,
   type EditPlanDraftV1,
@@ -49,6 +51,13 @@ import {
   type ModelRef,
 } from "#video-editor/contracts/v1";
 import { describeEditorError, EditorError, editorFailure } from "./errors.js";
+import {
+  candidateManifestHash,
+  parseCandidates,
+  parseDecisions,
+  parseSourceRange,
+  removalTargets,
+} from "./object-edit.js";
 
 /** Server-side cap for a single chunked upload (clients cap at 64 MiB). */
 const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
@@ -148,6 +157,12 @@ CREATE TABLE IF NOT EXISTS mask_anchors (
   request_hash TEXT NOT NULL, document TEXT NOT NULL, approved_by TEXT,
   UNIQUE(project_id, request_id)
 );
+-- Copilot object edit: the workflow document pins asset bytes, range and revision.
+CREATE TABLE IF NOT EXISTS object_edits (
+  workflow_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
+  asset_id TEXT NOT NULL, document TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_object_edits_project ON object_edits(project_id);
 CREATE TABLE IF NOT EXISTS plans (
   plan_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id),
   plan_hash TEXT NOT NULL, revision TEXT NOT NULL, document TEXT NOT NULL
@@ -2672,6 +2687,184 @@ export class EditorStore {
       }));
     }
     return [...statuses.values()];
+  }
+
+  // --- Copilot object edit (P0-A) ------------------------------------------
+  // The durable workflow pins asset bytes, frame range and timeline revision.
+  // Decisions are recorded against that pin, so a later asset swap or trim
+  // cannot silently retarget who is removed.
+
+  openObjectEdit(input: {
+    requestId: string;
+    projectId: string;
+    assetId: string;
+    expectedRevision: string;
+    sourceRange: TimeRange;
+    actor: EditorPrincipal;
+  }): ObjectEditWorkflow {
+    this.authorize(input.projectId, input.actor, "operator");
+    const sourceRange = parseSourceRange(input.sourceRange);
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: { assetId: input.assetId, expectedRevision: input.expectedRevision, sourceRange },
+      execute: () => {
+        const project = this.projectRow(input.projectId);
+        if (project.revision !== input.expectedRevision)
+          editorFailure(
+            "REVISION_CONFLICT",
+            "The object edit was opened against an older project snapshot",
+          );
+        const asset = this.sourceAsset(input.projectId, input.assetId);
+        const workflow: ObjectEditWorkflow = {
+          workflowId: `object-edit-${sha256Json({ projectId: input.projectId, requestId: input.requestId }).slice(0, 32)}`,
+          projectId: input.projectId,
+          assetId: asset.assetId,
+          assetContentHash: asset.original.sha256,
+          sourceRange,
+          baseTimelineRevision: project.revision,
+          candidateManifestHash: candidateManifestHash([]),
+          candidates: [],
+          decisions: [],
+          state: "analyzing",
+          workflowRevision: "0",
+          createdAt: this.now(),
+        };
+        this.database
+          .prepare(
+            "INSERT INTO object_edits(workflow_id, project_id, asset_id, document) VALUES (?, ?, ?, ?)",
+          )
+          .run(workflow.workflowId, workflow.projectId, workflow.assetId, JSON.stringify(workflow));
+        return workflow;
+      },
+    });
+  }
+
+  recordObjectCandidates(input: {
+    requestId: string;
+    projectId: string;
+    workflowId: string;
+    expectedWorkflowRevision: string;
+    candidates: ObjectCandidate[];
+    actor: EditorPrincipal;
+  }): ObjectEditWorkflow {
+    this.authorize(input.projectId, input.actor, "owner");
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: {
+        workflowId: input.workflowId,
+        expectedWorkflowRevision: input.expectedWorkflowRevision,
+        candidates: input.candidates,
+      },
+      execute: () => {
+        const workflow = this.objectEdit(input.projectId, input.workflowId);
+        if (workflow.workflowRevision !== input.expectedWorkflowRevision)
+          editorFailure(
+            "REVISION_CONFLICT",
+            "The object edit moved on; reload before recording candidates",
+          );
+        if (workflow.state !== "analyzing")
+          editorFailure("WORKFLOW_STATE", "Candidates can only be recorded while analyzing");
+        const candidates = parseCandidates(input.candidates);
+        const next: ObjectEditWorkflow = {
+          ...workflow,
+          candidates,
+          candidateManifestHash: candidateManifestHash(candidates),
+          state: "awaiting_target_selection",
+          workflowRevision: (BigInt(workflow.workflowRevision) + 1n).toString(),
+        };
+        this.saveObjectEdit(next);
+        return next;
+      },
+    });
+  }
+
+  decideObjectTarget(input: {
+    requestId: string;
+    projectId: string;
+    workflowId: string;
+    expectedWorkflowRevision: string;
+    decisions: ObjectDecision[];
+    actor: EditorPrincipal;
+  }): ObjectEditWorkflow {
+    this.authorize(input.projectId, input.actor, "operator");
+    return this.mutate({
+      projectId: input.projectId,
+      requestId: input.requestId,
+      payload: {
+        workflowId: input.workflowId,
+        expectedWorkflowRevision: input.expectedWorkflowRevision,
+        decisions: input.decisions,
+      },
+      execute: () => {
+        const workflow = this.objectEdit(input.projectId, input.workflowId);
+        if (workflow.workflowRevision !== input.expectedWorkflowRevision)
+          editorFailure("REVISION_CONFLICT", "The object edit moved on; reload before deciding");
+        if (workflow.state !== "awaiting_target_selection")
+          editorFailure("WORKFLOW_STATE", "This object edit is not waiting for a target decision");
+        const project = this.projectRow(input.projectId);
+        const asset = this.sourceAsset(input.projectId, workflow.assetId);
+        if (
+          project.revision !== workflow.baseTimelineRevision ||
+          asset.original.sha256 !== workflow.assetContentHash
+        )
+          editorFailure(
+            "REVISION_CONFLICT",
+            "The recorded target is stale: the asset or timeline changed, reopen the object edit",
+          );
+        const decisions = parseDecisions(input.decisions, workflow.candidates);
+        const targets = removalTargets(workflow.candidates, decisions);
+        const next: ObjectEditWorkflow = {
+          ...workflow,
+          decisions,
+          state: targets.length > 0 ? "awaiting_mask_review" : "completed",
+          workflowRevision: (BigInt(workflow.workflowRevision) + 1n).toString(),
+        };
+        this.saveObjectEdit(next);
+        return next;
+      },
+    });
+  }
+
+  getObjectEdit(projectId: string, workflowId: string, principal: EditorPrincipal): ObjectEditWorkflow {
+    this.authorize(projectId, principal, "viewer");
+    return this.objectEdit(projectId, workflowId);
+  }
+
+  /**
+   * Gate for any future generation: a workflow may only produce a removal job
+   * after a mask was reviewed and at least one target was decided.
+   */
+  objectEditGenerationGuard(projectId: string, workflowId: string): ObjectEditWorkflow {
+    const workflow = this.objectEdit(projectId, workflowId);
+    if (workflow.state !== "awaiting_generation_review")
+      editorFailure("WORKFLOW_STATE", "Generation requires a reviewed object mask");
+    if (removalTargets(workflow.candidates, workflow.decisions).length === 0)
+      editorFailure("WORKFLOW_STATE", "No removal target was selected");
+    return workflow;
+  }
+
+  private sourceAsset(projectId: string, assetId: string): SourceAsset {
+    const row = this.database
+      .prepare("SELECT document FROM assets WHERE project_id = ? AND asset_id = ?")
+      .get(projectId, assetId) as { document: string } | undefined;
+    if (!row) editorFailure("ASSET_NOT_FOUND", "The source asset does not exist in this project");
+    return SourceAssetSchema.parse(JSON.parse(row.document));
+  }
+
+  private objectEdit(projectId: string, workflowId: string): ObjectEditWorkflow {
+    const row = this.database
+      .prepare("SELECT document FROM object_edits WHERE project_id = ? AND workflow_id = ?")
+      .get(projectId, workflowId) as { document: string } | undefined;
+    if (!row) editorFailure("NOT_FOUND", "The object edit workflow does not exist");
+    return ObjectEditWorkflowSchema.parse(JSON.parse(row.document));
+  }
+
+  private saveObjectEdit(workflow: ObjectEditWorkflow): void {
+    this.database
+      .prepare("UPDATE object_edits SET document = ? WHERE project_id = ? AND workflow_id = ?")
+      .run(JSON.stringify(workflow), workflow.projectId, workflow.workflowId);
   }
 
   private mutate<Input, Output>(input: {

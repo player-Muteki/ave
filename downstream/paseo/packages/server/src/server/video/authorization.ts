@@ -33,6 +33,7 @@ const READ_METHODS = new Set([
   "video.v1.get_export_summary",
   "video.v1.get_asset_metadata",
   "video.v1.get_approval",
+  "video.v1.get_object_edit",
   "video.v1.get_mutation_result",
   // Watching a reviewable proxy/candidate is a read; the store still enforces project scope,
   // candidate revision and the awaiting-review state, and only delivered bytes are exportable.
@@ -44,6 +45,8 @@ const MANAGE_METHODS = new Set([
   "video.v1.revoke_device",
   "video.v1.configure_worker",
   "video.v1.import_asset",
+  // Detector output is recorded by the owner's daemon, never by a paired device.
+  "video.v1.record_object_candidates",
 ]);
 
 export function editorPrincipalForCaller(caller: EditorCaller): EditorPrincipal {

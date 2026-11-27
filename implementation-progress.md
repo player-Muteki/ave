@@ -304,6 +304,16 @@
 
 与主线自动素材分析集成后，服务端视频回归通过 95 项（另 2 项按环境跳过），插件测试通过 134 项，离线 Worker 契约样例通过 94 项。63 个契约定义同步，服务端和插件类型检查通过。本轮实测平台为 Linux 上的 Chrome 工作台，生成能力的桌面安装包和 Android 真机仍待验收。
 
+## 2026-11-27 · Copilot P0-A：对象编辑契约与持久状态机
+
+契约新增对象编辑工作流：ObjectEditState／PersonRole／PersonRisk／ObjectCandidate／ObjectDecision／ObjectEditWorkflow，以及 open_object_edit、record_object_candidates、decide_object_target、get_object_edit 四个 RPC。工作流文档同时钉住资产内容哈希、源帧区间、打开时的时间线 revision、候选清单哈希与决策，schema bundle 重新生成后 116 个定义保持一致。
+
+服务端新增 `object_edits` 表（workflow_id 主键、project 索引），整条工作流以 JSON 文档持久化，daemon 重启后从同一状态继续。状态机为 analyzing → awaiting_target_selection → awaiting_mask_review｜completed：只有 analyzing 能一次性记录候选，只有等待决策时能写入选择；任何一步 revision 不符都拒绝。决策写入前重新核对项目 revision 与资产哈希，换素材或时间线前进后旧选择作废并返回 REVISION_CONFLICT，工作流本身保持原状，不会静默改掉“去掉谁”。
+
+确认请求复用现有 mutations 幂等表：同一 requestId 重放返回同一响应，workflowRevision 不会二次自增；同一 requestId 换内容返回 IDEMPOTENCY_CONFLICT。生成闸门 objectEditGenerationGuard 只在 awaiting_generation_review 且至少存在一个 remove 目标时放行，P0-A 阶段尚无路径可以生成。权限上 open/decide 需 operator，record 仅 owner（检测结果由本机 daemon 写入），get 允许 viewer，viewer 的打开与决策均被拒。
+
+新增 16 项测试（5 项纯规则＋11 项存储）：候选哈希与键序/成员序无关、风险分与 protected 覆盖、重复对象与重复决策拒绝、非法区间；存储侧覆盖打开时钉住哈希与区间、陈旧 revision、缺资产、候选只记录一次、remove→掩码评审、全部 keep→完成、越权、幂等重放、换素材后决策作废、数据库重开后停在同一状态、生成闸门拒绝。回归 authorization／store／contracts 25 项通过，worker 离线契约 169 fixtures／116 定义 PASS。检测器、候选卡片与单目标闭环尚未接入，P0-B 起继续。
+
 ## v0.1.0 · 静音剪切验收
 
 工作台以归一化 RMS ≤ 0.01（−40 dBFS）且选区内连续至少 0.5 秒作为静音条件，选择最长符合条件的连续区间。基线的单测复现了有声误剪和片头零长度段，修复后 7 项剪切单测通过。真实 Chrome、daemon 和 FFmpeg 验证了 2.28 秒的 25 fps 双音样片：选择有声范围没有创建计划，选择中间静音后批准删除 [0.600, 1.600)，下载的成品完整解码为 32 帧、1.28 秒。48 kHz 音轨的两个采样窗口分别保留了前段 440 Hz、后段 880 Hz；源 SHA-256 未变，成品与审批及下载清单的哈希一致。

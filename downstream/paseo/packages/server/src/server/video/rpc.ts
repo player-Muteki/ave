@@ -48,6 +48,10 @@ import {
   PreviewFramesRequestSchema,
   CreateMaskRevisionRequestSchema,
   MaskRevisionReviewRequestSchema,
+  ObjectEditRequestSchema,
+  OpenObjectEditRequestSchema,
+  RecordObjectCandidatesRequestSchema,
+  DecideObjectTargetRequestSchema,
   TrackMaskRequestSchema, RequestTrackedMaskReviewSchema, ProposeVacePreviewSchema, VACE_PROFILE,
   type EditorPrincipal,
 } from "#video-editor/contracts/v1";
@@ -437,6 +441,32 @@ export class EditorRpcService {
           principal,
           new AbortController().signal,
         );
+      }
+      case "video.v1.open_object_edit": {
+        const request = OpenObjectEditRequestSchema.parse(input);
+        return { workflow: this.editor.store.openObjectEdit({ ...request, actor: principal }) };
+      }
+      case "video.v1.record_object_candidates": {
+        const request = RecordObjectCandidatesRequestSchema.parse(input);
+        return {
+          workflow: this.editor.store.recordObjectCandidates({ ...request, actor: principal }),
+        };
+      }
+      case "video.v1.decide_object_target": {
+        const request = DecideObjectTargetRequestSchema.parse(input);
+        return {
+          workflow: this.editor.store.decideObjectTarget({ ...request, actor: principal }),
+        };
+      }
+      case "video.v1.get_object_edit": {
+        const request = ObjectEditRequestSchema.parse(input);
+        return {
+          workflow: this.editor.store.getObjectEdit(
+            request.projectId,
+            request.workflowId,
+            principal,
+          ),
+        };
       }
       case "video.v1.create_invitation":
       case "video.v1.redeem_invitation":

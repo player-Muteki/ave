@@ -1563,3 +1563,134 @@ export const getPlanningRunRpc = {
   input: PlanningRunRequestSchema,
   output: PlanningRunStatusSchema,
 };
+
+// --- Copilot object edit (P0-A) ---------------------------------------------
+// A workflow pins the asset bytes, the source range and the timeline revision it
+// was opened against. If any of them moves, the recorded target decision is stale
+// and the editor must reopen; the store refuses stale decisions instead of
+// silently retargeting a generation.
+export const ObjectEditStateSchema = z.enum([
+  "analyzing",
+  "awaiting_target_selection",
+  "awaiting_mask_review",
+  "awaiting_generation_review",
+  "completed",
+  "failed",
+]);
+export type ObjectEditState = z.infer<typeof ObjectEditStateSchema>;
+
+export const PersonRoleSchema = z.enum(["protagonist", "background", "uncertain"]);
+export type PersonRole = z.infer<typeof PersonRoleSchema>;
+
+export const PersonRiskSchema = z
+  .object({
+    areaRatio: z.number().min(0).max(1),
+    occlusion: z.number().min(0).max(1),
+    motion: z.number().min(0).max(1),
+    overlapProtected: z.boolean(),
+  })
+  .strict();
+export type PersonRisk = z.infer<typeof PersonRiskSchema>;
+
+export const ObjectCandidateSchema = z
+  .object({
+    objectId: id,
+    trackId: id,
+    role: PersonRoleSchema,
+    confidence: z.number().min(0).max(1),
+    evidenceFrames: z.array(uint).min(1).max(12),
+    box: z
+      .object({
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+        width: z.number().min(0).max(1),
+        height: z.number().min(0).max(1),
+      })
+      .strict(),
+    risk: PersonRiskSchema,
+  })
+  .strict();
+export type ObjectCandidate = z.infer<typeof ObjectCandidateSchema>;
+
+export const ObjectDecisionSchema = z
+  .object({ objectId: id, decision: z.enum(["remove", "keep", "skip"]) })
+  .strict();
+export type ObjectDecision = z.infer<typeof ObjectDecisionSchema>;
+
+export const ObjectEditWorkflowSchema = z
+  .object({
+    workflowId: id,
+    projectId: id,
+    assetId: id,
+    assetContentHash: sha256,
+    sourceRange: TimeRangeSchema,
+    baseTimelineRevision: uint,
+    candidateManifestHash: sha256,
+    candidates: z.array(ObjectCandidateSchema).max(32),
+    decisions: z.array(ObjectDecisionSchema).max(32),
+    state: ObjectEditStateSchema,
+    workflowRevision: uint,
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+export type ObjectEditWorkflow = z.infer<typeof ObjectEditWorkflowSchema>;
+
+export const OpenObjectEditRequestSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    assetId: id,
+    expectedRevision: uint,
+    sourceRange: TimeRangeSchema,
+  })
+  .strict();
+export type OpenObjectEditRequest = z.infer<typeof OpenObjectEditRequestSchema>;
+
+export const ObjectEditResultSchema = z.object({ workflow: ObjectEditWorkflowSchema }).strict();
+export type ObjectEditResult = z.infer<typeof ObjectEditResultSchema>;
+
+export const RecordObjectCandidatesRequestSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    workflowId: id,
+    expectedWorkflowRevision: uint,
+    candidates: z.array(ObjectCandidateSchema).min(1).max(32),
+  })
+  .strict();
+export type RecordObjectCandidatesRequest = z.infer<typeof RecordObjectCandidatesRequestSchema>;
+
+export const DecideObjectTargetRequestSchema = z
+  .object({
+    requestId,
+    projectId: id,
+    workflowId: id,
+    expectedWorkflowRevision: uint,
+    decisions: z.array(ObjectDecisionSchema).min(1).max(32),
+  })
+  .strict();
+export type DecideObjectTargetRequest = z.infer<typeof DecideObjectTargetRequestSchema>;
+
+export const ObjectEditRequestSchema = z.object({ projectId: id, workflowId: id }).strict();
+export type ObjectEditRequest = z.infer<typeof ObjectEditRequestSchema>;
+
+export const openObjectEditRpc = {
+  name: "video.v1.open_object_edit",
+  input: OpenObjectEditRequestSchema,
+  output: ObjectEditResultSchema,
+};
+export const recordObjectCandidatesRpc = {
+  name: "video.v1.record_object_candidates",
+  input: RecordObjectCandidatesRequestSchema,
+  output: ObjectEditResultSchema,
+};
+export const decideObjectTargetRpc = {
+  name: "video.v1.decide_object_target",
+  input: DecideObjectTargetRequestSchema,
+  output: ObjectEditResultSchema,
+};
+export const getObjectEditRpc = {
+  name: "video.v1.get_object_edit",
+  input: ObjectEditRequestSchema,
+  output: ObjectEditResultSchema,
+};
