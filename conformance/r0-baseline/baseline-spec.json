@@ -1,0 +1,384 @@
+{
+  "schemaVersion": "ave.r0-baseline/v1",
+  "frozenAt": "2026-11-27",
+  "sourceHashes": {
+    "v1SchemaJsonSha256": "7ddb2fa868d84aa868ed36acca9ecbc779ede3ff7ddf8371312850fbb6bfe039",
+    "fixturesJsonSha256": "88de584646f85691a9ba286cd3964a0c454446a99970882dfd1cea2ef04a0522",
+    "v1ContractTsSha256": "35f1669c85f6c2c931ea5f4f97749d5c61c50d34a6166c5b76767b25b827c8c5"
+  },
+  "wireNaming": {
+    "protocolVersion": "1",
+    "namespace": "video.v1",
+    "note": "Preserve video.v1.* during R0-R5 migration; renaming to ave.v1.* is a separate decision."
+  },
+  "rpcSurface": {
+    "mainSwitchMethods": [
+      "video.v1.analyze_asset",
+      "video.v1.answer_run_question",
+      "video.v1.cancel_upload",
+      "video.v1.commit_upload",
+      "video.v1.contact_sheet",
+      "video.v1.control_job",
+      "video.v1.create_invitation",
+      "video.v1.create_job",
+      "video.v1.create_mask_revision",
+      "video.v1.create_project",
+      "video.v1.create_upload",
+      "video.v1.decide_approval",
+      "video.v1.decide_object_target",
+      "video.v1.estimate_timeline",
+      "video.v1.follow_up_planning_run",
+      "video.v1.get_analysis",
+      "video.v1.get_approval",
+      "video.v1.get_asset_metadata",
+      "video.v1.get_capabilities",
+      "video.v1.get_events",
+      "video.v1.get_export_summary",
+      "video.v1.get_job",
+      "video.v1.get_mask_revision",
+      "video.v1.get_model_policies",
+      "video.v1.get_mutation_result",
+      "video.v1.get_object_edit",
+      "video.v1.get_plan",
+      "video.v1.get_planning_run",
+      "video.v1.get_project",
+      "video.v1.get_qa_summary",
+      "video.v1.get_run_events",
+      "video.v1.get_run_questions",
+      "video.v1.get_scene_cuts",
+      "video.v1.get_upload_status",
+      "video.v1.get_waveform",
+      "video.v1.import_asset",
+      "video.v1.inspect_frame",
+      "video.v1.list_approvals",
+      "video.v1.list_artifacts",
+      "video.v1.list_object_edits",
+      "video.v1.list_plans",
+      "video.v1.list_projects",
+      "video.v1.open_object_edit",
+      "video.v1.preview_frames",
+      "video.v1.propose_vace_preview",
+      "video.v1.read_asset_chunk",
+      "video.v1.record_object_candidates",
+      "video.v1.record_object_qa",
+      "video.v1.redeem_invitation",
+      "video.v1.remove_model_policy",
+      "video.v1.request_tracked_mask_review",
+      "video.v1.review_object_mask",
+      "video.v1.revoke_approval",
+      "video.v1.revoke_device",
+      "video.v1.set_model_policy",
+      "video.v1.set_project_cloud_policy",
+      "video.v1.start_planning_run",
+      "video.v1.steer_planning_run",
+      "video.v1.stop_planning_run",
+      "video.v1.submit_plan",
+      "video.v1.track_mask",
+      "video.v1.verify_export",
+      "video.v1.write_upload_chunk"
+    ],
+    "disabledStubs": [
+      "video.v1.import_asset"
+    ],
+    "deviceOnlyMethods": [
+      "video.v1.create_invitation",
+      "video.v1.redeem_invitation",
+      "video.v1.revoke_device",
+      "video.v1.configure_worker"
+    ],
+    "authorizationMatrix": {
+      "roles": ["viewer", "operator", "owner"],
+      "unauthenticatedError": "UNAUTHENTICATED",
+      "forbiddenError": "PERMISSION_DENIED",
+      "projectScopeRule": "owner has projectIds=null; viewer/operator require matching projectId in principal.projectIds and project_grants row",
+      "readMethods": [
+        "video.v1.get_analysis",
+        "video.v1.get_approval",
+        "video.v1.get_asset_metadata",
+        "video.v1.get_capabilities",
+        "video.v1.get_events",
+        "video.v1.get_export_summary",
+        "video.v1.get_job",
+        "video.v1.get_mask_revision",
+        "video.v1.get_model_policies",
+        "video.v1.get_mutation_result",
+        "video.v1.get_object_edit",
+        "video.v1.get_plan",
+        "video.v1.get_planning_run",
+        "video.v1.get_project",
+        "video.v1.get_qa_summary",
+        "video.v1.get_run_events",
+        "video.v1.get_run_questions",
+        "video.v1.get_scene_cuts",
+        "video.v1.get_upload_status",
+        "video.v1.get_waveform",
+        "video.v1.list_approvals",
+        "video.v1.list_artifacts",
+        "video.v1.list_object_edits",
+        "video.v1.list_plans",
+        "video.v1.list_projects",
+        "video.v1.read_asset_chunk"
+      ],
+      "manageMethods": [
+        "video.v1.configure_worker",
+        "video.v1.create_invitation",
+        "video.v1.import_asset",
+        "video.v1.record_object_candidates",
+        "video.v1.record_object_qa",
+        "video.v1.redeem_invitation",
+        "video.v1.revoke_device"
+      ],
+      "operatorExtraForbidden": [
+        "video.v1.revoke_device"
+      ]
+    }
+  },
+  "plannerTools": {
+    "allowed": [
+      "diff_plans",
+      "estimate_timeline",
+      "get_analysis",
+      "get_asset_metadata",
+      "get_contact_sheet",
+      "get_job_status",
+      "get_object_edits",
+      "get_plan",
+      "get_planning_run",
+      "get_project_snapshot",
+      "get_qa_report",
+      "get_qa_summary",
+      "get_scene_cuts",
+      "get_waveform",
+      "list_artifacts",
+      "submit_edit_plan",
+      "validate_edit_plan"
+    ],
+    "terminatingTool": "submit_edit_plan",
+    "forbiddenSurface": [
+      "bash",
+      "shell",
+      "exec",
+      "read_file",
+      "write_file",
+      "approve",
+      "decide_approval",
+      "create_job",
+      "render",
+      "export",
+      "mcp"
+    ]
+  },
+  "errorCodes": [
+    "APPROVAL_CONSUMED",
+    "APPROVAL_EXPIRED",
+    "ARTIFACT_HASH_MISMATCH",
+    "ASSET_NOT_FOUND",
+    "CANCELLED",
+    "CAPABILITY_UNAVAILABLE",
+    "IDEMPOTENCY_CONFLICT",
+    "INTERNAL",
+    "INVALID_ARGUMENT",
+    "NEEDS_RECONCILIATION",
+    "NOT_FOUND",
+    "PERMISSION_DENIED",
+    "PLAN_SEMANTIC_INVALID",
+    "PROJECT_NOT_FOUND",
+    "QA_FAILED",
+    "RANGE_NOT_SATISFIABLE",
+    "RESOURCE_EXHAUSTED",
+    "REVISION_CONFLICT",
+    "SCHEMA_UNSUPPORTED",
+    "UNAUTHENTICATED",
+    "UPSTREAM_UNAVAILABLE",
+    "WORKER_BUSY",
+    "WORKER_FAILED",
+    "WORKFLOW_STATE"
+  ],
+  "jobStates": [
+    "draft",
+    "analyzing",
+    "awaiting_plan_approval",
+    "awaiting_inputs",
+    "rendering_preview",
+    "awaiting_review",
+    "rendering_final",
+    "validating",
+    "awaiting_delivery_approval",
+    "pausing",
+    "paused",
+    "completed",
+    "failed",
+    "cancel_requested",
+    "cancelled"
+  ],
+  "objectEditFsm": {
+    "states": [
+      "analyzing",
+      "awaiting_target_selection",
+      "awaiting_mask_review",
+      "awaiting_generation_review",
+      "completed",
+      "failed"
+    ],
+    "transitions": [
+      {
+        "action": "open_object_edit",
+        "from": null,
+        "to": "analyzing",
+        "actorRole": "operator",
+        "preconditions": ["expectedRevision == project.revision", "non-empty non-negative sourceRange"]
+      },
+      {
+        "action": "record_object_candidates",
+        "from": "analyzing",
+        "to": "awaiting_target_selection",
+        "actorRole": "owner",
+        "preconditions": ["expectedWorkflowRevision match", "1..32 unique objectId and trackId candidates"]
+      },
+      {
+        "action": "decide_object_target",
+        "from": "awaiting_target_selection",
+        "to": "awaiting_mask_review | completed",
+        "actorRole": "operator",
+        "preconditions": [
+          "expectedWorkflowRevision match",
+          "project.revision == workflow.baseTimelineRevision",
+          "asset.original.sha256 == workflow.assetContentHash",
+          "if removalTargets > 0 -> awaiting_mask_review else completed"
+        ]
+      },
+      {
+        "action": "review_object_mask",
+        "from": "awaiting_mask_review",
+        "to": "awaiting_generation_review | awaiting_mask_review",
+        "actorRole": "operator",
+        "preconditions": ["expectedWorkflowRevision match", "approved=true -> awaiting_generation_review; approved=false -> awaiting_mask_review"]
+      },
+      {
+        "action": "record_object_qa",
+        "from": "awaiting_generation_review",
+        "to": "completed | failed",
+        "actorRole": "owner",
+        "preconditions": ["expectedWorkflowRevision match", "QA verdict passed -> completed else failed"]
+      }
+    ],
+    "generationGuard": {
+      "requiredState": "awaiting_generation_review",
+      "requiresRemovalTargets": true
+    },
+    "invalidationRule": "If project timeline revision or source asset contentHash changes after workflow open, target decisions fail with REVISION_CONFLICT."
+  },
+  "failureRecoveryMatrix": [
+    {
+      "id": "FR-01",
+      "scenario": "Same requestId + same payload replay",
+      "expected": "Idempotent return of original mutation result without duplicate side effects"
+    },
+    {
+      "id": "FR-02",
+      "scenario": "Same requestId + different payload",
+      "expected": "Reject with IDEMPOTENCY_CONFLICT"
+    },
+    {
+      "id": "FR-03",
+      "scenario": "Stale expectedRevision on mutation",
+      "expected": "Reject with REVISION_CONFLICT"
+    },
+    {
+      "id": "FR-04",
+      "scenario": "Lost mutation response on disconnect",
+      "expected": "Client reconciles via video.v1.get_mutation_result(projectId, requestId)"
+    },
+    {
+      "id": "FR-05",
+      "scenario": "Upload commit with mismatched bytes or SHA-256",
+      "expected": "Reject with ARTIFACT_HASH_MISMATCH and do not register SourceAsset"
+    },
+    {
+      "id": "FR-06",
+      "scenario": "Expired, rejected, revoked, or consumed approval used in create_job",
+      "expected": "Reject with APPROVAL_EXPIRED / APPROVAL_CONSUMED / PERMISSION_DENIED"
+    },
+    {
+      "id": "FR-07",
+      "scenario": "Project revision advances or source asset changes after plan/object edit",
+      "expected": "Prior approvals and target decisions become invalid (REVISION_CONFLICT)"
+    },
+    {
+      "id": "FR-08",
+      "scenario": "Client reconnect after gap",
+      "expected": "Resume via get_events(afterSeq); set snapshotRequired=true when gap cannot be served incrementally"
+    },
+    {
+      "id": "FR-09",
+      "scenario": "Daemon restart with active job states (analyzing/rendering_preview/rendering_final/validating/pausing/cancel_requested)",
+      "expected": "Recover job to failed with error.code=NEEDS_RECONCILIATION and emit job.state.changed event"
+    },
+    {
+      "id": "FR-10",
+      "scenario": "Daemon restart with active planning run (running/awaiting_input)",
+      "expected": "Emit run.interrupted; never blindly replay planning runs"
+    },
+    {
+      "id": "FR-11",
+      "scenario": "Agent planning session settles",
+      "expected": "agent_settled ends planning run only; never approves plans or marks EditJobs completed"
+    },
+    {
+      "id": "FR-12",
+      "scenario": "Source asset mutability",
+      "expected": "sourceNeverWritable is literal true; all renders go to staging and commit atomically to CAS"
+    },
+    {
+      "id": "FR-13",
+      "scenario": "Legacy/Native coexistence isolation",
+      "expected": "Native daemon uses isolated AVE_HOME; never shares SQLite DB or CAS directory with legacy paseoHome/video-editor"
+    }
+  ],
+  "goldenMediaSpecs": [
+    {
+      "filename": "cfr_25fps_av.mp4",
+      "container": "mp4",
+      "videoStreams": 1,
+      "audioStreams": 1,
+      "subtitleStreams": 0,
+      "fpsMode": "cfr",
+      "avgFrameRate": "25/1",
+      "minDurationSec": 2.9,
+      "maxDurationSec": 3.1
+    },
+    {
+      "filename": "cfr_30fps_av.mp4",
+      "container": "mp4",
+      "videoStreams": 1,
+      "audioStreams": 1,
+      "subtitleStreams": 0,
+      "fpsMode": "cfr",
+      "avgFrameRate": "30/1",
+      "minDurationSec": 2.9,
+      "maxDurationSec": 3.1
+    },
+    {
+      "filename": "vfr_mixed_av.mp4",
+      "container": "mp4",
+      "videoStreams": 1,
+      "audioStreams": 1,
+      "subtitleStreams": 0,
+      "fpsMode": "vfr",
+      "minDistinctFrameDurations": 2,
+      "minDurationSec": 2.5,
+      "maxDurationSec": 2.8
+    },
+    {
+      "filename": "multistream_sub.mkv",
+      "container": "matroska",
+      "videoStreams": 1,
+      "audioStreams": 2,
+      "subtitleStreams": 1,
+      "fpsMode": "cfr",
+      "avgFrameRate": "25/1",
+      "minDurationSec": 1.9,
+      "maxDurationSec": 2.1
+    }
+  ]
+}

@@ -35,7 +35,7 @@
 
 ### 1.4 领域、存储、媒体与 Python Worker 资产盘点
 
-- **契约与字节帧**：[v1.ts](../downstream/paseo/plugins/video-editor/shared/contracts/v1.ts)（1,650 行）、[v1.schema.json](../downstream/paseo/plugins/video-editor/shared/contracts/v1.schema.json)（8,749 行）、[bytes.ts](../downstream/paseo/plugins/video-editor/shared/bytes.ts)（41 行）、[fixtures.json](../downstream/paseo/plugins/video-editor/test/fixtures.json)（198 条）。
+- **契约与字节帧**：[v1.ts](../downstream/paseo/plugins/video-editor/shared/contracts/v1.ts)（1,650 行）、[v1.schema.json](../downstream/paseo/plugins/video-editor/shared/contracts/v1.schema.json)（8,749 行）、[bytes.ts](../downstream/paseo/plugins/video-editor/shared/bytes.ts)（41 行）、[fixtures.json](../downstream/paseo/plugins/video-editor/test/fixtures.json)（196 条，198 行）。
 - **存储层**：[store.ts](../downstream/paseo/packages/server/src/server/video/store.ts)（3,009 行，单类 `EditorStore`，包含 23 张 SQLite 表与约 87 个方法）+ [access.ts](../downstream/paseo/packages/server/src/server/video/access.ts)（168 行，当前读写 `access.json`）。
 - **RPC 表面**：[rpc.ts](../downstream/paseo/packages/server/src/server/video/rpc.ts)（605 行，共 63 个去重 `video.v1.*` 主路由，其中 `video.v1.import_asset` 为禁用桩；另有 `video.v1.configure_worker` 归入权限表）。
 - **媒体与对象编辑**：[media.ts](../downstream/paseo/packages/server/src/server/video/media.ts)（1,837 行）、[cas.ts](../downstream/paseo/packages/server/src/server/video/cas.ts)（207 行）、[jobs.ts](../downstream/paseo/packages/server/src/server/video/jobs.ts)（143 行）、[object-edit.ts](../downstream/paseo/packages/server/src/server/video/object-edit.ts)（130 行）及相关检测/锚点/窗口/QA/模型网关模块。
@@ -104,7 +104,7 @@ storage/
 
 ### R0 · 冻结行为基线
 - **目标**：在不改动现有代码行为的前提下，冻结可被旧版与原生版共同检验的规范与样本。
-- **交付物**：`conformance/r0-baseline/`（`fixtures.json`、`baseline-spec.json`、`generate_golden_media.py`、`verify_r0_baseline.py`、`README.md`），覆盖 198 条契约 fixture、63 个 `video.v1.*` RPC 方法、权限矩阵、17 个 Planner tool、24 个错误码、对象编辑六态机、故障恢复矩阵与 4 个黄金合成媒体样本（25/30fps CFR、VFR、多音轨+字幕 MKV）。
+- **交付物**：`conformance/r0-baseline/`（`fixtures.json`、`baseline-spec.json`、`generate_golden_media.py`、`verify_r0_baseline.py`、`README.md`），覆盖 196 条契约 fixture、63 个 `video.v1.*` RPC 方法、权限矩阵、17 个 Planner tool、24 个错误码、对象编辑六态机、故障恢复矩阵与 4 个黄金合成媒体样本（25/30fps CFR、VFR、多音轨+字幕 MKV）。
 - **明确不做**：不新建产品源码，不修改 `downstream/paseo/`。
 - **验收门**：`verify_r0_baseline.py` 全量比对通过并实际生成/probe/完整解码 4 个黄金样本；`check_project.py` 通过。
 
@@ -112,7 +112,7 @@ storage/
 - **目标**：建立不引用任何 Paseo/Pi 包的原生 `packages/contracts`、`packages/domain`、`storage/sqlite`、`storage/cas`。
 - **关键改动**：初始化根 workspace（隔离 `downstream/` 等目录）；原样迁移 `v1.ts`/schema/bytes；实现有理数时间、`EditGraph` 校验、Plan 哈希与 Timeline 估算、6 态 ObjectEdit FSM；实现单库单事务协调器下的 5 个 Repository（含 `devices`/`invitations` 入库）与 `ContentAddressedStore`。
 - **明确不做**：不做 WebSocket 服务器、Electron 壳、Planner 模型对接或 Python 推理。
-- **验收门**：原生单元测试覆盖全部 198 条 R0 fixture、`requestId` 幂等、`REVISION_CONFLICT`、审批哈希绑定/过期/撤销、ObjectEdit 六态流转与换素材失效、CAS 校验/上传提交、中断 Job/Outbox 恢复；零 Paseo/Pi 依赖检查通过。
+- **验收门**：原生单元测试覆盖全部 196 条 R0 fixture、`requestId` 幂等、`REVISION_CONFLICT`、审批哈希绑定/过期/撤销、ObjectEdit 六态流转与换素材失效、CAS 校验/上传提交、中断 Job/Outbox 恢复；零 Paseo/Pi 依赖检查通过。
 
 ### R2 · 本地桌面确定性闭环
 - **目标**：不依赖 Pi 和远程 relay，跑通原生桌面端导入、裁切、审批、预览、导出、QA 与崩溃恢复闭环。
