@@ -1,0 +1,26 @@
+{
+  "name": "ave-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "storage/*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "check:boundaries": "python3 scripts/check_native_boundaries.py"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.25.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.6"
+  }
+}

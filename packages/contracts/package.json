@@ -1,0 +1,31 @@
+{
+  "name": "@ave/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./v1": {
+      "types": "./dist/v1.d.ts",
+      "default": "./src/v1.ts"
+    },
+    "./bytes": {
+      "types": "./dist/bytes.d.ts",
+      "default": "./src/bytes.ts"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./src/errors.ts"
+    },
+    "./schema": "./src/v1.schema.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "generate:schema": "node scripts/generate-schema.mjs --write"
+  }
+}
