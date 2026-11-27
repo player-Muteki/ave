@@ -1,0 +1,14 @@
+# Core deterministic worker runtime (pure CPU kernels)
+numpy>=1.26
+Pillow>=10.0
+
+# Optional scene/person detection (BSD-3-Clause scenedetect, Apache-2.0 opencv/onnxruntime)
+# scenedetect>=0.6.4
+# opencv-python-headless>=4.9
+# onnxruntime>=1.18
+
+# Optional GPU inference kernels (SAM2 Tiny + VACE 1.3B)
+# torch>=2.3
+# sam2>=1.0
+# diffusers>=0.32
+# transformers>=4.46

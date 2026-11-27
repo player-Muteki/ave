@@ -6,7 +6,12 @@ import {
   downloadArtifactBytes,
   sha256HexBrowserSafe,
 } from "@ave/client-sdk";
-import type { ApprovalRequest, JobSnapshot, ProjectSnapshot } from "@ave/contracts";
+import type {
+  ApprovalRequest,
+  JobSnapshot,
+  ObjectEditWorkflow,
+  ProjectSnapshot,
+} from "@ave/contracts";
 import { buildSingleTrimDraft, formatError } from "./workbench-state.js";
 
 declare global {
@@ -35,12 +40,17 @@ export function App() {
   const [durSec, setDurSec] = useState("2");
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [objectEdits, setObjectEdits] = useState<ObjectEditWorkflow[]>([]);
 
   const refreshProject = useCallback(async (projectId: string) => {
     const client = clientRef.current;
     if (!client) return;
-    const snap = await client.getProject(projectId);
+    const [snap, oeRes] = await Promise.all([
+      client.getProject(projectId),
+      client.call<{ workflows: ObjectEditWorkflow[] }>("video.v1.list_object_edits", { projectId }),
+    ]);
     setSnapshot(snap);
+    setObjectEdits(oeRes.workflows);
     if (!selectedAssetId && snap.assets[0]) {
       setSelectedAssetId(snap.assets[0].assetId);
     }
@@ -72,6 +82,11 @@ export function App() {
         if (list.projects[0]) {
           const snap = await client.getProject(list.projects[0].projectId);
           setSnapshot(snap);
+          const oeRes = await client.call<{ workflows: ObjectEditWorkflow[] }>(
+            "video.v1.list_object_edits",
+            { projectId: snap.projectId },
+          );
+          setObjectEdits(oeRes.workflows);
           if (snap.assets[0]) setSelectedAssetId(snap.assets[0].assetId);
           unsubEvents = await client.subscribe(snap.projectId, snap.latestSeq, () => {
             void refreshProject(snap.projectId);
@@ -203,6 +218,68 @@ export function App() {
     }
   };
 
+  const handleOpenObjectEdit = async () => {
+    const client = clientRef.current;
+    if (!client || !snapshot || !selectedAsset) return;
+    try {
+      await client.call("video.v1.open_object_edit", {
+        requestId: nextReqId("oe"),
+        projectId: snapshot.projectId,
+        assetId: selectedAsset.assetId,
+        expectedRevision: snapshot.revision,
+        sourceRange: {
+          start: { num: "0", den: "1" },
+          duration: { num: "1", den: "1" },
+        },
+      });
+      await refreshProject(snapshot.projectId);
+      setStatus("已开启对象编辑工作流");
+    } catch (err) {
+      setStatus(formatError(err));
+    }
+  };
+
+  const handleDecideTarget = async (
+    workflow: ObjectEditWorkflow,
+    objectId: string,
+    decision: "remove" | "keep" | "skip",
+  ) => {
+    const client = clientRef.current;
+    if (!client || !snapshot) return;
+    try {
+      await client.call("video.v1.decide_object_target", {
+        requestId: nextReqId("oedec"),
+        projectId: snapshot.projectId,
+        workflowId: workflow.workflowId,
+        expectedWorkflowRevision: workflow.workflowRevision,
+        decisions: [{ objectId, decision }],
+      });
+      await refreshProject(snapshot.projectId);
+      setStatus(`已记录对象 ${objectId} 决策: ${decision}`);
+    } catch (err) {
+      setStatus(formatError(err));
+    }
+  };
+
+  const handleReviewMask = async (workflow: ObjectEditWorkflow, approved: boolean) => {
+    const client = clientRef.current;
+    if (!client || !snapshot) return;
+    try {
+      await client.call("video.v1.review_object_mask", {
+        requestId: nextReqId("oemask"),
+        projectId: snapshot.projectId,
+        workflowId: workflow.workflowId,
+        expectedWorkflowRevision: workflow.workflowRevision,
+        maskRevisionId: workflow.maskRevisionId ?? "mask-rev-1",
+        approved,
+      });
+      await refreshProject(snapshot.projectId);
+      setStatus(approved ? "掩码已批准，进入生成审查阶段" : "掩码已驳回，待重选目标");
+    } catch (err) {
+      setStatus(formatError(err));
+    }
+  };
+
   return (
     <div style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -299,8 +376,44 @@ export function App() {
             ) : (
               <p style={{ color: "var(--muted)", fontSize: 13 }}>尚无已校验加载的成片。</p>
             )}
-            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
-              对象编辑工作流: {snapshot.objectEdits.length} 条
+            <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13 }}>对象编辑工作流 ({objectEdits.length})</span>
+                {selectedAsset && (
+                  <button className="secondary" onClick={() => void handleOpenObjectEdit()}>
+                    新建去人/对象编辑
+                  </button>
+                )}
+              </div>
+              {objectEdits.map((oe) => (
+                <div key={oe.workflowId} style={{ marginTop: 8, padding: 8, border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 }}>
+                  <div>
+                    <strong>{oe.workflowId.slice(0, 12)}</strong> · 状态: {oe.state} · 候选: {oe.candidates.length}
+                  </div>
+                  {oe.candidates.length > 0 && oe.state === "awaiting_target_selection" && (
+                    <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                      {oe.candidates.map((c) => (
+                        <div key={c.objectId} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          <span>{c.objectId} ({c.role})</span>
+                          <button onClick={() => void handleDecideTarget(oe, c.objectId, "remove")}>移除</button>
+                          <button className="secondary" onClick={() => void handleDecideTarget(oe, c.objectId, "keep")}>保留</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {oe.state === "awaiting_mask_review" && (
+                    <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
+                      <button onClick={() => void handleReviewMask(oe, true)}>批准掩码</button>
+                      <button className="secondary" onClick={() => void handleReviewMask(oe, false)}>驳回掩码</button>
+                    </div>
+                  )}
+                  {oe.qa && (
+                    <div style={{ marginTop: 4, color: "var(--muted)" }}>
+                      QA · residual={oe.qa.residualRatio} complete={oe.qa.completeRatio} flicker={oe.qa.flickerRatio}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </section>
         </div>

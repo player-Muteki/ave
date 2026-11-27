@@ -7,6 +7,7 @@ import {
 } from "@ave/contracts";
 import type { AveStore } from "@ave/sqlite";
 import type { DeterministicBackendRegistry } from "./backends/deterministic-backend.js";
+import type { AveMediaWorkerBridge } from "./media-worker-bridge.js";
 
 const OWNER_WORKER: EditorPrincipal = {
   principalId: "worker",
@@ -19,6 +20,7 @@ export class AveJobSupervisor {
   private readonly queue: Array<() => Promise<void>> = [];
   private active = 0;
   private closing = false;
+  private mediaWorker?: AveMediaWorkerBridge;
 
   constructor(
     private readonly store: AveStore,
@@ -27,6 +29,10 @@ export class AveJobSupervisor {
     private readonly onProjectEvent: (projectId: string) => void = () => {},
     private readonly concurrency = 1,
   ) {}
+
+  setMediaWorker(bridge: AveMediaWorkerBridge): void {
+    this.mediaWorker = bridge;
+  }
 
   start(): void {
     this.schedule();
@@ -174,10 +180,14 @@ export class AveJobSupervisor {
     if (job.kind === "analysis") {
       const tracking = this.store.jobs.trackingRequest(job.projectId, job.jobId);
       if (tracking) {
-        editorFailure(
-          "CAPABILITY_UNAVAILABLE",
-          "Mask tracking worker is not configured in R2 (arrives in R4)",
-        );
+        if (!this.mediaWorker) {
+          editorFailure(
+            "CAPABILITY_UNAVAILABLE",
+            "Mask tracking worker is not attached",
+          );
+        }
+        await this.mediaWorker.runTrackMaskJob(job, tracking, signal);
+        return;
       }
       if (!job.analysisAssetId) {
         editorFailure("INVALID_ARGUMENT", "Analysis job has no target asset");

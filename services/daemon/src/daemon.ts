@@ -6,6 +6,7 @@ import { AveStore, resolveAveHome } from "@ave/sqlite";
 import { DeterministicBackendRegistry } from "./backends/deterministic-backend.js";
 import { FfmpegBackend } from "./backends/ffmpeg-backend.js";
 import { AveJobSupervisor } from "./job-supervisor.js";
+import { AveMediaWorkerBridge, type MediaWorkerTestAdapter } from "./media-worker-bridge.js";
 import { AvePlannerController, type PlannerDefaults } from "./planner-controller.js";
 import { AveRpcRegistry } from "./rpc-registry.js";
 import { DaemonQueries } from "./store-queries.js";
@@ -21,6 +22,8 @@ export interface AveDaemonOptions {
   ffprobe?: string;
   planner?: PlannerDefaults;
   plannerWorkerEntryPath?: string;
+  mediaWorkerDir?: string;
+  mediaWorkerTestAdapter?: MediaWorkerTestAdapter;
 }
 
 export interface AveDaemonAddress {
@@ -42,6 +45,7 @@ export class AveDaemon {
   readonly uploads: UploadManager;
   readonly queries: DaemonQueries;
   readonly planner: AvePlannerController;
+  readonly mediaWorker: AveMediaWorkerBridge;
   readonly rpc: AveRpcRegistry;
   readonly ws: AveWsServer;
   private addressInfo?: AveDaemonAddress;
@@ -65,10 +69,12 @@ export class AveDaemon {
     this.ownerToken = options.ownerToken ?? randomBytes(24).toString("base64url");
     this.store = store;
     this.cas = cas;
+    const ffmpegBin = options.ffmpeg ?? process.env.AVE_FFMPEG ?? "ffmpeg";
+    const ffprobeBin = options.ffprobe ?? process.env.AVE_FFPROBE ?? "ffprobe";
     this.backends = new DeterministicBackendRegistry([
       new FfmpegBackend({
-        ffmpeg: options.ffmpeg ?? process.env.AVE_FFMPEG ?? "ffmpeg",
-        ffprobe: options.ffprobe ?? process.env.AVE_FFPROBE ?? "ffprobe",
+        ffmpeg: ffmpegBin,
+        ffprobe: ffprobeBin,
       }),
     ]);
 
@@ -84,7 +90,17 @@ export class AveDaemon {
       providerDefaults: options.planner,
       workerEntryPath: options.plannerWorkerEntryPath,
     });
+    this.mediaWorker = new AveMediaWorkerBridge({
+      store: this.store,
+      cas: this.cas,
+      ffmpeg: ffmpegBin,
+      ffprobe: ffprobeBin,
+      workerDir: options.mediaWorkerDir,
+      onProjectEvent,
+      testAdapter: options.mediaWorkerTestAdapter,
+    });
     this.jobs = new AveJobSupervisor(this.store, this.cas, this.backends, onProjectEvent);
+    this.jobs.setMediaWorker(this.mediaWorker);
     this.uploads = new UploadManager(this.store, this.cas, this.backends);
     this.rpc = new AveRpcRegistry({
       store: this.store,
@@ -95,6 +111,7 @@ export class AveDaemon {
       queries: this.queries,
       onProjectEvent,
       planner: this.planner,
+      mediaWorker: this.mediaWorker,
     });
     this.ws = new AveWsServer({
       host: options.host ?? "127.0.0.1",
