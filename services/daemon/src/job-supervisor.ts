@@ -178,6 +178,11 @@ export class AveJobSupervisor {
     const project = this.store.projects.getProjectSnapshot(job.projectId, OWNER_WORKER);
 
     if (job.kind === "analysis") {
+      if (job.objectTask) {
+        if (!this.mediaWorker) editorFailure("CAPABILITY_UNAVAILABLE", "Object worker is unavailable");
+        await this.mediaWorker.runObjectTask(job, signal);
+        return;
+      }
       const tracking = this.store.jobs.trackingRequest(job.projectId, job.jobId);
       if (tracking) {
         if (!this.mediaWorker) {
@@ -242,6 +247,7 @@ export class AveJobSupervisor {
       job,
       plan,
       assets,
+      generateShot: this.mediaWorker?.generateShot.bind(this.mediaWorker),
       cas: this.cas,
       signal,
     });

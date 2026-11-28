@@ -15,6 +15,7 @@ import {
   VACE_PROFILE,
   editorFailure,
   encodeFramedChunk,
+  type AcceptedEditPlan,
   type ApprovalRequest,
   type ArtifactRef,
   type CreateMaskRevisionRequest,
@@ -27,8 +28,11 @@ import {
   type SourceAsset,
   type TrackMaskRequest,
 } from "@ave/contracts";
-import { sha256Json } from "@ave/domain";
+import { probeStartTime, rationalEquals, rationalSub, removalTargets, seedMaskAnchorRequest, sha256Json } from "@ave/domain";
+import { detectObjectCandidates, objectSourceFrames, type DetectPeople } from "./object-detection.js";
 import type { AveStore } from "@ave/sqlite";
+import type { GeneratedShot } from "./backends/deterministic-backend.js";
+import { verifyGeneratedPixels } from "./vace-output.js";
 import { ffmpegOutputTimingArgs } from "./media-flags.js";
 import { resolveMediaWorkerDir } from "./py-worker.js";
 import type { MediaWorkerHook } from "./rpc-registry.js";
@@ -56,6 +60,7 @@ interface IndexedFrame {
  * GPU weights. Never auto-enabled in production.
  */
 export interface MediaWorkerTestAdapter {
+  detectPeople?: DetectPeople;
   inspectMask?: (params: {
     directory: string;
     width: number;
@@ -76,6 +81,7 @@ export interface MediaWorkerTestAdapter {
     anchorOffset: number;
     anchorRaw: Uint8Array;
   }) => Promise<number[]>;
+  generateShot?: (directory: string, signal: AbortSignal) => Promise<void>;
   enableVace?: boolean;
 }
 
@@ -145,7 +151,7 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
   }
 
   hasVace(): boolean {
-    return Boolean(this.testAdapter?.enableVace || configuredVaceEnv());
+    return Boolean(this.testAdapter?.generateShot || this.testAdapter?.enableVace || configuredVaceEnv());
   }
 
   private async resolveFrame(request: InspectFrameRequest, asset: SourceAsset) {
@@ -269,7 +275,7 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
   private async runInspectInternal(
     request: InspectFrameRequest,
     asset: SourceAsset,
-    save?: CreateMaskRevisionRequest,
+    save?: CreateMaskRevisionRequest | "workflow",
   ) {
     const frame = await this.resolveFrame(request, asset);
     const { width, height, pts, frameCount, previewWidth, previewHeight } = frame;
@@ -379,8 +385,8 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
       if (!save) return { header, jpeg: stdout };
 
       if (
-        header.mask?.labelSha256 !== save.expectedLabelSha256 ||
-        header.previewSha256 !== save.expectedPreviewSha256
+        !header.mask?.foregroundPixels || (save !== "workflow" && (header.mask.labelSha256 !== save.expectedLabelSha256 ||
+        header.previewSha256 !== save.expectedPreviewSha256))
       ) {
         editorFailure("REVISION_CONFLICT", "Recomputed mask differs from the reviewed anchor");
       }
@@ -389,7 +395,7 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
         "application/octet-stream",
       );
       if (
-        rawLabelMask.sha256 !== save.expectedLabelSha256 ||
+        rawLabelMask.sha256 !== header.mask!.labelSha256 ||
         BigInt(rawLabelMask.bytes) !== BigInt(width) * BigInt(height)
       ) {
         editorFailure("QA_FAILED", "Stored mask does not match the reviewed source raster");
@@ -399,6 +405,43 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
       if (acquired) this.inspecting = false;
       await rm(directory, { recursive: true, force: true });
     }
+  }
+
+  async runObjectTask(job: JobSnapshot, signal: AbortSignal): Promise<void> {
+    const task = job.objectTask!;
+    const workflow = this.store.objectEdits.getObjectEdit(job.projectId, task.workflowId, WORKER_PRINCIPAL);
+    const asset = this.store.projects.getAsset(job.projectId, workflow.assetId, workflow.baseTimelineRevision, WORKER_PRINCIPAL);
+    if (task.stage === "detect") {
+      const result = await detectObjectCandidates(this.cas, asset, workflow, this.ffmpeg, this.workerDir, signal, this.testAdapter?.detectPeople);
+      this.store.objectEdits.finishWorker(job, WORKER_PRINCIPAL, result);
+    } else {
+      const { video, width, height, sourceFrames } = await objectSourceFrames(this.cas, asset, workflow);
+      const targets = removalTargets(workflow.candidates, workflow.decisions);
+      const evidence = targets[0]?.evidenceFrames.map(Number).filter(frame =>
+        frame >= sourceFrames.firstFrame && frame < sourceFrames.firstFrame + sourceFrames.frameCount &&
+        targets.every(c => c.evidenceFrames.includes(String(frame)))) ?? [];
+      if (!evidence.length) editorFailure("CAPABILITY_UNAVAILABLE", "Selected targets have no common evidence frame in this range");
+      const previous = workflow.anchorFrame === undefined ? -1 : evidence.indexOf(workflow.anchorFrame);
+      const frame = evidence[(previous + 1) % evidence.length]!;
+      const context = { projectId: job.projectId, assetId: asset.assetId, streamUid: video.streamUid,
+        sourcePresentationIndexHash: asset.presentationIndex.sha256, frame };
+      const keep = workflow.candidates.filter(c => c.evidenceFrames.includes(String(frame)) &&
+        workflow.decisions.some(d => d.objectId === c.objectId && d.decision === "keep"));
+      const anchor = seedMaskAnchorRequest(context, targets[0]!, width, height);
+      if (targets.length > 1 || keep.length) {
+        anchor.points = [...targets, ...keep].map((candidate, i) => {
+          const points = seedMaskAnchorRequest(context, candidate, width, height).points;
+          return { ...points[Math.floor(points.length / 2)]!, foreground: i < targets.length };
+        });
+      }
+      const { header, jpeg, rawLabelMask } = await this.runInspectInternal(anchor, asset, "workflow");
+      if (!rawLabelMask || !header.mask) editorFailure("QA_FAILED", "The mask worker returned no label");
+      const image = await this.cas.writeBytes(jpeg, "image/jpeg");
+      const request = { requestId: sha256Json([job.jobId, "save-anchor"]), expectedRevision: job.revision,
+        anchor, expectedLabelSha256: rawLabelMask.sha256, expectedPreviewSha256: image.sha256 };
+      this.store.objectEdits.finishWorker(job, WORKER_PRINCIPAL, { sourceFrames, request, header, label: rawLabelMask, image });
+    }
+    this.onProjectEvent(job.projectId);
   }
 
   async inspectFrame(request: InspectFrameRequest, principal: EditorPrincipal): Promise<Uint8Array> {
@@ -740,10 +783,8 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
     }
   }
 
-  async proposeVacePreview(
-    request: ProposeVacePreview,
-    principal: EditorPrincipal,
-  ): Promise<unknown> {
+  private async generationInputs(request: Pick<ProposeVacePreview, "projectId" | "expectedRevision" | "maskApprovalId" | "manifestHash">,
+    principal: EditorPrincipal) {
     if (!this.hasVace()) {
       editorFailure("CAPABILITY_UNAVAILABLE", "Configure the local VACE model and Python runtime");
     }
@@ -767,6 +808,16 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
     const stream = asset.streams.find((s) => s.streamUid === doc.streamUid && s.kind === "video");
     if (!stream) {
       editorFailure("ASSET_NOT_FOUND", "Missing generation video stream");
+    }
+    const anchor = input.anchor.anchor;
+    if (doc.projectId !== request.projectId || doc.jobId !== input.manifest.jobId ||
+        doc.anchorApprovalId !== input.tracking.anchorApprovalId || doc.anchorHash !== input.tracking.anchorHash ||
+        doc.maskRevisionId !== input.anchor.maskRevisionId || doc.sourceSha256 !== asset.original.sha256 ||
+        doc.sourcePresentationIndexHash !== asset.presentationIndex.sha256 || doc.assetId !== asset.assetId ||
+        doc.streamUid !== anchor.streamUid || doc.width !== stream.width || doc.height !== stream.height ||
+        !rationalEquals(doc.timeBase, stream.timeBase) || doc.reviewVideo.sha256 !== input.proxy.blob.sha256 ||
+        doc.frames.some((frame, i) => frame.sourceFrame !== input.tracking.firstFrame + i)) {
+      editorFailure("REVISION_CONFLICT", "Approved sequence is bound to different source frames");
     }
     const squarePixels = ["1:1", "1/1", "N/A", ""].includes(stream.sampleAspectRatio ?? "");
     const hdr = ["smpte2084", "arib-std-b67"].includes(stream.color?.transfer ?? "");
@@ -800,7 +851,6 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
       ? BigInt(nextRow.pts ?? nextRow.best_effort_timestamp ?? 0) - BigInt(last.pts)
       : BigInt(finalRow?.duration ?? finalRow?.pkt_duration ?? 0);
     if (
-      start < 0n ||
       step <= 0n ||
       duration !== step ||
       doc.frames.some(
@@ -822,12 +872,65 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
         "This shot duration cannot be represented by the 48 kHz output audio clock",
       );
     }
+    const probe = await this.cas.readJson<{ format?: { start_time?: string } }>(asset.probe);
+    const origin = probeStartTime(probe.format?.start_time) ?? { num: "0", den: "1" };
     const clock = {
-      start: rational(start * n, d),
+      start: rationalSub(rational(start * n, d), origin),
       duration: rational(9n * step * n, d),
       rate: rational(d, step * n),
     };
 
+    return { input, asset, doc, clock };
+  }
+
+  async generateShot(plan: AcceptedEditPlan, directory: string, signal: AbortSignal): Promise<GeneratedShot> {
+    const g = plan.generationRequests[0]!;
+    const config = configuredVaceEnv();
+    if (!this.testAdapter?.generateShot && !config) editorFailure("CAPABILITY_UNAVAILABLE", "Local VACE execution is unavailable");
+    const { input, asset, doc, clock } = await this.generationInputs({
+      projectId: plan.projectId, expectedRevision: plan.baseTimelineRevision, maskApprovalId: g.maskApprovalId!,
+      manifestHash: g.referenceManifestHash,
+    }, WORKER_PRINCIPAL);
+    const trim = plan.trimOperations[0]!;
+    if (g.modelId !== VACE_MODEL || g.maskRevisionId !== input.manifest.artifactId || g.shotId !== doc.jobId ||
+        trim.source.assetId !== asset.assetId || trim.source.assetContentHash !== doc.sourceSha256 || trim.source.streamUid !== doc.streamUid ||
+        !rationalEquals(trim.sourceRange.start, clock.start) || !rationalEquals(trim.sourceRange.duration, clock.duration) ||
+        !rationalEquals(clock.rate, g.sampleFps) || g.samplingMapHash !== sha256Json(["source-ordinal", g.referenceManifestHash, input.tracking.firstFrame, 9])) {
+      editorFailure("REVISION_CONFLICT", "Generation request differs from the approved mask sequence or timeline");
+    }
+    const sourcePts = await this.prepareShotFrames(asset, input.anchor.anchor, input.tracking,
+      args => execute(this.ffmpeg, args, { cwd: directory, signal, shell: false, timeout: 120_000, maxBuffer: 4 << 20 }), "rgb24");
+    const sourcePath = path.join(directory, "source.rgb");
+    const sourceRgbHash = await sha256File(sourcePath);
+    for (const [i, frame] of doc.frames.entries()) {
+      if (sourcePts[i] !== frame.pts) editorFailure("QA_FAILED", "VACE frame does not match the approved source PTS");
+      await writeFile(path.join(directory, i + ".raw"), await this.cas.readBytes(frame.label));
+    }
+    const seed = Number(g.seed);
+    await writeFile(path.join(directory, "request.json"), JSON.stringify({
+      width: doc.width, height: doc.height, prompt: g.prompt, negativePrompt: g.negativePrompt, seed,
+    }));
+    try {
+      if (this.testAdapter?.generateShot) await this.testAdapter.generateShot(directory, signal);
+      else await execute(config!.python, ["-I", "-B", path.join(this.workerDir, "generate_masked_shot.py")], {
+        cwd: directory, signal, shell: false, timeout: 20 * 60_000, killSignal: "SIGKILL", maxBuffer: 4 << 20,
+        env: { ...process.env, AVE_VACE_MODEL: config!.model, HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1" },
+      });
+    } catch {
+      if (signal.aborted) editorFailure("CANCELLED", "VACE generation was cancelled");
+      editorFailure("WORKER_FAILED", "VACE generation failed or timed out", true);
+    }
+    if (await sha256File(sourcePath) !== sourceRgbHash) editorFailure("QA_FAILED", "VACE modified its reference frames");
+    const changedPixels = await verifyGeneratedPixels(directory, this.cas, doc.frames, doc.width, doc.height, seed);
+    const output = path.join(directory, "composite.rgb");
+    return { path: output, width: doc.width, height: doc.height, rate: clock.rate, trace: {
+      modelRevision: g.modelId, seed, promptHash: sha256Json([g.prompt, g.negativePrompt]),
+      maskHash: g.referenceManifestHash, sourceRgbHash, compositeHash: await sha256File(output), sourcePts, changedPixels,
+    } };
+  }
+
+  async proposeVacePreview(request: ProposeVacePreview, principal: EditorPrincipal): Promise<unknown> {
+    const { input, doc, clock } = await this.generationInputs(request, principal);
     const project = this.store.projects.getProjectSnapshot(request.projectId, principal);
     const draft = EditPlanDraftV1Schema.parse({
       schemaVersion: "video.edit-plan/v1",

@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const fpsModeSupport = new Map<string, Promise<boolean>>();
 
-export type FfmpegOutputTimingMode = "vfr" | "passthrough";
+export type FfmpegOutputTimingMode = "vfr" | "passthrough" | "cfr";
 
 /** Feature detection keeps the daemon usable with both legacy and current FFmpeg. */
 export function helpSupportsFpsMode(help: string): boolean {

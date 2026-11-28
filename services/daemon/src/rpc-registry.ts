@@ -257,8 +257,9 @@ export class AveRpcRegistry {
       return revoked;
     });
 
-    this.register("video.v1.decide_approval", (input, principal) => {
+    this.register("video.v1.decide_approval", async (input, principal) => {
       const parsed = this.parse(ApprovalDecisionSchema, input);
+      if (parsed.decision === "approve") await store.objectEdits.verifyPendingMask(parsed.approvalId, principal);
       const res = store.plans.decideApproval(parsed, principal);
       onProjectEvent(res.approval.projectId);
       return res;
@@ -618,10 +619,15 @@ export class AveRpcRegistry {
       return { deviceId: parsed.deviceId, revoked: true };
     });
 
+    const dispatchObjectWorker = (workflow: ReturnType<typeof store.objectEdits.openObjectEdit>) => {
+      if (workflow.workerJobId) jobs.enqueue(workflow.projectId, workflow.workerJobId);
+      onProjectEvent(workflow.projectId);
+      return { workflow };
+    };
     // Copilot object-edit state machine
     this.register("video.v1.open_object_edit", (input, principal) => {
       const parsed = this.parse(OpenObjectEditRequestSchema, input);
-      return { workflow: store.objectEdits.openObjectEdit({ ...parsed, actor: principal }) };
+      return dispatchObjectWorker(store.objectEdits.openObjectEdit({ ...parsed, actor: principal }));
     });
 
     this.register("video.v1.record_object_candidates", (input, principal) => {
@@ -633,12 +639,16 @@ export class AveRpcRegistry {
 
     this.register("video.v1.decide_object_target", (input, principal) => {
       const parsed = this.parse(DecideObjectTargetRequestSchema, input);
-      return { workflow: store.objectEdits.decideObjectTarget({ ...parsed, actor: principal }) };
+      return dispatchObjectWorker(store.objectEdits.decideObjectTarget({ ...parsed, actor: principal }));
     });
 
-    this.register("video.v1.review_object_mask", (input, principal) => {
+    this.register("video.v1.review_object_mask", async (input, principal) => {
       const parsed = this.parse(ReviewObjectMaskRequestSchema, input);
-      return { workflow: store.objectEdits.reviewObjectMask({ ...parsed, actor: principal }) };
+      const workflow = store.objectEdits.getObjectEdit(parsed.projectId, parsed.workflowId, principal);
+      if (parsed.approved && workflow.maskRevisionId === parsed.maskRevisionId && workflow.maskApprovalId) {
+        await store.objectEdits.verifyPendingMask(workflow.maskApprovalId, principal);
+      }
+      return dispatchObjectWorker(store.objectEdits.reviewObjectMask({ ...parsed, actor: principal }));
     });
 
     this.register("video.v1.record_object_qa", (input, principal) => {

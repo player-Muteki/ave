@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -30,6 +30,7 @@ import {
   planRemovalGeneration,
   planTrackWindows,
 } from "@ave/domain";
+import { recordedWorker, makePeopleClip, type WorkerMode } from "./recorded-object-worker.js";
 import { AveDaemon, AvePyWorker, type MediaWorkerTestAdapter } from "../src/index.js";
 
 const execFileAsync = promisify(execFile);
@@ -84,6 +85,17 @@ async function waitForJobTerminal(
     await new Promise((r) => setTimeout(r, 40));
   }
   throw new Error(`Timed out waiting for job ${jobId}`);
+}
+
+async function settledJob(client: AveClient, projectId: string, id: string): Promise<JobSnapshot> {
+  let job = await client.getJob(projectId, id);
+  const deadline = Date.now() + 30000;
+  while (!["completed", "failed", "cancelled", "awaiting_review", "awaiting_delivery_approval"].includes(job.state)) {
+    if (Date.now() > deadline) throw new Error("Timeout in " + job.phaseDetail);
+    await new Promise(resolve => setTimeout(resolve, 30));
+    job = await client.getJob(projectId, id);
+  }
+  return job;
 }
 
 afterEach(async () => {
@@ -211,157 +223,11 @@ describe("@ave/daemon R4 Media Worker & Object-Edit Loop", () => {
       }),
     ).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
 
-    const withCands = await client.call<{ workflow: ObjectEditWorkflow }>(
-      "video.v1.record_object_candidates",
-      {
-        requestId: "r4-oe-cands-1",
-        projectId: project.projectId,
-        workflowId: opened.workflow.workflowId,
-        expectedWorkflowRevision: opened.workflow.workflowRevision,
-        candidates: [
-          {
-            objectId: "person-bg",
-            trackId: "trk-bg",
-            role: "background",
-            confidence: 0.91,
-            evidenceFrames: ["0", "4"],
-            box: { x: 0.1, y: 0.2, width: 0.2, height: 0.4 },
-            risk: { areaRatio: 0.12, occlusion: 0.05, motion: 0.1, overlapProtected: false },
-          },
-          {
-            objectId: "person-main",
-            trackId: "trk-main",
-            role: "protagonist",
-            confidence: 0.98,
-            evidenceFrames: ["0", "4"],
-            box: { x: 0.5, y: 0.2, width: 0.2, height: 0.5 },
-            risk: { areaRatio: 0.2, occlusion: 0.0, motion: 0.05, overlapProtected: false },
-          },
-        ],
-      },
-    );
-    expect(withCands.workflow.state).toBe("awaiting_target_selection");
-
-    const decided = await client.call<{ workflow: ObjectEditWorkflow }>(
-      "video.v1.decide_object_target",
-      {
-        requestId: "r4-oe-dec-1",
-        projectId: project.projectId,
-        workflowId: withCands.workflow.workflowId,
-        expectedWorkflowRevision: withCands.workflow.workflowRevision,
-        decisions: [
-          { objectId: "person-bg", decision: "remove" },
-          { objectId: "person-main", decision: "keep" },
-        ],
-      },
-    );
-    expect(decided.workflow.state).toBe("awaiting_mask_review");
-
-    const rejectedMask = await client.call<{ workflow: ObjectEditWorkflow }>(
-      "video.v1.review_object_mask",
-      {
-        requestId: "r4-oe-mask-rej",
-        projectId: project.projectId,
-        workflowId: decided.workflow.workflowId,
-        expectedWorkflowRevision: decided.workflow.workflowRevision,
-        maskRevisionId: "mask-1",
-        approved: false,
-      },
-    );
-    expect(rejectedMask.workflow.state).toBe("awaiting_mask_review");
-
-    const approvedMask = await client.call<{ workflow: ObjectEditWorkflow }>(
-      "video.v1.review_object_mask",
-      {
-        requestId: "r4-oe-mask-app",
-        projectId: project.projectId,
-        workflowId: rejectedMask.workflow.workflowId,
-        expectedWorkflowRevision: rejectedMask.workflow.workflowRevision,
-        maskRevisionId: "mask-2",
-        approved: true,
-      },
-    );
-    expect(approvedMask.workflow.state).toBe("awaiting_generation_review");
-
-    // Verify domain removal plan & long-shot window planning
-    const genPlan = planRemovalGeneration(approvedMask.workflow, {
-      frames: 9,
-      width: videoStream.width!,
-      height: videoStream.height!,
-      rotation: 0,
-      sampleAspectRatio: "1:1",
-      transfer: "bt709",
-    });
-    expect(genPlan.objectId).toBe("person-bg");
-    const windows = planTrackWindows(0, 120, { maxFrames: 81, overlap: 2 });
-    expect(windows).toHaveLength(2);
-    const seamA = new Uint8Array([255, 255, 0, 0]);
-    expect(checkSeamContinuity(seamA, seamA).passed).toBe(true);
-
-    // Failing QA transitions workflow to failed
-    const failedQa = await client.call<{ workflow: ObjectEditWorkflow }>(
-      "video.v1.record_object_qa",
-      {
-        requestId: "r4-oe-qa-fail",
-        projectId: project.projectId,
-        workflowId: approvedMask.workflow.workflowId,
-        expectedWorkflowRevision: approvedMask.workflow.workflowRevision,
-        qa: { frames: "9", residualRatio: 0.15, completeRatio: 0.99, flickerRatio: 0.01 },
-      },
-    );
-    expect(failedQa.workflow.state).toBe("failed");
-
-    // Second workflow completes cleanly on passing QA
-    const w2 = await client.call<{ workflow: ObjectEditWorkflow }>("video.v1.open_object_edit", {
-      requestId: "r4-oe-open-2",
-      projectId: project.projectId,
-      assetId: asset.assetId,
-      expectedRevision: snap.revision,
-      sourceRange: { start: { num: "0", den: "1" }, duration: { num: "1", den: "1" } },
-    });
-    const w2C = await client.call<{ workflow: ObjectEditWorkflow }>(
-      "video.v1.record_object_candidates",
-      {
-        requestId: "r4-oe-c2",
-        projectId: project.projectId,
-        workflowId: w2.workflow.workflowId,
-        expectedWorkflowRevision: w2.workflow.workflowRevision,
-        candidates: withCands.workflow.candidates,
-      },
-    );
-    const w2D = await client.call<{ workflow: ObjectEditWorkflow }>(
-      "video.v1.decide_object_target",
-      {
-        requestId: "r4-oe-d2",
-        projectId: project.projectId,
-        workflowId: w2C.workflow.workflowId,
-        expectedWorkflowRevision: w2C.workflow.workflowRevision,
-        decisions: [{ objectId: "person-bg", decision: "remove" }],
-      },
-    );
-    const w2M = await client.call<{ workflow: ObjectEditWorkflow }>(
-      "video.v1.review_object_mask",
-      {
-        requestId: "r4-oe-m2",
-        projectId: project.projectId,
-        workflowId: w2D.workflow.workflowId,
-        expectedWorkflowRevision: w2D.workflow.workflowRevision,
-        maskRevisionId: "mask-pass",
-        approved: true,
-      },
-    );
-    const w2Done = await client.call<{ workflow: ObjectEditWorkflow }>(
-      "video.v1.record_object_qa",
-      {
-        requestId: "r4-oe-q2",
-        projectId: project.projectId,
-        workflowId: w2M.workflow.workflowId,
-        expectedWorkflowRevision: w2M.workflow.workflowRevision,
-        qa: { frames: "9", residualRatio: 0.005, completeRatio: 0.995, flickerRatio: 0.01 },
-      },
-    );
-    expect(w2Done.workflow.state).toBe("completed");
-
+    // Detection is scheduled by the daemon. The actual CPU detector can report
+    // zero candidates on this synthetic clip, or a missing optional capability.
+    const actual = await settledJob(client, project.projectId, opened.workflow.workerJobId!);
+    if (!support.hog) expect(actual.error?.code).toBe("CAPABILITY_UNAVAILABLE");
+    else expect(actual.state, JSON.stringify(actual.error)).toBe("completed");
     client.close();
   });
 
@@ -559,3 +425,120 @@ describe("@ave/daemon R4 Media Worker & Object-Edit Loop", () => {
     client.close();
   });
 });
+
+it("runs scheduled detection, mask review and approved nine-frame preview and final renders", async () => {
+  const dir = await makeTempDir("ave-two-people-");
+  const clip = await makePeopleClip(dir);
+  let mode: WorkerMode = "normal";
+  const daemon = await AveDaemon.create({ aveHome: await makeTempDir("ave-edit-home-"), mediaWorkerTestAdapter: recordedWorker(() => mode) });
+  daemons.push(daemon);
+  const address = await daemon.start();
+  const client = new AveClient({ url: address.wsUrl, auth: { kind: "localOwner", token: address.ownerToken },
+    WebSocketImpl: WebSocket as unknown as new (url: string) => never, reconnect: false });
+  await client.connect();
+  try {
+    const { projectId } = await client.createProject({ requestId: randomUUID(), title: "Two targets" });
+    const asset = await uploadGoldenCfr(client, projectId, clip, "two");
+    const expectedRevision = (await client.getProject(projectId)).revision;
+    const open = async () => (await client.call<{ workflow: ObjectEditWorkflow }>("video.v1.open_object_edit", {
+      projectId, expectedRevision, assetId: asset.assetId, requestId: randomUUID(),
+      sourceRange: { start: { num: "4", den: "25" }, duration: { num: "12", den: "25" } },
+    })).workflow;
+    const get = async (id: string) => (await client.call<{ workflow: ObjectEditWorkflow }>("video.v1.get_object_edit", { projectId, workflowId: id })).workflow;
+    for (const scenario of ["empty", "unavailable"] as const) {
+      mode = scenario;
+      const wf = await open();
+      await settledJob(client, projectId, wf.workerJobId!);
+      expect((await get(wf.workflowId)).state).toBe(scenario === "empty" ? "completed" : "failed");
+    }
+    mode = "normal";
+    let wf = await open();
+    expect((await settledJob(client, projectId, wf.workerJobId!)).state).toBe("completed");
+    wf = await get(wf.workflowId);
+    expect(wf.sourceFrames).toMatchObject({ firstFrame: 4, frameCount: 12 });
+    expect(wf.candidates).toHaveLength(2);
+    const workflowId = wf.workflowId;
+    const decisions = wf.candidates.map((c, i) => ({ objectId: c.objectId, decision: i ? "keep" : "remove" }));
+    wf = (await client.call<{ workflow: ObjectEditWorkflow }>("video.v1.decide_object_target", {
+      requestId: randomUUID(), projectId, workflowId, expectedWorkflowRevision: wf.workflowRevision, decisions,
+    })).workflow;
+    expect((await settledJob(client, projectId, wf.workerJobId!)).state).toBe("completed");
+    wf = await get(workflowId);
+    const review = (approved: boolean, id = wf.maskRevisionId!, requestId = randomUUID()) => ({
+      approved, maskRevisionId: id, requestId, projectId, workflowId, expectedWorkflowRevision: wf.workflowRevision,
+    });
+    await expect(client.call("video.v1.review_object_mask", review(true, "unknown"))).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+    const initialId = wf.maskRevisionId;
+    const rejected = (await client.call<{ workflow: ObjectEditWorkflow }>("video.v1.review_object_mask", review(false))).workflow;
+    await settledJob(client, projectId, rejected.workerJobId!);
+    wf = await get(workflowId);
+    expect(wf.maskRevisionId).toBeTruthy();
+    expect(wf.maskRevisionId).not.toBe(initialId);
+    const mask = daemon.store.plans.approval(wf.maskApprovalId!);
+    daemon.store.plans.updateApproval({ ...mask, expiresAt: new Date(0).toISOString() });
+    await expect(client.call("video.v1.review_object_mask", review(true))).rejects.toMatchObject({ code: "APPROVAL_EXPIRED" });
+    daemon.store.plans.updateApproval(mask);
+    const request = review(true);
+    const accepted = await client.call<{ workflow: ObjectEditWorkflow }>("video.v1.review_object_mask", request);
+    expect(await client.call("video.v1.review_object_mask", request)).toEqual(accepted);
+    wf = accepted.workflow;
+    expect(wf.state).toBe("awaiting_generation_review");
+    const planned = planRemovalGeneration(wf, { frames: 9, width: 160, height: 128, rotation: 0, sampleAspectRatio: "1:1", transfer: "bt709" });
+    expect(planned.objectId).toBe(decisions[0]!.objectId);
+    expect(planTrackWindows(0, 120, { maxFrames: 81, overlap: 2 })).toHaveLength(2);
+    expect(checkSeamContinuity(Uint8Array.of(255), Uint8Array.of(255)).passed).toBe(true);
+    const track = await client.call<{ job: JobSnapshot }>("video.v1.track_mask", {
+      projectId, requestId: randomUUID(), expectedRevision, anchorApprovalId: mask.approvalId,
+      anchorHash: mask.subjectHash, firstFrame: 4, frameCount: 9,
+    });
+    const tracked = await waitForJobTerminal(client, projectId, track.job.jobId);
+    const manifest = tracked.artifacts.find(a => a.kind === "mask")!;
+    const proxy = tracked.artifacts.find(a => a.kind === "proxy")!;
+    const seq = await client.call<ApprovalRequest>("video.v1.request_tracked_mask_review", { projectId,
+      requestId: randomUUID(), jobId: tracked.jobId, expectedRevision, manifestHash: manifest.blob.sha256, reviewHash: proxy.blob.sha256 });
+    const proposal = (seed: number) => client.call<{ approval: ApprovalRequest }>("video.v1.propose_vace_preview", {
+      projectId, expectedRevision, requestId: randomUUID(), maskApprovalId: seq.approvalId, manifestHash: manifest.blob.sha256,
+      prompt: "Remove the red figure and preserve the blue figure", negativePrompt: "", seed });
+    await expect(proposal(1)).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    const approve = (approval: ApprovalRequest) => client.decideApproval({ requestId: randomUUID(), expectedRevision,
+      approvalId: approval.approvalId, decision: "approve" });
+    await approve(seq);
+    async function render(approval: ApprovalRequest) {
+      const { grant } = await approve(approval);
+      const { job } = await client.createJob({ projectId, expectedRevision, requestId: randomUUID(), approvalId: approval.approvalId, grantId: grant!.grantId });
+      return settledJob(client, projectId, job.jobId);
+    }
+    let seed = 1;
+    for (const scenario of ["no-change", "leak", "timeout"] as const) {
+      mode = scenario;
+      const job = await render((await proposal(++seed)).approval);
+      expect(job.state, scenario).toBe("failed");
+      expect(job.error?.code, job.error?.sanitizedDetail).toBe(scenario === "timeout" ? "WORKER_FAILED" : "QA_FAILED");
+      expect(job.artifacts).toHaveLength(0);
+    }
+    mode = "normal";
+    const preview = await render((await proposal(++seed)).approval);
+    expect(preview.state, JSON.stringify(preview.error)).toBe("awaiting_review");
+    const finalApproval = (await client.getProject(projectId)).approvals.find(a => a.purpose === "final" && a.status === "pending")!;
+    const final = await render(finalApproval);
+    expect(final.state, JSON.stringify(final.error)).toBe("awaiting_delivery_approval");
+    for (const job of [preview, final]) {
+      const candidate = job.artifacts.find(a => a.kind === "candidate")!;
+      const qa = await daemon.cas.readJson<any>(job.artifacts.find(a => a.kind === "qa")!.blob);
+      expect(qa.generation).toMatchObject({ modelRevision: VACE_MODEL, seed, maskHash: manifest.blob.sha256 });
+      const file = daemon.cas.pathFor(candidate.blob);
+      const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-show_streams", "-of", "json", file]);
+      const streams = JSON.parse(stdout).streams;
+      expect(streams[0].nb_frames).toBe("9");
+      expect(streams.map((stream: { duration: string }) => stream.duration)).toEqual(["0.360000", "0.360000"]);
+      const { stdout: rgb } = await execFileAsync("ffmpeg", ["-v", "error", "-i", file, "-frames:v", "1", ...(job.kind === "preview" ? ["-vf", "crop=450:360:95:0,scale=160:128"] : []), "-pix_fmt", "rgb24", "-f", "rawvideo", "-"], { encoding: "buffer" });
+      const pixel = (x: number) => Array.from(rgb.subarray(3 * (160 * 40 + x), 3 * (160 * 40 + x) + 3));
+      expect(Math.max(...pixel(30)) - Math.min(...pixel(30))).toBeLessThan(12);
+      expect(pixel(110)[2]! - pixel(110)[0]!).toBeGreaterThan(150);
+    }
+    expect(await daemon.cas.verifyBlob(asset.original)).toBe(true);
+    const state = await client.call<{ workflow: ObjectEditWorkflow }>("video.v1.record_object_qa", { projectId, workflowId,
+      expectedWorkflowRevision: wf.workflowRevision, requestId: randomUUID(), qa: { frames: "9", residualRatio: 0, completeRatio: 1, flickerRatio: 0 } });
+    expect(state.workflow.state).toBe("completed");
+  } finally { client.close(); }
+}, 90_000);

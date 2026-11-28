@@ -24,6 +24,8 @@ import type {
   AnalysisArtifactsResult,
   ContactSheetData,
   DeterministicBackend,
+  GeneratedShot,
+  GenerateShot,
   ProbeAndIndexResult,
   RenderPlanResult,
 } from "./deterministic-backend.js";
@@ -189,6 +191,7 @@ export class FfmpegBackend implements DeterministicBackend {
   async renderPlan(input: {
     job: JobSnapshot;
     plan: AcceptedEditPlan;
+    generateShot?: GenerateShot;
     assets: Map<string, SourceAsset>;
     cas: ContentAddressedStore;
     signal: AbortSignal;
@@ -208,9 +211,29 @@ export class FfmpegBackend implements DeterministicBackend {
     const directory = await mkdtemp(path.join(tmpdir(), "ave-render-"));
     let outputBlob: BlobRef;
     let recipeSha256: string;
+    let shot: GeneratedShot | undefined;
     try {
       const output = path.join(directory, "candidate.mp4");
-      recipeSha256 = await this.renderToFile(assets, firstAsset, plan, job.kind, output, cas, signal);
+      if (plan.generationRequests.length) {
+        assertRenderablePreview(plan);
+        if (!input.generateShot) editorFailure("CAPABILITY_UNAVAILABLE", "This backend requires a VACE worker");
+        shot = await input.generateShot(plan, directory, signal);
+      }
+      recipeSha256 = await this.renderToFile(assets, firstAsset, plan, job.kind, output, cas, signal, shot);
+      if (shot) {
+        const control = path.join(directory, "trim-control.mp4");
+        await this.renderToFile(assets, firstAsset, plan, job.kind, control, cas, signal);
+        const digest = async (file: string) => (await this.run(this.tools.ffmpeg, ["-v", "error", "-nostdin", "-i", file,
+          "-map", "0:v:0", "-pix_fmt", "rgb24", "-f", "hash", "-hash", "sha256", "-"])).stdout.trim();
+        if (await digest(output) === await digest(control)) editorFailure("QA_FAILED", "Encoded candidate matches the plain trim");
+        const frames = JSON.parse((await this.run(this.tools.ffprobe, ["-v", "error", "-select_streams", "v:0",
+          "-show_frames", "-show_streams", "-show_entries", "frame=best_effort_timestamp:stream=time_base", "-of", "json", output])).stdout);
+        const [n, d] = String(frames.streams[0]?.time_base).split("/").map(BigInt);
+        if (frames.frames.length !== 9 || frames.frames.some((f: { best_effort_timestamp: number }, i: number) =>
+          BigInt(f.best_effort_timestamp) * n! * BigInt(shot!.rate.num) !== BigInt(i) * d! * BigInt(shot!.rate.den))) {
+          editorFailure("QA_FAILED", `Encoded candidate clock ${frames.streams[0]?.time_base} / PTS ${frames.frames.slice(0, 12).map((f: {best_effort_timestamp: number}) => f.best_effort_timestamp)} differs from the approved ${shot.rate.num}/${shot.rate.den} fps timeline`);
+        }
+      }
       this.throwIfCancelled(signal);
       outputBlob = await cas.importFile(output, "video/mp4");
     } finally {
@@ -263,6 +286,7 @@ export class FfmpegBackend implements DeterministicBackend {
     const qaBlob = await cas.writeJson({
       ffmpegBuildHash: createHash("sha256").update(build.stdout).digest("hex"),
       renderRecipeHash: recipeSha256,
+      ...(shot ? { generation: shot.trace } : {}),
       planHash: plan.planHash,
       reportId: job.jobId,
       subjectHash: outputBlob.sha256,
@@ -803,6 +827,7 @@ export class FfmpegBackend implements DeterministicBackend {
     output: string,
     cas: ContentAddressedStore,
     signal: AbortSignal,
+    shot?: GeneratedShot,
   ): Promise<string> {
     assertRenderablePreview(plan);
     if (plan.deterministicBackendId !== "ffmpeg") {
@@ -861,6 +886,11 @@ export class FfmpegBackend implements DeterministicBackend {
       }
     }
 
+    if (shot) {
+      args.push("-f", "rawvideo", "-pixel_format", "rgb24", "-video_size", shot.width + "x" + shot.height,
+        "-framerate", shot.rate.num + "/" + shot.rate.den, "-i", shot.path);
+    }
+    const generatedIndex = ops.length + audioInput.size;
     const audioSegments: number[] = [];
     ops.forEach((op, i) => {
       const asset = assets.get(op.source.assetId)!;
@@ -869,7 +899,8 @@ export class FfmpegBackend implements DeterministicBackend {
       );
       if (!video) editorFailure("CAPABILITY_UNAVAILABLE", `Segment ${i} has no video stream`);
       const range = `start=${rationalSecondsPrecise(op.sourceRange.start)}:duration=${rationalSecondsPrecise(op.sourceRange.duration)}`;
-      let vchain = `[${i}:${video.streamIndex}]trim=${range},setpts=PTS-STARTPTS`;
+      let vchain = shot ? "[" + generatedIndex + ":v:0]setpts=PTS-STARTPTS"
+        : `[${i}:${video.streamIndex}]trim=${range},setpts=PTS-STARTPTS`;
       vchain += transformFilterChain(video, transformOps.get(op.clipId));
       const vDurSec = Number(rationalSecondsPrecise(op.recordRange.duration));
       if (op.fadeIn) {
@@ -1097,14 +1128,16 @@ export class FfmpegBackend implements DeterministicBackend {
       metaSrtIndex = args.reduce((n, a) => (a === "-i" ? n + 1 : n), 0) - 1;
     }
 
+    const generationRate = plan.generationRequests[0]?.sampleFps;
     const previewClock = trackOrder.length === 1 && !transitions.size ? sourceTimeBase : "filter";
     args.push(
       "-filter_complex",
       filters.join(";"),
       "-map",
       vOut,
-      ...(await ffmpegOutputTimingArgs(this.tools.ffmpeg, "vfr")),
-      ...(kind === "preview" ? ["-enc_time_base:v", previewClock] : []),
+      ...(await ffmpegOutputTimingArgs(this.tools.ffmpeg, generationRate ? "cfr" : "vfr")),
+      ...(generationRate ? ["-r:v", generationRate.num + "/" + generationRate.den, "-enc_time_base:v", generationRate.den + "/" + generationRate.num]
+        : kind === "preview" ? ["-enc_time_base:v", previewClock] : []),
       "-c:v",
       "libx264",
       "-pix_fmt",
@@ -1115,9 +1148,9 @@ export class FfmpegBackend implements DeterministicBackend {
     args.push("-movflags", "+faststart", output);
 
     const normalized = args.map((a) =>
-      a === output ? "<output>" : subDir ? a.split(subDir).join("<tmp>") : a,
+      a === output ? "<output>" : shot && a === shot.path ? shot.trace.compositeHash : subDir ? a.split(subDir).join("<tmp>") : a,
     );
-    const recipeSha256 = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+    const recipeSha256 = createHash("sha256").update(JSON.stringify(shot ? [normalized, shot.trace] : normalized)).digest("hex");
     try {
       await this.spawnChecked(this.tools.ffmpeg, args, signal);
     } finally {

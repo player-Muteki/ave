@@ -345,6 +345,8 @@ export const JobSnapshotSchema = z
     error: EditorErrorSchema.optional(),
     analysisAssetId: id.optional(),
     analysisRate: AnalysisRateSchema.optional(),
+    trackingAnchorId: id.optional(),
+    objectTask: z.object({ workflowId: id, stage: z.enum(["detect", "mask"]) }).strict().optional(),
     model: ModelRefSchema.optional(),
   })
   .strict();
@@ -1528,6 +1530,13 @@ export const ObjectEditWorkflowSchema = z
     candidates: z.array(ObjectCandidateSchema).max(32),
     decisions: z.array(ObjectDecisionSchema).max(32),
     maskRevisionId: id.optional(),
+    maskApprovalId: id.optional(),
+    anchorFrame: z.number().int().nonnegative().optional(),
+    workerJobId: id.optional(),
+    sourceFrames: z.object({
+      streamUid: id, firstFrame: z.number().int().nonnegative(), frameCount: z.number().int().positive(),
+    }).strict().optional(),
+    error: EditorErrorSchema.optional(),
     qa: ObjectQaReportSchema.optional(),
     state: ObjectEditStateSchema,
     workflowRevision: uint,

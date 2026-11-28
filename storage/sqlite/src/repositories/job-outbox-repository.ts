@@ -193,6 +193,7 @@ export class JobOutboxRepository {
     assetId: string;
     rate?: string;
     tracking?: TrackMaskRequest;
+    objectTask?: JobSnapshot["objectTask"];
     model?: ModelRef;
     principal: EditorPrincipal;
   }): JobResult {
@@ -235,7 +236,9 @@ export class JobOutboxRepository {
               track.firstFrame,
               track.frameCount,
             ])
-          : sha256Json(["analysis", input.assetId, asset.original.sha256, rate]);
+          : input.objectTask
+            ? sha256Json(["object", input.objectTask, input.requestId])
+            : sha256Json(["analysis", input.assetId, asset.original.sha256, rate]);
         const existing = this.tx.db
           .prepare(
             "SELECT document FROM jobs WHERE project_id = ? AND plan_hash = ? AND kind = 'analysis' AND active = 1",
@@ -254,8 +257,10 @@ export class JobOutboxRepository {
           phaseDetail: "queued",
           progress: { completedUnits: "0" },
           artifacts: [],
-          analysisAssetId: track ? undefined : input.assetId,
-          analysisRate: track ? undefined : rate,
+          objectTask: input.objectTask,
+          trackingAnchorId: track?.anchorApprovalId,
+          analysisAssetId: track || input.objectTask ? undefined : input.assetId,
+          analysisRate: track || input.objectTask ? undefined : rate,
           model: !track && input.model ? { provider: input.model.provider, id: input.model.id } : undefined,
         });
         this.tx.db
@@ -446,6 +451,7 @@ export class JobOutboxRepository {
           ["completed", "failed", "cancelled"].includes(next.state) ? 0 : 1,
           jobId,
         );
+      if (next.objectTask) this.requireObjectEdits().onWorkerState(next);
       this.tx.emit(projectId, eventType, {
         jobId,
         state: next.state,
@@ -923,14 +929,7 @@ export class JobOutboxRepository {
           sanitizedDetail: "The previous worker was interrupted; review and retry the job",
         },
       };
-      this.tx.db
-        .prepare("UPDATE jobs SET document = ?, active = 0 WHERE job_id = ?")
-        .run(JSON.stringify(recovered), job.jobId);
-      this.tx.emit(job.projectId, "job.state.changed", {
-        jobId: job.jobId,
-        state: recovered.state,
-        phaseDetail: recovered.phaseDetail,
-      });
+      this.updateJob(job.projectId, job.jobId, () => recovered);
       recoveredList.push(recovered);
     }
     return recoveredList;

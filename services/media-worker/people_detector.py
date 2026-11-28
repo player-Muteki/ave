@@ -385,6 +385,9 @@ def detect_people_candidates(
         hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
         detections_per_frame: list[list[Detection]] = []
         for frame in frames:
+            if width < 64 or height < 128:
+                detections_per_frame.append([])
+                continue
             rects, weights = hog.detectMultiScale(
                 frame.bgr, winStride=(8, 8), padding=(8, 8), scale=1.05
             )
@@ -393,7 +396,7 @@ def detect_people_candidates(
                     Box(rect[0] / width, rect[1] / height, rect[2] / width, rect[3] / height),
                     float(weight),
                 )
-                for rect, weight in zip(rects, weights.flatten())
+                for rect, weight in zip(rects, np.asarray(weights).ravel())
                 if float(weight) >= 0.0
             ]
             detections_per_frame.append(detections)

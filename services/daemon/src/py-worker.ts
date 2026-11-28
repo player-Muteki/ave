@@ -25,6 +25,7 @@ export interface WorkerSupport {
   numpy: boolean;
   scenedetect: boolean;
   cv2: boolean;
+  hog: boolean;
 }
 
 export interface SamplingMapResult {
@@ -115,7 +116,7 @@ export class AvePyWorker {
           /* keep raw */
         }
         const error = new EditorError(
-          code === 127 || /No module named|ModuleNotFoundError/.test(detail)
+          code === 127 || /No module named|ModuleNotFoundError|CAPABILITY_UNAVAILABLE/.test(detail)
             ? "CAPABILITY_UNAVAILABLE"
             : "WORKER_FAILED",
           detail || `python worker exited ${code}`,
@@ -130,6 +131,10 @@ export class AvePyWorker {
   async support(signal: AbortSignal): Promise<WorkerSupport> {
     const stdout = await this.run(["support"], "", signal);
     return JSON.parse(stdout) as WorkerSupport;
+  }
+
+  async detectPeople(directory: string, signal: AbortSignal): Promise<unknown> {
+    return JSON.parse(await this.run(["detect-people", "--directory", directory], "", signal));
   }
 
   async samplingMap(

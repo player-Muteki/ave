@@ -14,6 +14,18 @@ export interface ProbeAndIndexResult {
   constantRateStreamUids: string[];
 }
 
+export interface GeneratedShot {
+  path: string;
+  width: number;
+  height: number;
+  rate: Rational;
+  trace: {
+    modelRevision: string; seed: number; promptHash: string; maskHash: string;
+    sourceRgbHash: string; compositeHash: string; sourcePts: string[]; changedPixels: number[];
+  };
+}
+export type GenerateShot = (plan: AcceptedEditPlan, directory: string, signal: AbortSignal) => Promise<GeneratedShot>;
+
 export interface RenderPlanResult {
   candidate: ArtifactRef;
   qa: ArtifactRef;
@@ -51,6 +63,7 @@ export interface DeterministicBackend {
   renderPlan(input: {
     job: JobSnapshot;
     plan: AcceptedEditPlan;
+    generateShot?: GenerateShot;
     assets: Map<string, SourceAsset>;
     cas: ContentAddressedStore;
     signal: AbortSignal;

@@ -4,6 +4,7 @@ import {
   MaskAnchorRevisionSchema,
   ObjectEditWorkflowSchema,
   SourceAssetSchema,
+  TrackedMaskManifestSchema,
   editorFailure,
   type ApprovalRequest,
   type ArtifactRef,
@@ -11,6 +12,7 @@ import {
   type CreateMaskRevisionRequest,
   type EditorPrincipal,
   type InspectFrameHeader,
+  type JobSnapshot,
   type MaskAnchorRevision,
   type ObjectCandidate,
   type ObjectDecision,
@@ -76,6 +78,55 @@ export class ObjectEditRepository {
       .run(JSON.stringify(workflow), workflow.projectId, workflow.workflowId);
   }
 
+  private scheduleWorker(workflow: ObjectEditWorkflow, stage: "detect" | "mask", actor: EditorPrincipal): ObjectEditWorkflow {
+    const { job } = this.jobs.createAnalysisJob({
+      requestId: sha256Json([workflow.workflowId, workflow.workflowRevision, stage]),
+      projectId: workflow.projectId, assetId: workflow.assetId, principal: actor,
+      objectTask: { workflowId: workflow.workflowId, stage },
+    });
+    return { ...workflow, workerJobId: job.jobId, error: undefined };
+  }
+
+  onWorkerState(job: JobSnapshot): void {
+    const task = job.objectTask!;
+    const workflow = this.objectEditRow(job.projectId, task.workflowId);
+    if (workflow.workerJobId !== job.jobId) return;
+    const failed = job.state === "failed" || job.state === "cancelled";
+    const retry = job.state === "analyzing" && workflow.state === "failed";
+    if (!failed && !retry) return;
+    this.saveObjectEdit({ ...workflow,
+      state: failed ? "failed" : task.stage === "detect" ? "analyzing" : "awaiting_mask_review",
+      error: failed ? job.error ?? { code: "CANCELLED", retryable: true, sanitizedDetail: "Object analysis cancelled" } : undefined,
+      workflowRevision: String(BigInt(workflow.workflowRevision) + 1n),
+    });
+  }
+
+  finishWorker(job: JobSnapshot, principal: EditorPrincipal, result:
+    | { candidates: ObjectCandidate[]; sourceFrames: NonNullable<ObjectEditWorkflow["sourceFrames"]> }
+    | { request: CreateMaskRevisionRequest; header: InspectFrameHeader; label: BlobRef; image: BlobRef; sourceFrames: NonNullable<ObjectEditWorkflow["sourceFrames"]> }
+  ): void {
+    this.tx.runInTransaction(() => {
+      const wf = this.objectEditRow(job.projectId, job.objectTask!.workflowId);
+      const current = this.jobs.getJob(job.projectId, job.jobId, principal);
+      if (current.state !== "analyzing" || wf.workerJobId !== job.jobId) {
+        editorFailure("CANCELLED", "Object task has been superseded or stopped");
+      }
+      this.projects.getAsset(job.projectId, wf.assetId, wf.baseTimelineRevision, principal);
+      const next = { ...wf, workflowRevision: String(BigInt(wf.workflowRevision) + 1n), sourceFrames: result.sourceFrames };
+      if ("candidates" in result) {
+        const candidates = result.candidates.length ? parseCandidates(result.candidates) : [];
+        this.saveObjectEdit({ ...next, candidates, candidateManifestHash: candidateManifestHash(candidates),
+          state: candidates.length ? "awaiting_target_selection" : "completed" });
+      } else {
+        const approval = this.saveMaskRevision(result.request, result.header, result.label, result.image, principal);
+        this.saveObjectEdit({ ...next, state: "awaiting_mask_review", anchorFrame: result.header.frame,
+          maskRevisionId: approval.subjectId, maskApprovalId: approval.approvalId });
+      }
+      this.jobs.updateJob(job.projectId, job.jobId, latest => ({ ...latest, state: "completed",
+        phaseDetail: "Object analysis complete", progress: { completedUnits: "1", totalUnits: "1" } }));
+    });
+  }
+
   openObjectEdit(input: {
     requestId: string;
     projectId: string;
@@ -99,7 +150,7 @@ export class ObjectEditRepository {
           );
         }
         const asset = this.sourceAsset(input.projectId, input.assetId);
-        const workflow: ObjectEditWorkflow = {
+        const workflow = this.scheduleWorker({
           workflowId: `object-edit-${sha256Json({ projectId: input.projectId, requestId: input.requestId }).slice(0, 32)}`,
           projectId: input.projectId,
           assetId: asset.assetId,
@@ -112,7 +163,7 @@ export class ObjectEditRepository {
           state: "analyzing",
           workflowRevision: "0",
           createdAt: this.tx.now(),
-        };
+        }, "detect", input.actor);
         this.tx.db
           .prepare(
             "INSERT INTO object_edits(workflow_id, project_id, asset_id, document) VALUES (?, ?, ?, ?)",
@@ -155,6 +206,7 @@ export class ObjectEditRepository {
         const candidates = parseCandidates(input.candidates);
         const next: ObjectEditWorkflow = {
           ...workflow,
+          workerJobId: undefined,
           candidates,
           candidateManifestHash: candidateManifestHash(candidates),
           state: "awaiting_target_selection",
@@ -212,8 +264,9 @@ export class ObjectEditRepository {
           state: targetState,
           workflowRevision: (BigInt(workflow.workflowRevision) + 1n).toString(),
         };
-        this.saveObjectEdit(next);
-        return next;
+        const result = targets.length ? this.scheduleWorker(next, "mask", input.actor) : next;
+        this.saveObjectEdit(result);
+        return result;
       },
     });
   }
@@ -283,16 +336,29 @@ export class ObjectEditRepository {
         if (workflow.state !== "awaiting_mask_review") {
           editorFailure("WORKFLOW_STATE", "This object edit is not waiting for a mask review");
         }
-        const nextState = input.approved ? "awaiting_generation_review" : "awaiting_mask_review";
-        assertObjectEditTransition(workflow.state, nextState);
-        const next: ObjectEditWorkflow = {
-          ...workflow,
-          maskRevisionId: input.maskRevisionId,
-          state: nextState,
-          workflowRevision: (BigInt(workflow.workflowRevision) + 1n).toString(),
-        };
-        this.saveObjectEdit(next);
-        return next;
+        if (workflow.maskRevisionId !== input.maskRevisionId || !workflow.maskApprovalId || !workflow.sourceFrames) {
+          editorFailure("INVALID_ARGUMENT", "This workflow has no matching generated mask to review");
+        }
+        const approval = this.plans.getApproval(workflow.projectId, workflow.maskApprovalId, input.actor);
+        const mask = this.maskInput(approval, input.actor);
+        const asset = this.projects.getAsset(workflow.projectId, workflow.assetId, workflow.baseTimelineRevision, input.actor);
+        const span = workflow.sourceFrames;
+        if (mask.kind !== "anchor" || approval.subjectId !== workflow.maskRevisionId ||
+            mask.revision.baseTimelineRevision !== workflow.baseTimelineRevision ||
+            mask.revision.anchor.assetId !== asset.assetId || mask.revision.anchor.sourceSha256 !== workflow.assetContentHash ||
+            mask.revision.anchor.sourcePresentationIndexHash !== asset.presentationIndex.sha256 ||
+            mask.revision.anchor.streamUid !== span.streamUid || mask.revision.anchor.frame !== workflow.anchorFrame ||
+            workflow.anchorFrame < span.firstFrame || workflow.anchorFrame >= span.firstFrame + span.frameCount) {
+          editorFailure("REVISION_CONFLICT", "The reviewed anchor belongs to a different source, frame or revision");
+        }
+        this.plans.decideApproval({ requestId: sha256Json([input.requestId, "anchor-decision"]),
+          approvalId: approval.approvalId, expectedRevision: workflow.baseTimelineRevision,
+          decision: input.approved ? "approve" : "reject" }, input.actor);
+        const next: ObjectEditWorkflow = { ...workflow, state: input.approved ? "awaiting_generation_review" : "awaiting_mask_review",
+          workflowRevision: String(BigInt(workflow.workflowRevision) + 1n) };
+        const result = input.approved ? next : this.scheduleWorker({ ...next, maskRevisionId: undefined, maskApprovalId: undefined }, "mask", input.actor);
+        this.saveObjectEdit(result);
+        return result;
       },
     });
   }
@@ -671,6 +737,21 @@ export class ObjectEditRepository {
       );
     }
     return input;
+  }
+
+  async verifyPendingMask(id: string, principal: EditorPrincipal): Promise<void> {
+    const input = this.pendingMaskForDecision(id, principal);
+    if (!input) return;
+    const cas = this.tx.requireCas();
+    const refs = input.kind === "anchor" ? [input.revision.rawLabelMask, input.revision.reviewImage] :
+      [input.manifest.blob, input.proxy.blob, input.anchor.rawLabelMask, input.anchor.reviewImage];
+    if (input.kind === "sequence") {
+      const doc = TrackedMaskManifestSchema.parse(await cas.readJson(input.manifest.blob));
+      refs.push(...doc.frames.map(frame => frame.label));
+    }
+    for (const ref of refs) {
+      if (!await cas.verifyBlob(ref)) editorFailure("ARTIFACT_HASH_MISMATCH", "Mask review data is missing or changed");
+    }
   }
 
   pendingMaskForDecision(id: string, principal: EditorPrincipal) {

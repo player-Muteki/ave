@@ -4903,6 +4903,31 @@
         "analysisRate": {
           "$ref": "urn:video-editor:v1:AnalysisRate"
         },
+        "trackingAnchorId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "objectTask": {
+          "type": "object",
+          "properties": {
+            "workflowId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "stage": {
+              "type": "string",
+              "enum": [
+                "detect",
+                "mask"
+              ]
+            }
+          },
+          "required": [
+            "workflowId",
+            "stage"
+          ],
+          "additionalProperties": false
+        },
         "model": {
           "$ref": "urn:video-editor:v1:ModelRef"
         }
@@ -5781,6 +5806,47 @@
         "maskRevisionId": {
           "type": "string",
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "maskApprovalId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "anchorFrame": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "workerJobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "sourceFrames": {
+          "type": "object",
+          "properties": {
+            "streamUid": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "firstFrame": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "frameCount": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "streamUid",
+            "firstFrame",
+            "frameCount"
+          ],
+          "additionalProperties": false
+        },
+        "error": {
+          "$ref": "urn:video-editor:v1:EditorError"
         },
         "qa": {
           "$ref": "urn:video-editor:v1:ObjectQaReport"
