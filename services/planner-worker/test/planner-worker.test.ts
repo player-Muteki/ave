@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ALLOWED_PLANNER_TOOLS,
   NativePlannerLoop,
+  OpenAiCompatibleProvider,
   PLANNER_OPENAI_TOOLS,
   enforceContextBudget,
   stripNulls,
@@ -229,4 +230,63 @@ describe("Native AVE planner-worker core", () => {
     const outcome = await loop.execute("Trim");
     expect(outcome.status).toBe("interrupted");
   });
+});
+
+it("sends closed recursive schemas for every tool and restores both estimate shapes", async () => {
+  const complete = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ choices: [{ message: { content: "ok" } }] }));
+  try {
+    await new OpenAiCompatibleProvider({ baseUrl: "https://provider.invalid/v1", model: "recorded" })
+      .complete([], PLANNER_OPENAI_TOOLS, new AbortController().signal);
+    const payload = JSON.parse(String(complete.mock.calls[0]![1]!.body));
+    function inspect(schema: any) {
+      if (!schema || typeof schema !== "object") return;
+      if (schema.type === "object") {
+        expect(schema.additionalProperties).toBe(false);
+        expect(schema.required.sort()).toEqual(Object.keys(schema.properties).sort());
+      }
+      Object.values(schema).forEach(inspect);
+    }
+    expect(payload.tools).toHaveLength(17);
+    for (const tool of payload.tools) {
+      expect(tool.function.strict).toBe(true);
+      inspect(tool.function.parameters);
+    }
+    const optional = payload.tools.find((t: any) => t.function.name === "get_object_edits").function.parameters.properties.assetId;
+    expect(optional.anyOf).toContainEqual({ type: "null" });
+    const estimate = payload.tools.find((t: any) => t.function.name === "estimate_timeline").function.parameters;
+    const nullable = Object.fromEntries(Object.keys(estimate.properties).map(key => [key, null]));
+    expect(validateModelToolCall("estimate_timeline", "a", { ...nullable, planId: "saved" }).args).toEqual({ planId: "saved" });
+    expect(() => validateModelToolCall("estimate_timeline", "b", { ...nullable, planId: "saved", projectId: "other" })).toThrow();
+    expect(() => validateModelToolCall("get_object_edits", "c", { projectId: "p", unknown: null })).toThrow();
+  } finally { complete.mockRestore(); }
+});
+
+it("keeps complete parallel tool groups across the 32-message boundary", async () => {
+  let turn = 0;
+  const draft = { schemaVersion: "video.edit-plan/v1", projectId: "p", baseTimelineRevision: "0",
+    baseAssetManifestHash: "a".repeat(64), intent: "trim", trimOperations: [], transformOperations: [], audioOperations: [],
+    transitionOperations: [], subtitleOperations: [], generationRequests: [], qaRequirements: [], maxCostMicros: "0", externalDestinations: [] };
+  const outcome = await new NativePlannerLoop({
+    projectId: "p", runId: "r", sessionId: "s", promptSignature: videoPlannerPromptSignature(),
+    provider: { async complete(messages) {
+      expect(messages.length).toBeLessThanOrEqual(32);
+      let pending: string[] = [];
+      for (const msg of messages) {
+        if (msg.role === "tool") {
+          expect(pending.shift()).toBe(msg.tool_call_id);
+        } else {
+          expect(pending).toEqual([]);
+          if (msg.role === "assistant") pending = (msg.tool_calls ?? []).map(c => c.id);
+        }
+      }
+      expect(pending).toEqual([]);
+      turn++;
+      return { content: null, toolCalls: turn < 10
+        ? [0, 1, 2].map(i => ({ id: "read-" + turn + "-" + i, name: "get_project_snapshot", argumentsJson: '{"projectId":"p"}' }))
+        : [{ id: "submit", name: "submit_edit_plan", argumentsJson: JSON.stringify(draft) }] };
+    } },
+    callTool: async call => call.tool === "submit_edit_plan" ? { planId: "saved" } : {}, onEvent: () => {},
+  }).execute("trim");
+  expect(outcome).toMatchObject({ status: "settled", planId: "saved" });
+  expect(turn).toBe(10);
 });

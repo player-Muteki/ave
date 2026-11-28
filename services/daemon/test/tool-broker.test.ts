@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { EditorError, type EditPlanDraftV1 } from "@ave/contracts";
+import { VideoToolCallSchema, EditorError, type EditPlanDraftV1 } from "@ave/contracts";
 import { AveToolBroker } from "../src/tool-broker.js";
 
 const HASH = "a".repeat(64);
@@ -229,4 +229,40 @@ describe("AveToolBroker project binding", () => {
     expect(input.draft.projectId).toBe(PROJECT);
     expect(input.principal).toEqual(principal);
   });
+});
+
+it("dispatches every declared tool with the session-bound project and principal", async () => {
+  const { broker, spies } = build();
+  const project = { projectId: PROJECT };
+  const asset = { assetId: "asset-0", contentHash: HASH };
+  const job = { jobId: "job-qa" };
+  const plan = { planId: "plan-0" };
+  const d = draft(PROJECT);
+  const cases = {
+    get_project_snapshot: [project, spies.getProjectSnapshot],
+    get_asset_metadata: [asset, spies.projects.plannerAssetMetadata],
+    get_job_status: [job, spies.getJob],
+    list_artifacts: [job, spies.jobs.listArtifacts],
+    get_object_edits: [project, spies.listObjectEdits],
+    validate_edit_plan: [d, spies.plans.validateProposal],
+    estimate_timeline: [plan, spies.plans.estimateTimeline],
+    submit_edit_plan: [d, spies.plans.createPlan],
+    get_contact_sheet: [asset, spies.getProjectSnapshot],
+    get_qa_report: [job, spies.getJob],
+    get_analysis: [asset, spies.jobs.analysisSummary],
+    get_plan: [plan, spies.getPlan],
+    get_scene_cuts: [asset, spies.sceneCuts],
+    get_waveform: [asset, spies.waveform],
+    get_planning_run: [project, spies.jobs.runLifecycle],
+    diff_plans: [{ ...plan, draft: d }, spies.getProjectSnapshot],
+    get_qa_summary: [job, spies.qaSummary],
+  } as const;
+  expect(Object.keys(cases).sort()).toEqual(VideoToolCallSchema.options.map(o => o.shape.tool.value).sort());
+  for (const [name, [args, handler]] of Object.entries(cases)) {
+    handler.mockClear();
+    await broker.invoke(call(name, args));
+    const seen = JSON.stringify(handler.mock.calls[0]);
+    expect(seen).toContain(JSON.stringify(PROJECT));
+    expect(seen).toContain(JSON.stringify(principal));
+  }
 });

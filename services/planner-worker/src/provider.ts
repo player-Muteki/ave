@@ -55,16 +55,12 @@ export function enforceContextBudget(
 
   if (truncated.length <= maxMessages) return truncated;
 
-  // Preserve leading system + initial user/snapshot messages plus the latest tail.
-  const headCount = Math.min(3, truncated.length);
-  const head = truncated.slice(0, headCount);
-  const tail = truncated.slice(-(maxMessages - headCount));
-
-  // Avoid starting tail with an orphaned tool message whose assistant tool_calls was trimmed.
-  while (tail.length > 0 && tail[0]?.role === "tool") {
-    tail.shift();
-  }
-  return [...head, ...tail];
+  // The loop starts with one system message and one user snapshot. Every tool
+  // response in the retained suffix must still follow its assistant request.
+  const head = truncated.slice(0, Math.max(0, Math.min(2, maxMessages)));
+  let start = truncated.length - (maxMessages - head.length);
+  while (truncated[start]?.role === "tool") start++;
+  return head.concat(truncated.slice(start));
 }
 
 export interface OpenAiProviderOptions {

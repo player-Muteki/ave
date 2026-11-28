@@ -64,6 +64,7 @@ export interface OpenAiToolDefinition {
   type: "function";
   function: {
     name: AllowedPlannerTool;
+    strict: true;
     description: string;
     parameters: Record<string, unknown>;
   };
@@ -74,6 +75,21 @@ const OPTION_BY_TOOL = new Map<
   (typeof VideoToolCallSchema.options)[number]
 >();
 
+function makeProviderStrict(schema: unknown): void {
+  if (!schema || typeof schema !== "object") return;
+  const node = schema as Record<string, unknown>;
+  if (node.type === "object") {
+    const properties = (node.properties ?? {}) as Record<string, unknown>;
+    const required = new Set((node.required ?? []) as string[]);
+    for (const [key, field] of Object.entries(properties)) {
+      if (!required.has(key)) properties[key] = { anyOf: [field, { type: "null" }] };
+    }
+    node.required = Object.keys(properties);
+    node.additionalProperties = false;
+  }
+  for (const child of Object.values(node)) makeProviderStrict(child);
+}
+
 export const PLANNER_OPENAI_TOOLS: readonly OpenAiToolDefinition[] = VideoToolCallSchema.options.map(
   (option) => {
     const name = option.shape.tool.value as AllowedPlannerTool;
@@ -82,10 +98,12 @@ export const PLANNER_OPENAI_TOOLS: readonly OpenAiToolDefinition[] = VideoToolCa
       name === "estimate_timeline" ? EstimateTimelineModelParameters : option.shape.args;
     const parameters = z.toJSONSchema(schemaForModel, { io: "input" }) as Record<string, unknown>;
     delete parameters.$schema;
+    makeProviderStrict(parameters);
     return {
       type: "function" as const,
       function: {
         name,
+        strict: true as const,
         description: PLANNER_TOOL_DESCRIPTIONS[name],
         parameters,
       },
@@ -142,7 +160,7 @@ export function validateModelToolCall(
   if (!option) {
     editorFailure("PERMISSION_DENIED", `Tool "${toolName}" is not registered`);
   }
-  const normalizedArgs = stripNulls(rawArgs, option.shape.args);
+  const normalizedArgs = stripNulls(rawArgs, toolName === "estimate_timeline" ? EstimateTimelineModelParameters : option.shape.args);
   const parsed = VideoToolCallSchema.safeParse({
     protocolVersion: "1",
     toolCallId: sha256Hex(toolCallId),
