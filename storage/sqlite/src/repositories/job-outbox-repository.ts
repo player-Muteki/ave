@@ -695,6 +695,41 @@ export class JobOutboxRepository {
     });
   }
 
+  recentPlanningHistory(projectId: string, principal: EditorPrincipal, providerScope: string) {
+    this.grants.authorizeProject(projectId, principal, "operator");
+    const rows = this.tx.db.prepare(
+      `SELECT prompt, reply FROM planning_history
+       WHERE project_id = ? AND principal_id = ? AND provider_scope = ?
+       ORDER BY seq DESC LIMIT 8`,
+    ).all(projectId, principal.principalId, providerScope) as Array<{ prompt: string; reply: string }>;
+    return rows.reverse();
+  }
+
+  recordSettledPlanningTurn(
+    projectId: string,
+    principal: EditorPrincipal,
+    providerScope: string,
+    prompt: string,
+    result: { runId: string; sessionId: string; detail?: string; planId?: string; planHash?: string },
+  ) {
+    this.grants.authorizeProject(projectId, principal, "operator");
+    const scope = [projectId, principal.principalId, providerScope];
+    this.tx.runInTransaction(() => {
+      const saved = this.tx.db.prepare(
+        `INSERT INTO planning_history(project_id, principal_id, provider_scope, run_id, prompt, reply)
+         VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(run_id) DO NOTHING`,
+      ).run(...scope, result.runId, prompt.slice(0, 2000), result.detail ?? "");
+      if (!saved.changes) return;
+      this.tx.db.prepare(
+        `DELETE FROM planning_history WHERE seq IN (
+           SELECT seq FROM planning_history WHERE project_id = ? AND principal_id = ? AND provider_scope = ?
+           ORDER BY seq DESC LIMIT -1 OFFSET 8
+         )`,
+      ).run(...scope);
+      this.tx.emit(projectId, "run.settled", result);
+    });
+  }
+
   recordExternalEvent(
     projectId: string,
     type: string,

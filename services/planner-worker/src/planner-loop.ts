@@ -20,6 +20,7 @@ export interface PlannerLoopOptions {
   sessionId: string;
   promptSignature: string;
   provider: PlannerProvider;
+  history?: Array<{ prompt: string; reply: string }>;
   maxTurns?: number;
   maxToolResultChars?: number;
   maxMessages?: number;
@@ -100,6 +101,9 @@ export class NativePlannerLoop {
           content:
             `The daemon bound this planning run to projectId "${this.options.projectId}".\n\n` +
             `Canonical project snapshot:\n${JSON.stringify(initialSnapshot)}\n\n` +
+            (this.options.history?.length
+              ? `Earlier completed exchanges in this project (oldest first). Use them to resolve follow-ups. Consult the current snapshot and get_plan for the actual state of proposed edits:\n${JSON.stringify(this.options.history)}\n\n`
+              : "") +
             `User edit request:\n${userPrompt}`,
         },
       ];

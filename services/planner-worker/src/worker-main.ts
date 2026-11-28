@@ -79,6 +79,7 @@ function main(): void {
           sessionId: message.sessionId,
           promptSignature: message.promptSignature,
           provider,
+          history: message.history,
           maxTurns: message.provider.maxTurns,
           callTool: invokeTool,
           onEvent: (event) => {

@@ -344,7 +344,7 @@ export function ChatGptPanel({
             </button>
           )}
           {account?.enabled && (
-            <p>将向所选模型发送指令、项目元数据与工具结果。源视频留在本机。</p>
+            <p>可接着上次的方案提要求。AVE 会向模型发送本项目最近 8 轮已完成的对话、当前指令、项目元数据与工具结果。源视频留在本机。</p>
           )}
           {runText && <p role="status">{runText}</p>}
         </div>

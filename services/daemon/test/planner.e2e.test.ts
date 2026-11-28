@@ -543,3 +543,54 @@ it("authorizes a desktop Responses run, submits once, and renders exactly 50 mut
     expect(audio.stdout.every(b=>b===0)).toBe(true);
   } finally {client.close();}
 },60000);
+
+it("sends completed project exchanges to Responses after reopening the daemon and isolates other projects", async () => {
+  const aveHome = await makeTempDir("ave-planner-memory-");
+  const worker = path.join(aveHome, "worker.mjs");
+  const capture = path.join(aveHome, "request.json");
+  const entry = path.resolve(__dirname, "../../planner-worker/dist/worker-main.js");
+  await writeFile(worker, `
+    import { writeFileSync } from "node:fs";
+    globalThis.fetch = async (_url, request) => {
+      writeFileSync(${JSON.stringify(capture)}, request.body);
+      const output = [{ type: "message", content: [{ type: "output_text", text: "我建议用淡入作为开场。" }] }];
+      return new Response("data: " + JSON.stringify({ type: "response.completed", response: { output } }) + "\\n\\n");
+    };
+    await import(${JSON.stringify(pathToFileURL(entry).href)});
+  `);
+  const options = { aveHome, plannerWorkerEntryPath: worker };
+  let daemon = await AveDaemon.create(options);
+  daemons.push(daemon);
+  const owner = daemon.ownerPrincipal();
+  const model = { provider: "chatgpt", id: "fixture-model" };
+  function createProject(requestId: string) {
+    const { projectId } = daemon.store.projects.createProject({ requestId, title: "Project", principal: owner });
+    daemon.store.projects.setProjectCloudPolicy({ projectId, requestId: "cloud", allowCloudModels: true }, owner);
+    daemon.store.plans.setModelPolicy({ projectId, requestId: "model", policy: {
+      provider: model.provider, modelId: model.id, location: "cloud", enabled: true, stages: ["planning"],
+    } }, owner);
+    return projectId;
+  }
+  async function ask(projectId: string, requestId: string, prompt: string) {
+    const run = await daemon.planner.startRun({ projectId, requestId, model, prompt }, owner, async () => "fixture");
+    await expect.poll(() => daemon.planner.status(projectId, run.runId, owner).state, { timeout: 5000 }).toBe("settled");
+    const request = JSON.parse(await readFile(capture, "utf8"));
+    return request.input.at(-1).content as string;
+  }
+  const project = createProject("first");
+  const other = createProject("other");
+  const original = "片头只留三秒，风格你来选。";
+  await ask(project, "first-turn", original);
+  await daemon.stop();
+  daemons.pop();
+  daemon = await AveDaemon.create(options);
+  daemons.push(daemon);
+  const followUp = "按你刚才建议的风格来，改成五秒。";
+  const request = await ask(project, "second-turn", followUp);
+  expect(request).toContain(original);
+  expect(request).toContain("我建议用淡入作为开场。");
+  expect(request).toContain(followUp);
+  const isolated = await ask(other, "unrelated", "剪出精彩片段。");
+  expect(isolated).not.toContain(original);
+  expect(isolated).not.toContain("我建议用淡入作为开场。");
+});

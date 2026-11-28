@@ -77,6 +77,7 @@ export const DaemonInitSchema = z
     sessionId: id,
     promptSignature: z.string().regex(/^[0-9a-f]{64}$/),
     provider: ProviderConfigSchema,
+    history: z.array(z.object({ prompt: z.string().max(2000), reply: z.string().max(2000) })).max(8).optional(),
   })
   .strict();
 

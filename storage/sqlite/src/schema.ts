@@ -150,6 +150,18 @@ CREATE TABLE IF NOT EXISTS artifacts (
   document TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS planning_history (
+  seq INTEGER PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+  principal_id TEXT NOT NULL,
+  provider_scope TEXT NOT NULL,
+  run_id TEXT NOT NULL UNIQUE,
+  prompt TEXT NOT NULL,
+  reply TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS planning_history_by_scope
+  ON planning_history(project_id, principal_id, provider_scope, seq);
+
 CREATE TABLE IF NOT EXISTS events (
   project_id TEXT NOT NULL,
   seq TEXT NOT NULL,

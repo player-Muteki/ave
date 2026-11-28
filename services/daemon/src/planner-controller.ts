@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -50,7 +51,8 @@ interface RunHandle {
   closed: Promise<void>;
   channel: IpcChannel<WorkerToDaemon, DaemonToWorker>;
   broker: AveToolBroker;
-  initialPrompt?: string;
+  prompt: string;
+  providerScope: string;
   state: PlanningRunStatus["state"];
   workerPid?: number;
 }
@@ -153,6 +155,8 @@ export class AvePlannerController implements PlannerControllerHook {
     }
 
     const { runId, sessionId } = receipt;
+    const providerScope = chatgpt ? "chatgpt" : createHash("sha256").update(provider.baseUrl).digest("hex");
+    const history = this.store.jobs.recentPlanningHistory(input.projectId, principal, providerScope);
     const child = spawn(process.execPath, [this.workerEntryPath], {
       stdio: ["pipe", "pipe", "ignore"],
       env: {
@@ -179,7 +183,8 @@ export class AvePlannerController implements PlannerControllerHook {
         runId,
         principal,
       }),
-      initialPrompt: input.prompt,
+      prompt: input.prompt,
+      providerScope,
       state: "running",
     };
 
@@ -220,6 +225,7 @@ export class AvePlannerController implements PlannerControllerHook {
         sessionId,
         promptSignature: videoPlannerPromptSignature(),
         provider,
+        history,
       },
       DaemonToWorkerSchema,
     );
@@ -242,7 +248,7 @@ export class AvePlannerController implements PlannerControllerHook {
     switch (message.kind) {
       case "hello":
         if (
-          handle.initialPrompt === undefined ||
+          handle.workerPid !== undefined ||
           message.runId !== handle.runId ||
           message.sessionId !== handle.sessionId ||
           handle.state !== "running"
@@ -251,10 +257,9 @@ export class AvePlannerController implements PlannerControllerHook {
         }
         handle.workerPid = message.workerPid;
         handle.channel.sendValidated(
-          { kind: "prompt", text: handle.initialPrompt },
+          { kind: "prompt", text: handle.prompt },
           DaemonToWorkerSchema,
         );
-        delete handle.initialPrompt;
         break;
 
       case "tool_call": {
@@ -291,19 +296,21 @@ export class AvePlannerController implements PlannerControllerHook {
 
       case "run_state":
         handle.state = message.state;
-        this.store.jobs.recordExternalEvent(
-          handle.projectId,
-          `run.${message.state}`,
-          {
-            runId: handle.runId,
-            sessionId: handle.sessionId,
-            ...(message.detail ? { detail: message.detail } : {}),
-            ...(message.planId ? { planId: message.planId } : {}),
-            ...(message.planHash ? { planHash: message.planHash } : {}),
-            ...(message.error ? { error: message.error } : {}),
-          },
-          handle.principal,
-        );
+        const result = {
+          runId: handle.runId,
+          sessionId: handle.sessionId,
+          ...(message.detail ? { detail: message.detail } : {}),
+          ...(message.planId ? { planId: message.planId } : {}),
+          ...(message.planHash ? { planHash: message.planHash } : {}),
+          ...(message.error ? { error: message.error } : {}),
+        };
+        if (message.state === "settled") {
+          this.store.jobs.recordSettledPlanningTurn(
+            handle.projectId, handle.principal, handle.providerScope, handle.prompt, result,
+          );
+        } else {
+          this.store.jobs.recordExternalEvent(handle.projectId, `run.${message.state}`, result, handle.principal);
+        }
         this.onProjectEvent(handle.projectId);
         if (
           message.state === "settled" ||
