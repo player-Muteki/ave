@@ -12,6 +12,7 @@ import type {
   ObjectEditWorkflow,
   ProjectSnapshot,
 } from "@ave/contracts";
+import { ObjectEditPanel } from "./ObjectEditPanel.js";
 import { buildSingleTrimDraft, formatError } from "./workbench-state.js";
 
 declare global {
@@ -42,23 +43,32 @@ export function App() {
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [objectEdits, setObjectEdits] = useState<ObjectEditWorkflow[]>([]);
 
+  const selectedProject = useRef("");
+  const refreshSequence = useRef(0);
   const refreshProject = useCallback(async (projectId: string) => {
     const client = clientRef.current;
-    if (!client) return;
-    const [snap, oeRes] = await Promise.all([
-      client.getProject(projectId),
-      client.call<{ workflows: ObjectEditWorkflow[] }>("video.v1.list_object_edits", { projectId }),
-    ]);
+    if (!client || selectedProject.current !== projectId) return;
+    const version = ++refreshSequence.current;
+    const [snap, edits] = await Promise.all([client.getProject(projectId),
+      client.call<{ workflows: ObjectEditWorkflow[] }>("video.v1.list_object_edits", { projectId })]);
+    if (version !== refreshSequence.current || selectedProject.current !== projectId || client !== clientRef.current) return;
     setSnapshot(snap);
-    setObjectEdits(oeRes.workflows);
-    if (!selectedAssetId && snap.assets[0]) {
-      setSelectedAssetId(snap.assets[0].assetId);
+    setObjectEdits(edits.workflows);
+    setSelectedAssetId(id => snap.assets.some(a => a.assetId === id) ? id : snap.assets[0]?.assetId ?? "");
+  }, []);
+
+  const selectProject = useCallback(async (projectId: string) => {
+    if (selectedProject.current !== projectId) {
+      selectedProject.current = projectId;
+      setSnapshot(null);
+      setObjectEdits([]);
+      setPreviewUrl("");
     }
-  }, [selectedAssetId]);
+    await refreshProject(projectId);
+  }, [refreshProject]);
 
   useEffect(() => {
     let active = true;
-    let unsubEvents: (() => void) | undefined;
     async function boot() {
       try {
         const cfg = window.aveDesktop
@@ -68,6 +78,7 @@ export function App() {
               ownerToken: new URLSearchParams(window.location.search).get("token") ?? "dev-token",
               aveHome: "browser",
             };
+        if (!active) return;
         const client = new AveClient({ url: cfg.wsUrl, auth: { kind: "localOwner", token: cfg.ownerToken } });
         clientRef.current = client;
         client.onConnectionChange((isConn) => {
@@ -77,21 +88,10 @@ export function App() {
         if (!active) return;
         setConnected(true);
         const list = await client.listProjects();
+        if (!active) return;
         setProjects(list.projects);
         setStatus(`已连接 (${cfg.aveHome})`);
-        if (list.projects[0]) {
-          const snap = await client.getProject(list.projects[0].projectId);
-          setSnapshot(snap);
-          const oeRes = await client.call<{ workflows: ObjectEditWorkflow[] }>(
-            "video.v1.list_object_edits",
-            { projectId: snap.projectId },
-          );
-          setObjectEdits(oeRes.workflows);
-          if (snap.assets[0]) setSelectedAssetId(snap.assets[0].assetId);
-          unsubEvents = await client.subscribe(snap.projectId, snap.latestSeq, () => {
-            void refreshProject(snap.projectId);
-          });
-        }
+        if (list.projects[0]) await selectProject(list.projects[0].projectId);
       } catch (err) {
         if (active) setStatus(`连接失败: ${formatError(err)}`);
       }
@@ -99,10 +99,25 @@ export function App() {
     void boot();
     return () => {
       active = false;
-      unsubEvents?.();
       clientRef.current?.close();
+      clientRef.current = null;
     };
-  }, [refreshProject]);
+  }, [selectProject]);
+
+  const projectId = snapshot?.projectId;
+  useEffect(() => {
+    if (!projectId || !clientRef.current) return;
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
+    const client = clientRef.current;
+    void client.subscribe(projectId, snapshot!.latestSeq, () => {
+      if (active) void refreshProject(projectId).catch(e => { if (active) setStatus(formatError(e)); });
+    }).then(stop => { if (active) unsubscribe = stop; else stop(); })
+      .catch(e => { if (active) setStatus(formatError(e)); });
+    return () => { active = false; unsubscribe?.(); };
+  }, [projectId, refreshProject]);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   const selectedAsset = useMemo(
     () => snapshot?.assets.find((a) => a.assetId === selectedAssetId) ?? snapshot?.assets[0],
@@ -116,10 +131,7 @@ export function App() {
       const snap = await client.createProject({ requestId: nextReqId("proj"), title: newTitle });
       const list = await client.listProjects();
       setProjects(list.projects);
-      setSnapshot(snap);
-      await client.subscribe(snap.projectId, snap.latestSeq, () => {
-        void refreshProject(snap.projectId);
-      });
+      await selectProject(snap.projectId);
       setStatus(`已创建项目 ${snap.title}`);
     } catch (err) {
       setStatus(formatError(err));
@@ -228,8 +240,8 @@ export function App() {
         assetId: selectedAsset.assetId,
         expectedRevision: snapshot.revision,
         sourceRange: {
-          start: { num: "0", den: "1" },
-          duration: { num: "1", den: "1" },
+          start: { num: startSec, den: "1" },
+          duration: { num: durSec, den: "1" },
         },
       });
       await refreshProject(snapshot.projectId);
@@ -239,47 +251,8 @@ export function App() {
     }
   };
 
-  const handleDecideTarget = async (
-    workflow: ObjectEditWorkflow,
-    objectId: string,
-    decision: "remove" | "keep" | "skip",
-  ) => {
-    const client = clientRef.current;
-    if (!client || !snapshot) return;
-    try {
-      await client.call("video.v1.decide_object_target", {
-        requestId: nextReqId("oedec"),
-        projectId: snapshot.projectId,
-        workflowId: workflow.workflowId,
-        expectedWorkflowRevision: workflow.workflowRevision,
-        decisions: [{ objectId, decision }],
-      });
-      await refreshProject(snapshot.projectId);
-      setStatus(`已记录对象 ${objectId} 决策: ${decision}`);
-    } catch (err) {
-      setStatus(formatError(err));
-    }
-  };
-
-  const handleReviewMask = async (workflow: ObjectEditWorkflow, approved: boolean) => {
-    const client = clientRef.current;
-    if (!client || !snapshot) return;
-    try {
-      await client.call("video.v1.review_object_mask", {
-        requestId: nextReqId("oemask"),
-        projectId: snapshot.projectId,
-        workflowId: workflow.workflowId,
-        expectedWorkflowRevision: workflow.workflowRevision,
-        maskRevisionId: workflow.maskRevisionId ?? "mask-rev-1",
-        approved,
-      });
-      await refreshProject(snapshot.projectId);
-      setStatus(approved ? "掩码已批准，进入生成审查阶段" : "掩码已驳回，待重选目标");
-    } catch (err) {
-      setStatus(formatError(err));
-    }
-  };
-
+  const queue = (snapshot?.approvals ?? []).filter(a => !objectEdits.some(wf => wf.maskApprovalId &&
+    (wf.maskApprovalId === a.approvalId || a.requiredInputs.some(input => input.type === "anchor_approval" && input.id === wf.maskApprovalId))));
   return (
     <div style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -301,7 +274,7 @@ export function App() {
             <button
               key={p.projectId}
               className={snapshot?.projectId === p.projectId ? "" : "secondary"}
-              onClick={() => void refreshProject(p.projectId)}
+              onClick={() => void selectProject(p.projectId).catch(e => setStatus(formatError(e)))}
             >
               {p.title} (rev {p.revision})
             </button>
@@ -328,8 +301,8 @@ export function App() {
               <div style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                 <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                   <input value={trimIntent} onChange={(e) => setTrimIntent(e.target.value)} placeholder="剪辑意图" />
-                  <input value={startSec} onChange={(e) => setStartSec(e.target.value)} style={{ width: 60 }} title="起始秒" />
-                  <input value={durSec} onChange={(e) => setDurSec(e.target.value)} style={{ width: 60 }} title="时长秒" />
+                  <input aria-label="开始秒数" value={startSec} onChange={(e) => setStartSec(e.target.value)} style={{ width: 60 }} title="起始秒" />
+                  <input aria-label="时长秒数" value={durSec} onChange={(e) => setDurSec(e.target.value)} style={{ width: 60 }} title="时长秒" />
                   <button onClick={() => void handleSubmitTrimPlan()}>提交裁剪方案</button>
                 </div>
               </div>
@@ -337,8 +310,8 @@ export function App() {
           </section>
 
           <section style={{ background: "var(--panel)", padding: 14, borderRadius: 10, border: "1px solid var(--border)" }}>
-            <h3 style={{ marginTop: 0 }}>2. 审批队列 ({snapshot.approvals.length})</h3>
-            {snapshot.approvals.map((a) => (
+            <h3 style={{ marginTop: 0 }}>2. 审批队列 ({queue.length})</h3>
+            {queue.map((a) => (
               <div key={a.approvalId} style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
                 <div>
                   <strong>{a.purpose}</strong> · {a.status} · {a.diffSummary.summary}
@@ -385,35 +358,8 @@ export function App() {
                   </button>
                 )}
               </div>
-              {objectEdits.map((oe) => (
-                <div key={oe.workflowId} style={{ marginTop: 8, padding: 8, border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 }}>
-                  <div>
-                    <strong>{oe.workflowId.slice(0, 12)}</strong> · 状态: {oe.state} · 候选: {oe.candidates.length}
-                  </div>
-                  {oe.candidates.length > 0 && oe.state === "awaiting_target_selection" && (
-                    <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                      {oe.candidates.map((c) => (
-                        <div key={c.objectId} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                          <span>{c.objectId} ({c.role})</span>
-                          <button onClick={() => void handleDecideTarget(oe, c.objectId, "remove")}>移除</button>
-                          <button className="secondary" onClick={() => void handleDecideTarget(oe, c.objectId, "keep")}>保留</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {oe.state === "awaiting_mask_review" && (
-                    <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
-                      <button onClick={() => void handleReviewMask(oe, true)}>批准掩码</button>
-                      <button className="secondary" onClick={() => void handleReviewMask(oe, false)}>驳回掩码</button>
-                    </div>
-                  )}
-                  {oe.qa && (
-                    <div style={{ marginTop: 4, color: "var(--muted)" }}>
-                      QA · residual={oe.qa.residualRatio} complete={oe.qa.completeRatio} flicker={oe.qa.flickerRatio}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {clientRef.current && objectEdits.map(oe => <ObjectEditPanel key={oe.workflowId}
+                client={clientRef.current!} snapshot={snapshot} workflow={oe} refresh={refreshProject} status={setStatus} />)}
             </div>
           </section>
         </div>
