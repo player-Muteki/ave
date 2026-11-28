@@ -97,7 +97,8 @@ it("previews an imported NTSC clip and submits the default two-second trim for r
     await page.getByLabel("时长秒数").fill("0.034");
     await page.getByRole("button", { name: "提交裁剪方案" }).click();
     await page.getByText(/实际时长 0\.033367 秒/).waitFor();
-    await page.getByRole("button", { name: "批准并执行" }).click();
+    const previewApproval = page.getByText(/^preview · pending ·/).locator("..");
+    await previewApproval.getByRole("button", { name: "批准并执行" }).click();
     await page.getByText(/awaiting_review/).nth(1).waitFor();
   });
 }, 60_000);
