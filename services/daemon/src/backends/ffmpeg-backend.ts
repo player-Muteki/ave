@@ -19,6 +19,7 @@ import {
   type StreamDescriptor,
 } from "@ave/contracts";
 import { assertRenderablePreview } from "@ave/domain";
+import { ffmpegOutputTimingArgs } from "../media-flags.js";
 import type {
   AnalysisArtifactsResult,
   ContactSheetData,
@@ -695,7 +696,9 @@ export class FfmpegBackend implements DeterministicBackend {
         "error",
         "-show_frames",
         "-show_entries",
-        "frame=stream_index,media_type,key_frame,pts,best_effort_timestamp,duration,pkt_duration:frame_side_data=",
+        // FFprobe 4.x rejects an empty frame_side_data section selector. Decoded
+        // side data remains optional and display-geometry checks fail closed.
+        "frame=stream_index,media_type,key_frame,pts,best_effort_timestamp,duration,pkt_duration",
         "-of",
         "json",
         sourcePath,
@@ -769,8 +772,7 @@ export class FfmpegBackend implements DeterministicBackend {
           "0:a:0?",
           "-vf",
           "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1",
-          "-fps_mode",
-          "vfr",
+          ...(await ffmpegOutputTimingArgs(this.tools.ffmpeg, "vfr")),
           "-enc_time_base:v",
           clock,
           "-c:v",
@@ -1101,8 +1103,7 @@ export class FfmpegBackend implements DeterministicBackend {
       filters.join(";"),
       "-map",
       vOut,
-      "-fps_mode",
-      "vfr",
+      ...(await ffmpegOutputTimingArgs(this.tools.ffmpeg, "vfr")),
       ...(kind === "preview" ? ["-enc_time_base:v", previewClock] : []),
       "-c:v",
       "libx264",
@@ -1587,7 +1588,18 @@ function parsePresentationFrames(json: string): unknown[] {
   ) {
     editorFailure("QA_FAILED", "No decoded frame list in probe output");
   }
-  return document.frames;
+  // Older ffprobe builds expose the same exact ticks as best_effort_timestamp
+  // and pkt_duration. Normalize once at the trust boundary so every consumer,
+  // including the Python sampling kernel, sees decimal string pts/duration.
+  return (document.frames as Array<Record<string, unknown>>).map((frame) => {
+    const pts = frame.pts ?? frame.best_effort_timestamp;
+    const duration = frame.duration ?? frame.pkt_duration;
+    return {
+      ...frame,
+      ...(typeof pts === "string" ? { pts } : {}),
+      ...(typeof duration === "string" ? { duration } : {}),
+    };
+  });
 }
 
 function parseRational(value: string): Rational {

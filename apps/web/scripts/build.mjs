@@ -15,6 +15,7 @@ await build({
   format: "esm",
   platform: "browser",
   target: ["es2022"],
+  conditions: ["ave-source", "import", "default"],
   sourcemap: true,
   jsx: "automatic",
 });

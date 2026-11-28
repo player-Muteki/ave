@@ -29,6 +29,7 @@ import {
 } from "@ave/contracts";
 import { sha256Json } from "@ave/domain";
 import type { AveStore } from "@ave/sqlite";
+import { ffmpegOutputTimingArgs } from "./media-flags.js";
 import { resolveMediaWorkerDir } from "./py-worker.js";
 import type { MediaWorkerHook } from "./rpc-registry.js";
 
@@ -240,8 +241,7 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
         `0:${frame.video.streamIndex}`,
         "-vf",
         `select=eq(n\\,${ordinal}),settb=${clock.num}/${clock.den},showinfo`,
-        "-fps_mode",
-        "passthrough",
+        ...(await ffmpegOutputTimingArgs(this.ffmpeg, "passthrough")),
         "-frames:v",
         "1",
         "-pix_fmt",
@@ -511,8 +511,7 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
       `0:${stream.streamIndex}`,
       "-vf",
       filter,
-      "-fps_mode",
-      "passthrough",
+      ...(await ffmpegOutputTimingArgs(this.ffmpeg, "passthrough")),
       "-frames:v",
       String(request.frameCount),
       "-threads:v",
@@ -668,7 +667,7 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
           "-show_streams",
           "-show_frames",
           "-show_entries",
-          "stream=codec_name,time_base:frame=pts",
+          "stream=codec_name,time_base:frame=pts,best_effort_timestamp",
           "-of",
           "json",
           "review.mp4",
@@ -677,14 +676,18 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
       );
       const probe = JSON.parse(probeResult.stdout) as {
         streams: Array<{ codec_name: string; time_base: string }>;
-        frames: Array<{ pts: number }>;
+        frames: Array<{ pts?: number | string; best_effort_timestamp?: number | string }>;
       };
       const [num, den] = String(probe.streams[0]?.time_base).split("/").map(BigInt);
+      const framePts = probe.frames.map((frame) => frame.pts ?? frame.best_effort_timestamp);
       if (
         probe.streams.length !== 1 ||
         probe.streams[0]?.codec_name !== "h264" ||
-        probe.frames.length !== pts.length ||
-        probe.frames.some((f, i) => BigInt(f.pts) * num! * 9n !== BigInt(i) * den!)
+        framePts.length !== pts.length ||
+        framePts.some(
+          (value, i) =>
+            value === undefined || BigInt(value) * num! * 9n !== BigInt(i) * den!,
+        )
       ) {
         editorFailure("QA_FAILED", "Review video frame clock mismatch");
       }
