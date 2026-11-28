@@ -92,7 +92,7 @@ it("previews an imported NTSC clip and submits the default two-second trim for r
     await page.getByRole("button", { name: "校验并加载成片" }).click();
     await page.waitForFunction(() => {
       const video = document.querySelector<HTMLVideoElement>('video[controls]:not([aria-label="素材预览"])');
-      return video && video.videoWidth === 160 && Math.abs(video.duration - 2.002) < 0.001;
+      return video && video.videoWidth === 640 && video.videoHeight === 360 && Math.abs(video.duration - 2.002) < 0.001;
     });
     await page.getByLabel("时长秒数").fill("0.034");
     await page.getByRole("button", { name: "提交裁剪方案" }).click();
