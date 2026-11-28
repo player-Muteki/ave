@@ -225,6 +225,7 @@
 
 - FilmCraft 上游 pin 更新到 `7b8e522d`（`research/upstream.json`，craft-libs `a4db7995`），源码审查见 `research/filmcraft-ba6fe105-to-7b8e522d.md`：新遁不启用为产物后端（导出/文档路径/控制桥均变，未构建验收），FFmpeg 继续承担确定性编辑。落地代码：新增离线门禁 `scripts/check_filmcraft_pin.py`（接入 `check_project.py`）固化 pin==审查 commit、审查文档存在且含不启用结论、capabilities 保持 `filmcraft available:false`、preview-profile 拒绝 filmcraft 后端、E13 探针从 upstream.json 读 pin；`get_capabilities` 的 filmcraft reason 改为引用审查 pin。本地 `check_project.py` 全绿。未跑真模型/e2e。
 
+- CI 补齐（video-tests.yml）： push/PR 现在会实跑套件： python 离线套件（契约 fixtures/rpc-surface/sampling/worker unit）、上游 pin+overlay 后的 vitest（server video 136项 + plugin 251项）、 build:server + tsgo typecheck，以及 FFmpeg 版本矩阵跑媒体检查。这次在本地验证中抓到了两个真实回归：planner 工具白名单漏了 get_object_edits（closed-session.mjs descriptions + closed-session.test.ts TOOL_NAMES），以及 store.ts 严格类型错误（SqliteStatement.run 返回 unknown）。
 - Copilot 闭环与 PR #13 取更优解（采用 #13 的 object_edits 持久工作流+P0-B/C/P1 链路）：删除自己 PR #12 的 object_sessions 会话模型及 bind/advance/mask-link，改用 #13 的 open_object_edit/record_object_candidates/decide_object_target/review_object_mask/record_object_qa/get/list_object_edits；保留不重叠的部分：快照摘要 objectEdits（workflow 摘要，最新 8 条）、planner 工具 get_object_edits（可按 assetId 过滤）、run 问题闭环 get_run_questions/answer_run_question、模型网关 model_policies + 云端开关（与 #13 的 model-gateway 本地工具记录互补，保留服务端强制层）。fixtures 196 例/137 defs，rpc-surface 63 case/59 export/26 read+7 manage 一致；本地 oes-smoke 按工作流全链路重写全绿。
 
 ## 环境与错误
