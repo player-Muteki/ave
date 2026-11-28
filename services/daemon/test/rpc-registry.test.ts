@@ -1,165 +1,219 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
-import * as contracts from "@ave/contracts";
-import type { AveCaller } from "@ave/domain";
+import { describe, expect, it, vi } from "vitest";
+import { EditorError } from "@ave/contracts";
+import { MANAGE_METHODS, READ_METHODS } from "@ave/domain";
 import { AveRpcRegistry, type AveRpcDependencies } from "../src/rpc-registry.js";
 
-const R0_SPEC = JSON.parse(
-  readFileSync(path.resolve(__dirname, "../../../conformance/r0-baseline/baseline-spec.json"), "utf8"),
-) as { rpcSurface: { mainSwitchMethods: string[] } };
+const HASH = "a".repeat(64);
 
-const contractRpcNames = Object.entries(contracts)
-  .filter(([, value]) => typeof (value as { name?: unknown }).name === "string")
-  .map(([, value]) => (value as { name: string }).name)
-  .filter((name) => name.startsWith("video.v1."))
-  .sort();
+const viewer = { principalId: "v", role: "viewer" as const, projectIds: ["p1"] };
+const operator = { principalId: "o", role: "operator" as const, projectIds: ["p1"] };
+const owner = { principalId: "owner", role: "owner" as const, projectIds: null };
 
-const viewer: AveCaller = {
-  principalId: "v1",
-  editorPrincipal: { principalId: "v1", role: "viewer", projectIds: null },
-};
-const operator: AveCaller = {
-  principalId: "op1",
-  editorPrincipal: { principalId: "op1", role: "operator", projectIds: null },
-};
-const owner: AveCaller = { principalId: "owner", isLocalOwner: true };
-
-function codeOf(fn: () => unknown): string | null {
-  try {
-    fn();
-    return null;
-  } catch (error) {
-    return (error as { code?: string }).code ?? String(error);
-  }
+function caller(editorPrincipal?: typeof viewer | typeof operator | typeof owner) {
+  return editorPrincipal
+    ? { principalId: editorPrincipal.principalId, editorPrincipal }
+    : { principalId: "anonymous" };
 }
 
-async function asyncCodeOf(fn: () => Promise<unknown>): Promise<string | null> {
-  try {
-    await fn();
-    return null;
-  } catch (error) {
-    return (error as { code?: string }).code ?? String(error);
-  }
+async function expectFailure(promise: Promise<unknown>, code: string): Promise<void> {
+  await expect(promise).rejects.toBeInstanceOf(EditorError);
+  await promise.catch((error: EditorError) => expect(error.code).toBe(code));
 }
 
-/** Minimal recording fake of the daemon dependencies; only the methods the tests invoke exist. */
-function makeDeps() {
-  const calls: string[] = [];
-  const deps = {
+function build(overrides: Partial<AveRpcDependencies> = {}) {
+  const snapshot = {
+    projectId: "p1",
+    revision: "0",
+    title: "Project",
+    baseAssetManifestHash: HASH,
+    assets: [],
+    plans: [],
+    approvals: [],
+    jobs: [],
+  };
+  const getProjectSnapshot = vi.fn(() => snapshot);
+  const listProjects = vi.fn(() => [{ projectId: "p1", title: "Project" }]);
+  const createPlan = vi.fn(() => ({ plan: { projectId: "p1", planId: "plan-1" } }));
+  const createProject = vi.fn(() => snapshot);
+  const revokeDevice = vi.fn(() => ({ revoked: true }));
+  const createInvitation = vi.fn(() => ({ invitationId: "inv-1", token: "tok" }));
+  const contactSheet = vi.fn(async () => ({ frames: 0 }));
+  const capabilities = vi.fn(async () => ({ posters: true }));
+  const burnInSubtitlesAvailable = vi.fn(async () => false);
+  const writeUploadChunk = vi.fn(async () => "262144");
+  const enqueue = vi.fn();
+
+  const deps: AveRpcDependencies = {
     store: {
-      projects: {
-        listProjects: (principal: unknown) => {
-          calls.push("projects.listProjects");
-          return [{ projectId: "p1", title: "t", revision: "0", principal: principal as never }];
-        },
-        createProject: () => {
-          calls.push("projects.createProject");
-          return { projectId: "p-new" };
-        },
-      },
-      objectEdits: {
-        recordObjectQa: () => {
-          calls.push("objectEdits.recordObjectQa");
-          return { workflowId: "object-edit-x", state: "completed" };
-        },
-      },
+      projects: { getProjectSnapshot, listProjects, createProject },
+      plans: { createPlan },
+      devices: { revokeDevice, createInvitation },
+      jobs: {},
+      objectEdits: {},
+    } as unknown as AveRpcDependencies["store"],
+    cas: {} as AveRpcDependencies["cas"],
+    backends: {
+      get: () => ({ burnInSubtitlesAvailable, contactSheet }),
+      capabilities,
+    } as unknown as AveRpcDependencies["backends"],
+    jobs: { enqueue, control: vi.fn() } as unknown as AveRpcDependencies["jobs"],
+    uploads: {
+      writeUploadChunk,
+      cancelUpload: vi.fn(async () => ({})),
+      commitUpload: vi.fn(async () => ({})),
+    } as unknown as AveRpcDependencies["uploads"],
+    queries: {} as DaemonQueries,
+    onProjectEvent: vi.fn(),
+    ...overrides,
+  };
+
+  return {
+    registry: new AveRpcRegistry(deps),
+    spies: {
+      getProjectSnapshot,
+      listProjects,
+      createPlan,
+      createProject,
+      revokeDevice,
+      createInvitation,
+      contactSheet,
+      capabilities,
+      burnInSubtitlesAvailable,
+      writeUploadChunk,
+      enqueue,
     },
-    cas: {},
-    backends: {},
-    jobs: {},
-    uploads: {},
-    queries: {},
-    onProjectEvent: () => {
-      calls.push("onProjectEvent");
-    },
-  } as unknown as AveRpcDependencies;
-  return { deps, calls };
+  };
 }
 
-describe("AveRpcRegistry security boundary", () => {
-  it("registers exactly the R0 main-switch methods and every contract RPC is handled", () => {
-    const { deps } = makeDeps();
-    const registry = new AveRpcRegistry(deps);
-    expect(registry.listRegisteredMethods()).toEqual([...R0_SPEC.rpcSurface.mainSwitchMethods].sort());
-    const registered = new Set(registry.listRegisteredMethods());
-    expect(contractRpcNames.length).toBeGreaterThan(50);
-    for (const name of contractRpcNames) {
-      expect(registered.has(name)).toBe(true);
-    }
+type DaemonQueries = AveRpcDependencies["queries"];
+
+describe("AveRpcRegistry authorization boundary", () => {
+  it("registers exactly the frozen 63-method surface and covers every read method", () => {
+    const { registry } = build();
+    const methods = registry.listRegisteredMethods();
+    expect(methods).toHaveLength(63);
+    expect(methods).toEqual([...methods].sort());
+    for (const method of READ_METHODS) expect(methods).toContain(method);
   });
 
-  it("rejects unknown and non-video methods before any handler runs", async () => {
-    const { deps, calls } = makeDeps();
-    const registry = new AveRpcRegistry(deps);
-    expect(await asyncCodeOf(() => registry.invoke("video.v1.nope", {}, owner))).toBe("CAPABILITY_UNAVAILABLE");
-    expect(await asyncCodeOf(() => registry.invoke("fs.readFile", {}, owner))).toBe("PERMISSION_DENIED");
-    expect(calls).toEqual([]);
+  it("denies an unauthenticated caller before any handler runs", async () => {
+    const { registry, spies } = build();
+    await expectFailure(registry.invoke("video.v1.get_project", { projectId: "p1" }, caller()), "UNAUTHENTICATED");
+    expect(spies.getProjectSnapshot).not.toHaveBeenCalled();
   });
 
-  it("denies a viewer write before the handler touches the store", async () => {
-    const { deps, calls } = makeDeps();
-    const registry = new AveRpcRegistry(deps);
-    const code = await asyncCodeOf(() =>
-      registry.invoke("video.v1.create_project", { requestId: "r1", title: "t" }, viewer),
-    );
-    expect(code).toBe("PERMISSION_DENIED");
-    expect(calls).toEqual([]);
+  it("denies a non-video namespace even for the owner", async () => {
+    const { registry } = build();
+    await expectFailure(registry.invoke("fs.read_file", {}, caller(owner)), "PERMISSION_DENIED");
   });
 
-  it("allows a viewer read and reaches the store", async () => {
-    const { deps, calls } = makeDeps();
-    const registry = new AveRpcRegistry(deps);
-    const result = (await registry.invoke("video.v1.list_projects", {}, viewer)) as {
-      projects: unknown[];
-    };
-    expect(result.projects).toHaveLength(1);
-    expect(calls).toEqual(["projects.listProjects"]);
-  });
-
-  it("gates owner-only manage methods: operator denied, owner reaches the store", async () => {
-    const { deps, calls } = makeDeps();
-    const registry = new AveRpcRegistry(deps);
-    const qaInput = {
-      requestId: "qa-1",
+  it("lets a viewer read but blocks a viewer write", async () => {
+    const { registry, spies } = build();
+    await expect(registry.invoke("video.v1.get_project", { projectId: "p1" }, caller(viewer))).resolves.toMatchObject({
       projectId: "p1",
-      workflowId: "object-edit-x",
-      expectedWorkflowRevision: "3",
-      qa: { frames: "9", residualRatio: 0.01, completeRatio: 0.99, flickerRatio: 0.01 },
-    };
-    expect(await asyncCodeOf(() => registry.invoke("video.v1.record_object_qa", qaInput, operator))).toBe(
+    });
+    expect(spies.getProjectSnapshot).toHaveBeenCalledTimes(1);
+
+    await expectFailure(registry.invoke("video.v1.contact_sheet", {}, caller(viewer)), "PERMISSION_DENIED");
+    expect(spies.contactSheet).not.toHaveBeenCalled();
+  });
+
+  it("blocks operator from manage methods and from revoking devices", async () => {
+    const { registry, spies } = build();
+    await expectFailure(
+      registry.invoke("video.v1.create_invitation", { role: "viewer", projectIds: ["p1"] }, caller(operator)),
       "PERMISSION_DENIED",
     );
-    expect(calls).toEqual([]);
-    const result = (await registry.invoke("video.v1.record_object_qa", qaInput, owner)) as {
-      workflow: { state: string };
-    };
-    expect(result.workflow.state).toBe("completed");
-    expect(calls).toEqual(["objectEdits.recordObjectQa"]);
+    await expectFailure(registry.invoke("video.v1.revoke_device", { deviceId: "d1" }, caller(operator)), "PERMISSION_DENIED");
+    expect(spies.createInvitation).not.toHaveBeenCalled();
+    expect(spies.revokeDevice).not.toHaveBeenCalled();
   });
 
-  it("validates the input shape against the contract schema before the store runs", async () => {
-    const { deps, calls } = makeDeps();
-    const registry = new AveRpcRegistry(deps);
-    // missing requestId/title
-    expect(await asyncCodeOf(() => registry.invoke("video.v1.create_project", {}, owner))).toBe(
-      "INVALID_ARGUMENT",
-    );
-    // wrong type for a field
-    expect(
-      await asyncCodeOf(() =>
-        registry.invoke("video.v1.create_project", { requestId: "r", title: 42 }, owner),
-      ),
-    ).toBe("INVALID_ARGUMENT");
-    expect(calls).toEqual([]);
-    // well-formed input passes schema and reaches the store
-    const result = (await registry.invoke(
-      "video.v1.create_project",
-      { requestId: "r1", title: "hello" },
-      owner,
-    )) as { projectId: string };
-    expect(result.projectId).toBe("p-new");
-    expect(calls).toEqual(["projects.createProject", "onProjectEvent"]);
+  it("allows the owner through the same manage methods", async () => {
+    const { registry, spies } = build();
+    await expect(
+      registry.invoke("video.v1.revoke_device", { deviceId: "d1" }, caller(owner)),
+    ).resolves.toEqual({ deviceId: "d1", revoked: true });
+    expect(spies.revokeDevice).toHaveBeenCalledWith("d1");
+  });
+
+  it("rejects a write payload before touching storage", async () => {
+    const { registry, spies } = build();
+    await expectFailure(registry.invoke("video.v1.get_project", { projectId: 42 }, caller(owner)), "INVALID_ARGUMENT");
+    expect(spies.getProjectSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("reports CAPABILITY_UNAVAILABLE for an unregistered method after authorization", async () => {
+    const { registry } = build();
+    await expectFailure(registry.invoke("video.v1.configure_worker", { workerId: "w1" }, caller(owner)), "CAPABILITY_UNAVAILABLE");
+  });
+
+  it("keeps direct filesystem import closed for the owner", async () => {
+    const { registry } = build();
+    await expectFailure(registry.invoke("video.v1.import_asset", {}, caller(owner)), "PERMISSION_DENIED");
+  });
+
+  it("fails closed when the media worker is absent", async () => {
+    const { registry } = build();
+    const request = {
+      projectId: "p1",
+      assetId: "a1",
+      streamUid: "s0",
+      sourcePresentationIndexHash: HASH,
+      frame: 0,
+      points: [],
+    };
+    await expectFailure(registry.invoke("video.v1.inspect_frame", request, caller(owner)), "CAPABILITY_UNAVAILABLE");
+  });
+
+  it("rejects non-binary upload chunks", async () => {
+    const { registry, spies } = build();
+    await expectFailure(registry.invoke("video.v1.write_upload_chunk", { hello: 1 }, caller(owner)), "INVALID_ARGUMENT");
+    expect(spies.writeUploadChunk).not.toHaveBeenCalled();
+  });
+
+  it("advertises optional capabilities only when they are attached", async () => {
+    const plain = build();
+    const plainFeatures = (await plain.registry.invoke("video.v1.get_capabilities", {}, caller(owner))) as {
+      features: string[];
+      operations: string[];
+    };
+    expect(plainFeatures.features).not.toContain("native-planner");
+    expect(plainFeatures.features).not.toContain("mask-tracking");
+    expect(plainFeatures.operations).toHaveLength(63);
+
+    const attached = build({
+      mediaWorker: {
+        hasMaskTracking: () => true,
+        hasVace: () => false,
+      } as unknown as AveRpcDependencies["mediaWorker"],
+    });
+    attached.registry.attachPlanner({
+      startRun: vi.fn(),
+      steerRun: vi.fn(),
+      followUpRun: vi.fn(),
+      stopRun: vi.fn(),
+      status: vi.fn(),
+    } as unknown as NonNullable<AveRpcDependencies["planner"]>);
+    const features = ((await attached.registry.invoke("video.v1.get_capabilities", {}, caller(owner))) as {
+      features: string[];
+    }).features;
+    expect(features).toContain("native-planner");
+    expect(features).toContain("mask-tracking");
+    expect(features).not.toContain("vace-preview");
+  });
+});
+
+describe("authorization matrix consistency", () => {
+  it("keeps read and manage sets disjoint", () => {
+    for (const method of READ_METHODS) expect(MANAGE_METHODS.has(method)).toBe(false);
+  });
+
+  // configure_worker stays in the frozen MANAGE_METHODS matrix but has no native
+  // handler. Non-owners are denied, owners reach CAPABILITY_UNAVAILABLE above.
+  it("documents the unregistered manage entry", () => {
+    const { registry } = build();
+    expect(MANAGE_METHODS.has("video.v1.configure_worker")).toBe(true);
+    expect(registry.listRegisteredMethods()).not.toContain("video.v1.configure_worker");
   });
 });

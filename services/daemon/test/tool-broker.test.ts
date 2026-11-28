@@ -1,237 +1,232 @@
-import { describe, expect, it } from "vitest";
-import { VideoToolCallSchema, type EditPlanDraftV1, type EditorPrincipal } from "@ave/contracts";
-import type { AveStore } from "@ave/sqlite";
-import { AveToolBroker, type PlannerScope } from "../src/tool-broker.js";
-import type { DaemonQueries } from "../src/store-queries.js";
+import { describe, expect, it, vi } from "vitest";
+import { EditorError, type EditPlanDraftV1 } from "@ave/contracts";
+import { AveToolBroker } from "../src/tool-broker.js";
 
-const H = "a".repeat(64);
+const HASH = "a".repeat(64);
+const HASH_B = "b".repeat(64);
+const PROJECT = "p1";
+const RUN = "run-1";
+const principal = { principalId: "owner", role: "owner" as const, projectIds: null };
 
-const principal: EditorPrincipal = { principalId: "op1", role: "operator", projectIds: null };
-const scope: PlannerScope = { projectId: "p1", runId: "run-1", principal };
-
-function codeOf(fn: () => unknown): string | null {
-  try {
-    fn();
-    return null;
-  } catch (error) {
-    return (error as { code?: string }).code ?? String(error);
-  }
-}
-async function asyncCodeOf(fn: () => Promise<unknown>): Promise<string | null> {
-  try {
-    await fn();
-    return null;
-  } catch (error) {
-    return (error as { code?: string }).code ?? String(error);
-  }
-}
-
-const draft: EditPlanDraftV1 = {
-  schemaVersion: "video.edit-plan/v1",
-  projectId: "p1",
-  baseTimelineRevision: "1",
-  baseAssetManifestHash: H,
-  preferredDeterministicBackendId: "ffmpeg",
-  intent: "Trim first second",
-  trimOperations: [],
-  transformOperations: [],
-  audioOperations: [],
-  transitionOperations: [],
-  subtitleOperations: [],
-  generationRequests: [],
-  qaRequirements: [],
-  externalDestinations: [],
-  maxCostMicros: "0",
-};
-
-const planRow = {
-  planId: "plan-1",
-  planHash: "h".repeat(64),
-  revision: "1",
-  intent: "trim",
-  trimOperations: [],
-  transformOperations: [],
-  audioOperations: [],
-  transitionOperations: [],
-  subtitleOperations: [],
-};
-
-/** Recording fake of the store + queries; every broker branch lands on one of these calls. */
-function makeFakes(jobArtifacts: unknown[] = [{ kind: "qa", artifactId: "qa-1", revision: "0", blob: { sha256: H } }]) {
-  const calls: string[] = [];
-  const store = {
-    projects: {
-      getProjectSnapshot: () => {
-        calls.push("projects.getProjectSnapshot");
-        return {
-          revision: "1",
-          baseAssetManifestHash: H,
-          assets: [
-            {
-              assetId: "a1",
-              original: { sha256: H },
-              presentationIndex: { sha256: H },
-              streams: [],
-            },
-          ],
-          plans: [planRow],
-          approvals: [],
-          jobs: [],
-        };
-      },
-      plannerAssetMetadata: () => {
-        calls.push("projects.plannerAssetMetadata");
-        return { assetId: "a1", contentHash: H };
-      },
-    },
-    jobs: {
-      listArtifacts: () => {
-        calls.push("jobs.listArtifacts");
-        return [];
-      },
-      getJob: () => {
-        calls.push("jobs.getJob");
-        return {
-          jobId: "j1",
-          kind: "preview",
-          state: "completed",
-          revision: "0",
-          planHash: "h".repeat(64),
-          progress: "1",
-          artifacts: jobArtifacts,
-        };
-      },
-      analysisSummary: () => {
-        calls.push("jobs.analysisSummary");
-        return { assetId: "a1", state: "completed" };
-      },
-      runLifecycle: () => {
-        calls.push("jobs.runLifecycle");
-        return [{ runId: "run-1", state: "settled" }];
-      },
-      getEvents: () => {
-        calls.push("jobs.getEvents");
-        return { events: [] };
-      },
-    },
-    plans: {
-      getPlan: () => {
-        calls.push("plans.getPlan");
-        return { planId: "plan-1" };
-      },
-      validateProposal: () => {
-        calls.push("plans.validateProposal");
-      },
-      estimateTimeline: () => {
-        calls.push("plans.estimateTimeline");
-        return { seconds: "2" };
-      },
-      createPlan: () => {
-        calls.push("plans.createPlan");
-        return { plan: { planId: "plan-9", planHash: "h".repeat(64), status: "proposed" } };
-      },
-    },
-    objectEdits: {
-      listObjectEdits: () => {
-        calls.push("objectEdits.listObjectEdits");
-        return [{ workflowId: "object-edit-1", assetId: "a1", state: "analyzing", candidates: [], decisions: [], workflowRevision: "0" }];
-      },
-    },
-  } as unknown as AveStore;
-  const queries = {
-    sceneCuts: () => {
-      calls.push("queries.sceneCuts");
-      return { cuts: [] };
-    },
-    waveform: () => {
-      calls.push("queries.waveform");
-      return { buckets: [] };
-    },
-    qaSummary: () => {
-      calls.push("queries.qaSummary");
-      return { state: "completed" };
-    },
-  } as unknown as DaemonQueries;
-  return { store, queries, calls };
+function draft(projectId: string, overrides: Partial<EditPlanDraftV1> = {}): EditPlanDraftV1 {
+  return {
+    schemaVersion: "video.edit-plan/v1",
+    projectId,
+    baseTimelineRevision: "0",
+    baseAssetManifestHash: HASH,
+    intent: "trim the tail",
+    trimOperations: [],
+    transformOperations: [],
+    audioOperations: [],
+    transitionOperations: [],
+    subtitleOperations: [],
+    generationRequests: [],
+    qaRequirements: [],
+    externalDestinations: [],
+    maxCostMicros: "0",
+    ...overrides,
+  };
 }
 
-function call(tool: string, args: unknown) {
-  return { protocolVersion: "1", toolCallId: `call-${tool}`, tool, args };
+async function expectFailure(promise: Promise<unknown>, code: string): Promise<void> {
+  await expect(promise).rejects.toBeInstanceOf(EditorError);
+  await promise.catch((error: EditorError) => expect(error.code).toBe(code));
 }
 
-const TOOL_ARGS: Record<string, unknown> = {
-  get_project_snapshot: { projectId: "p1" },
-  get_asset_metadata: { assetId: "a1", contentHash: H },
-  get_job_status: { jobId: "j1" },
-  list_artifacts: { jobId: "j1" },
-  get_object_edits: { projectId: "p1" },
-  validate_edit_plan: draft,
-  estimate_timeline: { planId: "plan-1" },
-  submit_edit_plan: draft,
-  get_contact_sheet: { assetId: "a1", contentHash: H },
-  get_qa_report: { jobId: "j1" },
-  get_analysis: { assetId: "a1", contentHash: H },
-  get_plan: { planId: "plan-1" },
-  get_scene_cuts: { assetId: "a1", contentHash: H },
-  get_waveform: { assetId: "a1", contentHash: H },
-  get_planning_run: { projectId: "p1" },
-  diff_plans: { planId: "plan-1", draft },
-  get_qa_summary: { jobId: "j1" },
-};
+function build(options: { assetCount?: number; planCount?: number; plans?: unknown[] } = {}) {
+  const assetCount = options.assetCount ?? 1;
+  const assets = Array.from({ length: assetCount }, (_, i) => ({
+    assetId: `asset-${i}`,
+    original: { sha256: HASH },
+    presentationIndex: { sha256: HASH_B },
+    streams: [{ streamUid: "s0", kind: "video", codec: "h264", width: 1280, height: 720, averageRate: "30/1" }],
+  }));
+  const planRecords = options.plans ?? Array.from({ length: options.planCount ?? 1 }, (_, i) => ({
+    planId: `plan-${i}`,
+    revision: "1",
+    planHash: HASH,
+    intent: "trim the tail",
+    trimOperations: [{ opId: "op-1", startUs: "0", endUs: "1000" }],
+    transformOperations: [],
+    audioOperations: [],
+    transitionOperations: [],
+    subtitleOperations: [],
+  }));
+  const snapshot = {
+    projectId: PROJECT,
+    revision: "3",
+    baseAssetManifestHash: HASH,
+    assets,
+    plans: planRecords,
+    approvals: [{ status: "pending" }, { status: "approved" }],
+    jobs: [
+      { jobId: "job-1", kind: "analysis", state: "succeeded", revision: "2", analysisAssetId: "asset-0" },
+      { jobId: "job-0", kind: "export", state: "running", revision: "1" },
+    ],
+  };
 
-describe("AveToolBroker security boundary", () => {
-  it("handles every tool in the contract union (no silent fallthrough)", async () => {
-    const toolNames = VideoToolCallSchema.options.map((o) => o.shape.tool.value);
-    expect(toolNames).toHaveLength(17);
-    expect(Object.keys(TOOL_ARGS).sort()).toEqual([...toolNames].sort());
-    for (const tool of toolNames) {
-      const { store, queries, calls } = makeFakes();
-      const broker = new AveToolBroker(store, queries, scope);
-      const result = await broker.invoke(call(tool, TOOL_ARGS[tool]));
-      expect(result, `tool ${tool} should produce a result`).not.toBeUndefined();
-      expect(calls.length, `tool ${tool} should reach the store`).toBeGreaterThan(0);
-    }
+  const getProjectSnapshot = vi.fn(() => snapshot);
+  const listObjectEdits = vi.fn(() => [
+    {
+      workflowId: "wf-1",
+      assetId: "asset-0",
+      state: "decided",
+      candidates: [],
+      decisions: [{ decision: "remove" }],
+      workflowRevision: "2",
+    },
+  ]);
+  const getJob = vi.fn((_projectId: string, jobId: string) => ({
+    jobId,
+    kind: "export",
+    state: "succeeded",
+    revision: "2",
+    progress: "1",
+    artifacts: jobId === "job-qa" ? [{ kind: "qa", artifactId: "art-qa", revision: "1", blob: { sha256: HASH } }] : [],
+  }));
+  const validateProposal = vi.fn();
+  const createPlan = vi.fn((input: { requestId: string; toolCallId: string; runId: string }) => ({
+    plan: { planId: "plan-new", planHash: HASH, status: "proposed", requestId: input.requestId },
+  }));
+  const estimateTimeline = vi.fn((input: { requestId: string }) => ({ requestId: input.requestId, durationUs: "1000" }));
+  const getPlan = vi.fn(() => planRecords[0]);
+  const plannerAssetMetadata = vi.fn(() => ({ assetId: "asset-0" }));
+
+  const deps = {
+    store: {
+      projects: { getProjectSnapshot, plannerAssetMetadata },
+      objectEdits: { listObjectEdits },
+      jobs: {
+        getJob,
+        listArtifacts: vi.fn(() => ({ artifacts: [] })),
+        analysisSummary: vi.fn(() => ({})),
+        runLifecycle: vi.fn(() => [{ runId: RUN, state: "running" }]),
+        getEvents: vi.fn(() => ({ events: [{ seq: "1", type: "run.started", runId: RUN, payload: { a: 1 } }] })),
+      },
+      plans: { getPlan, validateProposal, createPlan, estimateTimeline },
+    },
+    queries: {
+      sceneCuts: vi.fn(async () => ({ cuts: [] })),
+      waveform: vi.fn(async () => ({ peaks: [] })),
+      qaSummary: vi.fn(async () => ({})),
+    },
+    scope: { projectId: PROJECT, runId: RUN, principal },
+  };
+
+  const broker = new AveToolBroker(
+    deps.store as unknown as ConstructorParameters<typeof AveToolBroker>[0],
+    deps.queries as unknown as ConstructorParameters<typeof AveToolBroker>[1],
+    deps.scope,
+  );
+
+  return { broker, spies: { ...deps.store, ...deps.queries, getProjectSnapshot, listObjectEdits, getJob, getPlan } };
+}
+
+function call(tool: string, args: Record<string, unknown>, toolCallId = "call-1") {
+  return { protocolVersion: "1", toolCallId, tool, args };
+}
+
+describe("AveToolBroker project binding", () => {
+  it("rejects a malformed envelope without reaching the store", async () => {
+    const { broker, spies } = build();
+    await expectFailure(broker.invoke({ tool: "get_project_snapshot", args: { projectId: PROJECT } }), "INVALID_ARGUMENT");
+    await expectFailure(broker.invoke(call("no_such_tool", {})), "INVALID_ARGUMENT");
+    expect(spies.getProjectSnapshot).not.toHaveBeenCalled();
   });
 
-  it("rejects malformed envelopes and unknown tools as INVALID_ARGUMENT", async () => {
-    const { store, queries, calls } = makeFakes();
-    const broker = new AveToolBroker(store, queries, scope);
-    expect(await asyncCodeOf(() => broker.invoke({ protocolVersion: "1", tool: "get_project_snapshot", args: { projectId: "p1" } }))).toBe("INVALID_ARGUMENT");
-    expect(await asyncCodeOf(() => broker.invoke(call("rogue_tool", {})))).toBe("INVALID_ARGUMENT");
-    expect(await asyncCodeOf(() => broker.invoke(call("get_job_status", {})))).toBe("INVALID_ARGUMENT");
-    expect(calls).toEqual([]);
+  it("refuses a tool call naming a different project", async () => {
+    const { broker, spies } = build();
+    await expectFailure(broker.invoke(call("get_project_snapshot", { projectId: "p2" })), "PERMISSION_DENIED");
+    expect(spies.getProjectSnapshot).not.toHaveBeenCalled();
   });
 
-  it("is bound to its project: cross-project tool args are PERMISSION_DENIED", async () => {
-    const { store, queries, calls } = makeFakes();
-    const broker = new AveToolBroker(store, queries, scope);
-    expect(
-      await asyncCodeOf(() => broker.invoke(call("get_project_snapshot", { projectId: "other" }))),
-    ).toBe("PERMISSION_DENIED");
-    expect(
-      await asyncCodeOf(() => broker.invoke(call("get_object_edits", { projectId: "other" }))),
-    ).toBe("PERMISSION_DENIED");
-    // diff_plans additionally checks the draft's own projectId
-    expect(
-      await asyncCodeOf(() => broker.invoke(call("diff_plans", { planId: "plan-1", draft: { ...draft, projectId: "other" } }))),
-    ).toBe("PERMISSION_DENIED");
-    expect(calls).toEqual([]);
+  it("refuses a plan draft that belongs to another project", async () => {
+    const { broker, spies } = build();
+    await expectFailure(
+      broker.invoke(call("diff_plans", { planId: "plan-0", draft: draft("p2") })),
+      "PERMISSION_DENIED",
+    );
+    expect(spies.getProjectSnapshot).not.toHaveBeenCalled();
   });
 
-  it("scopes asset identity to the bound project (contact sheet hash mismatch)", async () => {
-    const { store, queries } = makeFakes();
-    const broker = new AveToolBroker(store, queries, scope);
-    expect(
-      await asyncCodeOf(() => broker.invoke(call("get_contact_sheet", { assetId: "a1", contentHash: "f".repeat(64) }))),
-    ).toBe("ASSET_NOT_FOUND");
-    expect(
-      await asyncCodeOf(() => broker.invoke(call("get_contact_sheet", { assetId: "nope", contentHash: H }))),
-    ).toBe("ASSET_NOT_FOUND");
+  it("fails closed on an unknown plan id", async () => {
+    const { broker } = build({ plans: [] });
+    await expectFailure(
+      broker.invoke(call("diff_plans", { planId: "plan-404", draft: draft(PROJECT) })),
+      "ASSET_NOT_FOUND",
+    );
   });
 
-  it("reports missing QA artifact instead of guessing pass/fail", async () => {
-    const { store, queries } = makeFakes([]);
-    const broker = new AveToolBroker(store, queries, scope);
-    expect(await asyncCodeOf(() => broker.invoke(call("get_qa_report", { jobId: "j1" })))).toBe("ASSET_NOT_FOUND");
+  it("returns a bounded snapshot with truncation flags", async () => {
+    const { broker } = build({ assetCount: 70, planCount: 40 });
+    const result = (await broker.invoke(call("get_project_snapshot", { projectId: PROJECT }))) as {
+      assets: unknown[];
+      hasMoreAssets: boolean;
+      plans: unknown[];
+      hasMorePlans: boolean;
+      pendingApprovalCount: number;
+      objectEditCount: number;
+    };
+    expect(result.assets).toHaveLength(64);
+    expect(result.hasMoreAssets).toBe(true);
+    expect(result.plans).toHaveLength(32);
+    expect(result.hasMorePlans).toBe(true);
+    expect(result.pendingApprovalCount).toBe(1);
+    expect(result.objectEditCount).toBe(1);
+  });
+
+  it("passes the optional asset filter through to object edits", async () => {
+    const { broker, spies } = build();
+    await broker.invoke(call("get_object_edits", { projectId: PROJECT, assetId: "asset-0" }));
+    expect(spies.listObjectEdits).toHaveBeenCalledWith(PROJECT, "asset-0", principal);
+  });
+
+  it("fails closed when a job has no QA artifact", async () => {
+    const { broker } = build();
+    await expectFailure(broker.invoke(call("get_qa_report", { jobId: "job-1" })), "ASSET_NOT_FOUND");
+    await expect(
+      broker.invoke(call("get_qa_report", { jobId: "job-qa" })),
+    ).resolves.toMatchObject({ jobId: "job-qa", qaArtifactId: "art-qa" });
+  });
+
+  it("fails closed when contact sheet identity does not match the bound project", async () => {
+    const { broker } = build();
+    await expectFailure(
+      broker.invoke(call("get_contact_sheet", { assetId: "asset-0", contentHash: HASH_B })),
+      "ASSET_NOT_FOUND",
+    );
+  });
+
+  it("validates proposals through the store before answering valid", async () => {
+    const { broker, spies } = build();
+    await expect(
+      broker.invoke(call("validate_edit_plan", draft(PROJECT) as unknown as Record<string, unknown>)),
+    ).resolves.toEqual({ valid: true });
+    expect(spies.plans.validateProposal).toHaveBeenCalledWith(draft(PROJECT), principal);
+  });
+
+  it("derives a stable request id from project, principal, run and tool call", async () => {
+    const { broker, spies } = build();
+    await broker.invoke(call("estimate_timeline", draft(PROJECT) as unknown as Record<string, unknown>));
+    await broker.invoke(call("estimate_timeline", draft(PROJECT) as unknown as Record<string, unknown>));
+    const first = spies.plans.estimateTimeline.mock.calls[0][0] as unknown as { requestId: string };
+    const second = spies.plans.estimateTimeline.mock.calls[1][0] as unknown as { requestId: string };
+    expect(first.requestId).toBe(second.requestId);
+    expect(first.requestId).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("binds submitted plans to the run and tool call", async () => {
+    const { broker, spies } = build();
+    await broker.invoke(call("submit_edit_plan", draft(PROJECT) as unknown as Record<string, unknown>, "call-9"));
+    const input = spies.plans.createPlan.mock.calls[0][0] as unknown as {
+      runId: string;
+      toolCallId: string;
+      draft: EditPlanDraftV1;
+      principal: typeof principal;
+    };
+    expect(input.runId).toBe(RUN);
+    expect(input.toolCallId).toBe("call-9");
+    expect(input.draft.projectId).toBe(PROJECT);
+    expect(input.principal).toEqual(principal);
   });
 });

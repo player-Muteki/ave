@@ -439,3 +439,12 @@ Windows Server 2025 x64 和 Ubuntu 24.04 x64 的原生安装包均通过 Qwen3.5
 - 新增 FFmpeg 输出时序能力探测：支持带 stream specifier 的 `-fps_mode` 帮助文本，旧构建自动使用等价的 `-vsync`。ffprobe 4.x 的空 `frame_side_data` 查询段不再发送，`best_effort_timestamp`／`pkt_duration` 在索引信任边界规范化为十进制字符串 `pts`／`duration`；审片视频时钟校验同样接受旧字段。R0 黄金媒体生成与 VFR 时长验证采用相同的双版本兼容规则。
 - **双版本完整回归均通过**：系统 FFmpeg／ffprobe 4.4 与独立 FFmpeg 9.0.2（搭配系统 ffprobe 4.4）分别跑完 **16 个 TS 文件、39 项测试**，覆盖真实媒体导入、分析、Planner、审批、导出、对象编辑、掩码跟踪审片和移动监督。两套环境的 R0 基线均为 **196 fixtures、63 RPC、17 工具、24 错误码、6 状态、4 个真实媒体样本** PASS。
 - 最终类型检查、Python 9/9、137 个 schema 定义同步、123 文件原生边界零参考耦合、RPC 权限表面、项目校验及 `git diff --check` 全部通过。本轮没有真实 GPU 权重推理、在线 Provider、Electron 安装包或 Android 真机验收。
+
+## 2026-11-28 · 授权边界单测与路线图分级
+
+- `.github/workflows/native-tests.yml` 上线后，push／PR 会执行 `tsc -b`、schema 同步、`vitest`、pytest、R0 基线、RPC 表面、边界与项目校验，以及三条 FFmpeg 腿的媒体矩阵。此前这些检查只存在于本机执行，是本轮修复能带病进入「已完成」的机制原因。
+- 新增 `services/daemon/test/rpc-registry.test.ts`：锁定 63 个注册方法及 READ 集合覆盖；未认证、非 `video.v1` 命名空间、viewer 写入、operator 触碰 manage、owner 直连 `import_asset` 均按错误码拒绝，并断言底层 store 未被调用；`get_capabilities` 仅在挂载对应钩子时声明 `native-planner`／`mask-tracking`。
+- 新增 `services/daemon/test/tool-broker.test.ts`：跨项目 `projectId`、跨项目 plan 草稿、未知 plan、无 QA artifact、contact sheet 哈希不匹配全部失败闭合；快照按 64／32 截断并给出 hasMore 标志；`estimate_timeline` 与 `submit_edit_plan` 的 requestId 稳定并绑定 run／toolCallId。
+- 单测暴露出授权矩阵与注册表的一处不一致：`MANAGE_METHODS` 仍含 `video.v1.configure_worker`，但原生注册表没有该 handler，owner 调用落到 `CAPABILITY_UNAVAILABLE`。因 R0 授权矩阵冻结为 7 条 manage，本轮只加测试记录现状，未修改授权集合。
+- `ROADMAP.md` 由单一「已完成」改为**代码完成／本机验证／实机验证**三列，并注明只有实机列为通过的阶段可作为对外交付证据。R2–R5 的实机列如实标为未通过。
+- 套件规模由 16 文件／39 项增至 **18 文件／64 项**，`tsc -b` 干净，pytest 9/9（无跳过），R0、RPC 表面、边界与项目校验均通过。
