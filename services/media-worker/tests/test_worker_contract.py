@@ -66,4 +66,5 @@ def test_optional_people_detector_when_onnx_and_cv2_present():
     pytest.importorskip("onnxruntime")
     import people_detector
 
-    assert hasattr(people_detector, "detect_people_candidates")
+    assert callable(people_detector.detect_people_candidates)
+    assert people_detector.detect_people is people_detector.detect_people_candidates

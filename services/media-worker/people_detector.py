@@ -358,7 +358,7 @@ def track_metrics(track: Track, frame_width: int, frame_height: int) -> dict[str
     }
 
 
-def detect_people(
+def detect_people_candidates(
     observations: Iterable[Observation],
     backend: str = "hog",
     model_path: str | None = None,
@@ -369,9 +369,9 @@ def detect_people(
     score_threshold: float = 0.3,
     iou_threshold: float = 0.3,
 ) -> dict[str, Any]:
-    """Run a detector over decoded frames and return normalized tracks.
+    """Run a detector over decoded frames and return role-agnostic track candidates.
 
-    ``model_path`` is required for ``yolox-onnx``; the file is opened read-only
+    This is the worker-facing public entry point. ``model_path`` is required for ``yolox-onnx``; the file is opened read-only
     by onnxruntime. No download, no network, no cache write.
     """
     frames = _checked_frames(observations)
@@ -445,6 +445,10 @@ def detect_people(
             for track in tracks
         ],
     }
+
+
+# Keep the earlier internal name as a compatibility alias for existing callers.
+detect_people = detect_people_candidates
 
 
 def _median_box(track: Track) -> dict[str, float]:

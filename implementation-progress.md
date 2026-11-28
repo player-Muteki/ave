@@ -427,3 +427,11 @@ Windows Server 2025 x64 和 Ubuntu 24.04 x64 的原生安装包均通过 Qwen3.5
 2026 年 11 月 26 日，团队仓库公开发布未签名桌面 Demo。远端标签 `v0.1.0` 指向安装包的构建提交 `fe56aaec492ff20a51a77b3c8b9602304aa95d89`。发布页提供四个安装包与七个配套附件。Windows 实测环境为 Windows Server 2025 x64，Windows 11 未实测，Intel Mac 安装包作为附加下载。[下载 v0.1.0](https://github.com/player-Muteki/ave/releases/tag/v0.1.0)
 
 草稿发布前已回读核对所有附件。发布页可匿名访问；按发布决定，公开下载的重复校验在部分附件通过后结束。[草稿安装包回读记录](https://github.com/player-Muteki/ave/actions/runs/45780821889)
+
+## 2026-11-28 · Native AVE 验收修复
+
+- 基于原生主线 `d263f21` 完整复验后，统一人物检测 Worker 的公开入口为 `detect_people_candidates`，保留 `detect_people` 兼容别名。Python Worker 契约测试由 8/9 修为 **9/9**。
+- Web 打包器启用内部包既有的 `ave-source` 导出条件；删除所有已生成 `dist` 后，无需预先执行 TypeScript 构建即可直接生成工作台 bundle，对应 2 项测试通过。根目录新增 `generate:schema` 命令，与 README 的复验步骤一致。
+- 新增 FFmpeg 输出时序能力探测：支持带 stream specifier 的 `-fps_mode` 帮助文本，旧构建自动使用等价的 `-vsync`。ffprobe 4.x 的空 `frame_side_data` 查询段不再发送，`best_effort_timestamp`／`pkt_duration` 在索引信任边界规范化为十进制字符串 `pts`／`duration`；审片视频时钟校验同样接受旧字段。R0 黄金媒体生成与 VFR 时长验证采用相同的双版本兼容规则。
+- **双版本完整回归均通过**：系统 FFmpeg／ffprobe 4.4 与独立 FFmpeg 9.0.2（搭配系统 ffprobe 4.4）分别跑完 **16 个 TS 文件、39 项测试**，覆盖真实媒体导入、分析、Planner、审批、导出、对象编辑、掩码跟踪审片和移动监督。两套环境的 R0 基线均为 **196 fixtures、63 RPC、17 工具、24 错误码、6 状态、4 个真实媒体样本** PASS。
+- 最终类型检查、Python 9/9、137 个 schema 定义同步、123 文件原生边界零参考耦合、RPC 权限表面、项目校验及 `git diff --check` 全部通过。本轮没有真实 GPU 权重推理、在线 Provider、Electron 安装包或 Android 真机验收。

@@ -30,6 +30,11 @@ def sha256_file(path: Path) -> str:
 
 def generate_samples(out_dir: Path) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
+    help_text = run_cmd(["ffmpeg", "-hide_banner", "-h", "full"]).stdout
+    timing_flag = "-fps_mode" if any(
+        line.lstrip().startswith(("-fps_mode ", "-fps_mode:", "-fps_mode["))
+        for line in help_text.splitlines()
+    ) else "-vsync"
     created: list[Path] = []
 
     # 1. cfr_25fps_av.mp4: 1.5s smptebars + 1.5s testsrc2 (deterministic scene cut) + 48kHz stereo AAC
@@ -73,7 +78,7 @@ def generate_samples(out_dir: Path) -> list[Path]:
         "-filter_complex",
         "[0:v]settb=1/90000,setpts='if(lt(N,25),N*3600,25*3600+(N-25)*6000)'[v];[1:a]pan=stereo|c0=c0|c1=c0[a]",
         "-map", "[v]", "-map", "[a]",
-        "-fps_mode", "vfr", "-enc_time_base", "1/90000", "-video_track_timescale", "90000",
+        timing_flag, "vfr", "-enc_time_base", "1/90000", "-video_track_timescale", "90000",
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
         "-c:a", "aac", "-b:a", "96k",
         "-movflags", "+faststart",
@@ -147,10 +152,14 @@ def verify_samples(out_dir: Path) -> list[dict]:
             frames = json.loads(
                 run_cmd([
                     "ffprobe", "-v", "error", "-select_streams", "v:0",
-                    "-show_entries", "frame=duration", "-print_format", "json", str(path),
+                    "-show_entries", "frame=duration,pkt_duration", "-print_format", "json", str(path),
                 ]).stdout
             ).get("frames", [])
-            durations = {f.get("duration") for f in frames if f.get("duration") is not None}
+            durations = {
+                f.get("duration", f.get("pkt_duration"))
+                for f in frames
+                if f.get("duration", f.get("pkt_duration")) is not None
+            }
             distinct_durations = len(durations)
             if distinct_durations < 2:
                 raise RuntimeError(f"{name}: expected VFR with >=2 frame durations, got {durations}")

@@ -11,6 +11,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -b",
+    "generate:schema": "node packages/contracts/scripts/generate-schema.mjs",
     "check:boundaries": "python3 scripts/check_native_boundaries.py"
   },
   "dependencies": {
