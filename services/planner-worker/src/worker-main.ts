@@ -12,6 +12,7 @@ import {
 } from "./ipc.js";
 import { NativePlannerLoop } from "./planner-loop.js";
 import { videoPlannerPromptSignature } from "./prompt.js";
+import { ChatGptResponses } from "./chatgpt-responses.js";
 import { OpenAiCompatibleProvider } from "./provider.js";
 
 /**
@@ -68,7 +69,10 @@ function main(): void {
           process.exitCode = 1;
           return;
         }
-        const provider = new OpenAiCompatibleProvider(message.provider);
+        const config = message.provider;
+        const provider = config.transport === "chatgpt-responses"
+          ? new ChatGptResponses(config.apiKey!, config.model, config.timeoutMs)
+          : new OpenAiCompatibleProvider(config);
         loop = new NativePlannerLoop({
           projectId: message.projectId,
           runId: message.runId,

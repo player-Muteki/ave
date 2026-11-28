@@ -37,7 +37,8 @@ describe("@ave/desktop security & daemon launcher", () => {
     expect(isAllowedIpcChannel("ave:get-daemon-config")).toBe(true);
     expect(isAllowedIpcChannel("ave:pick-source-file")).toBe(true);
     expect(isAllowedIpcChannel("ave:exec-shell")).toBe(false);
-    expect(ALLOWED_IPC_CHANNELS).toHaveLength(2);
+    expect(ALLOWED_IPC_CHANNELS).toContain("ave:account-plan");
+    expect(isAllowedIpcChannel("ave:account-token")).toBe(false);
 
     const exposed: Record<string, Record<string, () => Promise<unknown>>> = {};
     const invoked: string[] = [];

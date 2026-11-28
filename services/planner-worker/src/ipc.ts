@@ -16,6 +16,7 @@ const id = z.string().min(1).max(128);
 export const ProviderConfigSchema = z
   .object({
     baseUrl: z.string().url(),
+    transport: z.literal("chatgpt-responses").optional(),
     apiKey: z.string().optional(),
     model: z.string().min(1),
     maxTurns: z.number().int().min(1).max(32).default(12),

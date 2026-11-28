@@ -107,9 +107,26 @@ export class AvePlannerController implements PlannerControllerHook {
   async startRun(
     input: StartPlanningRunInput,
     principal: EditorPrincipal,
+    desktopAccess?: () => Promise<string>,
   ): Promise<PlanningRunStatus> {
     this.store.devices.authorizeProject(input.projectId, principal, "operator");
-    const provider = this.resolveProviderConfig(input.model);
+    const chatgpt = input.model?.provider === "chatgpt";
+    const checkCloud = () => {
+      if (!desktopAccess || !input.model || !this.store.projects.cloudModelsAllowed(input.projectId) ||
+          !this.store.plans.modelAllowed(input.projectId, "planning", input.model, principal)) {
+        editorFailure("PERMISSION_DENIED", "请在本机桌面为此项目启用所选 ChatGPT 云模型");
+      }
+    };
+    let provider: ProviderConfig;
+    if (chatgpt) {
+      checkCloud();
+      const token = await desktopAccess!();
+      checkCloud();
+      provider = { transport:"chatgpt-responses", baseUrl:"https://api.openai.com/v1", model:input.model!.id,
+        apiKey:token, timeoutMs:120000, maxTurns:12 };
+    } else {
+      provider = this.resolveProviderConfig(input.model);
+    }
 
     if (!existsSync(this.workerEntryPath)) {
       editorFailure(

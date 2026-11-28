@@ -1,5 +1,7 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { StartPlanningRunInputSchema } from "@ave/contracts";
+import { ChatGptAccount, type SecretStorage } from "./chatgpt-account.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { launchDesktopDaemon } from "./daemon-launcher.js";
 import { buildDesktopWindowOptions, isAllowedIpcChannel } from "./security.js";
 
@@ -14,11 +16,14 @@ export async function startElectronDesktopApp(): Promise<void> {
       quit(): void;
       getPath(name: string): string;
     };
+    safeStorage: SecretStorage;
+    shell: { openExternal(url:string):Promise<void> };
     BrowserWindow: new (options: ReturnType<typeof buildDesktopWindowOptions>) => {
+      webContents: {mainFrame:unknown; setWindowOpenHandler(handler:()=>{action:"deny"}):void};
       loadFile(filePath: string): Promise<void>;
     };
     ipcMain: {
-      handle(channel: string, listener: () => Promise<unknown>): void;
+      handle(channel: string, listener: (event:{sender:unknown;senderFrame?:{url:string}},input?:unknown) => Promise<unknown>): void;
     };
     dialog: {
       showOpenDialog(options: Record<string, unknown>): Promise<{ canceled: boolean; filePaths: string[] }>;
@@ -29,11 +34,20 @@ export async function startElectronDesktopApp(): Promise<void> {
   const aveHome = path.join(electron.app.getPath("userData"), "ave-home");
   const daemon = await launchDesktopDaemon({ aveHome });
 
-  const registerSafe = (channel: string, handler: () => Promise<unknown>) => {
+  const preloadPath = path.join(__dirname, "preload.cjs");
+  const win = new electron.BrowserWindow(buildDesktopWindowOptions(preloadPath));
+  const webHtml = path.resolve(__dirname, "../../web/dist/browser/index.html");
+  win.webContents.setWindowOpenHandler(()=>({action:"deny"}));
+  const account = new ChatGptAccount(path.join(electron.app.getPath("userData"),"chatgpt"),electron.safeStorage,url=>electron.shell.openExternal(url));
+  const registerSafe = (channel: string, handler: (input?:unknown) => Promise<unknown>) => {
     if (!isAllowedIpcChannel(channel)) {
       throw new Error(`Disallowed IPC channel: ${channel}`);
     }
-    electron.ipcMain.handle(channel, handler);
+    electron.ipcMain.handle(channel, async (event,input) => {
+      if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame ||
+          event.senderFrame?.url !== pathToFileURL(webHtml).href) throw new Error("无效的桌面请求来源");
+      return handler(input);
+    });
   };
 
   registerSafe("ave:get-daemon-config", async () => ({
@@ -50,9 +64,21 @@ export async function startElectronDesktopApp(): Promise<void> {
     return res.canceled ? null : (res.filePaths[0] ?? null);
   });
 
-  const preloadPath = path.join(__dirname, "preload.cjs");
-  const win = new electron.BrowserWindow(buildDesktopWindowOptions(preloadPath));
-  const webHtml = path.resolve(__dirname, "../../web/dist/browser/index.html");
+  registerSafe("ave:account-status",async()=>account.status());
+  registerSafe("ave:account-login",async()=>account.login());
+  registerSafe("ave:account-cancel",async()=>account.cancel());
+  registerSafe("ave:account-logout",async()=>account.logout());
+  registerSafe("ave:account-models",async()=>account.models());
+  registerSafe("ave:account-usage",async()=>electron.shell.openExternal("https://chatgpt.com/settings/usage"));
+  registerSafe("ave:account-plan",async raw=>{
+    const input = StartPlanningRunInputSchema.parse(raw);
+    if (input.model?.provider !== "chatgpt") throw new Error("请选择 ChatGPT 模型");
+    const version = account.sessionVersion;
+    return daemon.startChatGpt(input,async()=>{
+      if(version !== account.sessionVersion) throw new Error("账号已变更");
+      return account.access();
+    });
+  });
   await win.loadFile(webHtml);
 
   electron.app.on("window-all-closed", () => {
