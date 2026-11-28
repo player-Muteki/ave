@@ -43,6 +43,8 @@ def main():
     parser.add_argument("--media", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--builder", default="electron-builder")
+    parser.add_argument("--headless-dmg", action="store_true", help="Create a macOS DMG without mounting a writable disk image")
+    parser.add_argument("--builder-cli", type=Path)
     parser.add_argument("--electron-dist", type=Path)
     args = parser.parse_args()
     suffix = ".exe" if os.name == "nt" else ""
@@ -69,9 +71,27 @@ def main():
             config["electronDist"] = str(args.electron_dist.resolve())
         config_path = work / "builder.json"
         config_path.write_text(json.dumps(config))
-        command = [args.builder, "--projectDir", str(entry), "--config", str(config_path), "--publish", "never"]
+        builder = ["node", str(args.builder_cli.resolve())] if args.builder_cli else [args.builder]
+        command = [*builder, "--projectDir", str(entry), "--config", str(config_path), "--publish", "never"]
         command.append("--arm64" if platform.machine().lower() in ("arm64","aarch64") else "--x64")
+        if args.headless_dmg:
+            if platform.system() != "Darwin":
+                parser.error("--headless-dmg requires macOS")
+            command.append("--dir")
         subprocess.run(command, check=True, env={**os.environ, "AVE_PACKAGE_PAYLOAD":str(payload),"AVE_PACKAGE_MEDIA":str(media)})
+        if args.headless_dmg:
+            folder = "mac-arm64" if platform.machine() == "arm64" else "mac"
+            app = args.output.resolve() / folder / "AVE.app"
+            image_root = work / "disk"
+            image_root.mkdir()
+            subprocess.run(["ditto", str(app), str(image_root / "AVE.app")], check=True)
+            (image_root / "Applications").symlink_to("/Applications")
+            raw = work / "native.dmg"
+            subprocess.run(["hdiutil","makehybrid","-hfs","-hfs-volume-name","AVE","-o",str(raw),str(image_root)],check=True)
+            final = args.output.resolve() / f"AVE-{sha[:8]}-{platform.machine()}.dmg"
+            subprocess.run(["hdiutil","convert",str(raw),"-format","UDZO","-o",str(final)],check=True)
+            subprocess.run(["hdiutil","verify",str(final)],check=True)
+
 
 
 if __name__ == "__main__":

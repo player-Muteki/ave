@@ -9,7 +9,7 @@ from fractions import Fraction
 from typing import Iterable
 
 import numpy as np
-from scenedetect.common import FrameTimecode
+from scenedetect import FrameTimecode
 from scenedetect.detectors import AdaptiveDetector
 
 

@@ -41,6 +41,7 @@ export interface AvePlannerControllerOptions {
 }
 
 interface RunHandle {
+  chatgpt:boolean;
   projectId: string;
   runId: string;
   sessionId: string;
@@ -165,6 +166,7 @@ export class AvePlannerController implements PlannerControllerHook {
     });
 
     const handle: RunHandle = {
+      chatgpt,
       projectId: input.projectId,
       runId,
       sessionId,
@@ -352,6 +354,10 @@ export class AvePlannerController implements PlannerControllerHook {
       state: handle.state,
       ...(handle.workerPid ? { workerPid: handle.workerPid } : {}),
     };
+  }
+
+  async stopDesktopRuns() {
+    await Promise.allSettled([...this.runs.values()].filter(h=>h.chatgpt).map(h=>this.stopRun(h.projectId,h.runId,h.principal)));
   }
 
   async stopRun(

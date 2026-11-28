@@ -16,7 +16,11 @@ export interface LaunchedDaemon {
   port: number;
   ownerToken: string;
   pid: number;
-  startChatGpt(input:StartPlanningRunInput, access:()=>Promise<string>):Promise<PlanningRunStatus>;
+  cancelChatGpt(): void;
+  startChatGpt(
+    input: StartPlanningRunInput,
+    access: () => Promise<string>,
+  ): Promise<PlanningRunStatus>;
   stop(): Promise<void>;
 }
 
@@ -32,10 +36,12 @@ export interface DaemonLaunchOptions {
 export async function launchDesktopDaemon(
   options: DaemonLaunchOptions = {},
 ): Promise<LaunchedDaemon> {
-  const ownerToken = options.ownerToken ?? randomBytes(24).toString("base64url");
+  const ownerToken =
+    options.ownerToken ?? randomBytes(24).toString("base64url");
   const distCli = path.join(REPO_ROOT, "services/daemon/dist/cli.js");
   const srcCli = path.join(REPO_ROOT, "services/daemon/src/cli.ts");
-  const cliPath = options.daemonCliPath ?? (existsSync(distCli) ? distCli : srcCli);
+  const cliPath =
+    options.daemonCliPath ?? (existsSync(distCli) ? distCli : srcCli);
   const useTsx = cliPath.endsWith(".ts");
 
   const args = useTsx ? ["--import", "tsx", cliPath] : [cliPath];
@@ -67,7 +73,9 @@ export async function launchDesktopDaemon(
   }>((resolve, reject) => {
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      reject(new Error(`AVE daemon startup timed out: ${stderrLines.join("")}`));
+      reject(
+        new Error(`AVE daemon startup timed out: ${stderrLines.join("")}`),
+      );
     }, options.startupTimeoutMs ?? 15_000);
 
     child.once("error", (err) => {
@@ -76,7 +84,9 @@ export async function launchDesktopDaemon(
     });
     child.once("exit", (code) => {
       clearTimeout(timer);
-      reject(new Error(`AVE daemon exited early (${code}): ${stderrLines.join("")}`));
+      reject(
+        new Error(`AVE daemon exited early (${code}): ${stderrLines.join("")}`),
+      );
     });
 
     const rl = readline.createInterface({ input: child.stdout! });
@@ -89,7 +99,13 @@ export async function launchDesktopDaemon(
           healthUrl?: string;
           port?: number;
         };
-        if (parsed.ready && parsed.wsUrl && parsed.healthUrl && parsed.aveHome && parsed.port) {
+        if (
+          parsed.ready &&
+          parsed.wsUrl &&
+          parsed.healthUrl &&
+          parsed.aveHome &&
+          parsed.port
+        ) {
           clearTimeout(timer);
           rl.close();
           resolve({
@@ -109,28 +125,46 @@ export async function launchDesktopDaemon(
     ...ready,
     ownerToken,
     pid: child.pid ?? 0,
+    cancelChatGpt() {
+      if (child.connected) child.send({ kind: "desktop-logout" });
+    },
     startChatGpt(input, access) {
       const id = randomUUID();
-      return new Promise((resolve,reject) => {
-        const finish = (error?:string, result?:PlanningRunStatus) => {
+      return new Promise((resolve, reject) => {
+        const finish = (error?: string, result?: PlanningRunStatus) => {
           clearTimeout(timer);
           child.off("message", onMessage);
           child.off("exit", exited);
-          if (result) resolve(result); else reject(new Error(error ?? "后台连接中断"));
+          if (result) resolve(result);
+          else reject(new Error(error ?? "后台连接中断"));
         };
         const exited = () => finish();
-        const onMessage = async (msg: {kind?:string;id?:string;exchange?:string;result?:PlanningRunStatus;error?:string}) => {
+        const onMessage = async (msg: {
+          kind?: string;
+          id?: string;
+          exchange?: string;
+          result?: PlanningRunStatus;
+          error?: string;
+        }) => {
           if (msg?.id !== id) return;
-          if (msg.kind === "desktop-result") finish(msg.error,msg.result);
+          if (msg.kind === "desktop-result") finish(msg.error, msg.result);
           if (msg.kind === "need-credential" && msg.exchange) {
-            const token = await access().catch(()=>undefined);
-            if (child.connected) child.send({kind:"credential",id:msg.exchange,token}, err=>{if(err) finish();});
+            const token = await access().catch(() => undefined);
+            if (child.connected)
+              child.send(
+                { kind: "credential", id: msg.exchange, token },
+                (err) => {
+                  if (err) finish();
+                },
+              );
           }
         };
-        const timer = setTimeout(()=>finish("规划请求超时"),35000);
-        child.on("message",onMessage);
-        child.once("exit",exited);
-        child.send({kind:"desktop-start",id,input}, err=>{if(err) finish();});
+        const timer = setTimeout(() => finish("规划请求超时"), 35000);
+        child.on("message", onMessage);
+        child.once("exit", exited);
+        child.send({ kind: "desktop-start", id, input }, (err) => {
+          if (err) finish();
+        });
       });
     },
     stop: () =>
