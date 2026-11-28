@@ -105,6 +105,9 @@ export function ObjectEditPanel({ client, snapshot, workflow: wf, refresh, statu
   return <fieldset disabled={busy || stale} style={{ marginTop: 12, border: "1px solid var(--border)" }}>
     <legend>{asset?.displayName} · {stageNames[wf.state]}</legend>
     {stale && <p>项目版本已更新，请重新选择素材并开启对象编辑。</p>}
+    {!wf.workerJobId && ["analyzing", "awaiting_mask_review", "awaiting_generation_review"].includes(wf.state) && !wf.maskApprovalId &&
+      <button onClick={() => void act(() => client.call("video.v1.open_object_edit", { projectId, assetId: wf.assetId,
+        requestId: crypto.randomUUID(), expectedRevision, sourceRange: wf.sourceRange }))}>重新检测此片段</button>}
     {wf.error && <p role="alert">{wf.error.code} · {wf.error.sanitizedDetail}</p>}
     {wf.state === "completed" && !wf.candidates.length && <p>所选片段中未检测到人物。</p>}
     {wf.state === "awaiting_target_selection" && asset && <>
@@ -124,7 +127,7 @@ export function ObjectEditPanel({ client, snapshot, workflow: wf, refresh, statu
       <ReviewMedia client={client} projectId={projectId} id={wf.maskRevisionId} kind="anchor" sourceHash={wf.assetContentHash} onViewed={setViewed} />
       <button disabled={viewed !== wf.maskRevisionId} onClick={() => void review(true)}>批准掩码</button>
       <button disabled={viewed !== wf.maskRevisionId} onClick={() => void review(false)}>驳回并重新生成掩码</button>
-    </> : <p>正在生成候选掩码…</p>)}
+    </> : wf.workerJobId && <p>正在生成候选掩码…</p>)}
     {wf.state === "awaiting_generation_review" && <>
       {(!track || track.state === "failed" || track.state === "cancelled") && (span && span.frameCount >= 9
         ? <button onClick={() => void trackMask()}>追踪九帧掩码</button> : <p>所选范围不足九帧，请重新选择片段。</p>)}

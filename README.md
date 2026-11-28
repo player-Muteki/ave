@@ -32,6 +32,8 @@ conformance/
 
 前置环境：Node.js 22+（内置 `node:sqlite`）、Python 3.11+（`pytest`、`numpy`、`Pillow`）、`ffmpeg`、`ffprobe`。本原生仓库可直接独立构建，无需恢复任何外部参考仓库。
 
+浏览器端到端测试使用 Chromium。安装依赖后可运行 `npx playwright-core install chromium`，或将 `AVE_TEST_CHROMIUM` 指向已有的 Chromium 可执行文件。
+
 ```bash
 npm install --offline --no-audit --no-fund --legacy-peer-deps
 node apps/web/scripts/build.mjs

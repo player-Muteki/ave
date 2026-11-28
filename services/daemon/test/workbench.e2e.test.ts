@@ -13,8 +13,11 @@ it("creates a project and reviews a recorded object removal in the built Chromiu
   const daemon = await AveDaemon.create({ aveHome: home, mediaWorkerTestAdapter: recordedWorker() });
   try {
     const address = await daemon.start();
-    const executablePath = process.env.AVE_TEST_CHROMIUM ?? (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined);
-    const browser = await chromium.launch(executablePath ? { executablePath } : { channel: "chrome" });
+    const executablePath = process.env.AVE_TEST_CHROMIUM ?? [
+      chromium.executablePath(), "/usr/lib/chromium/chromium", "/opt/google/chrome/chrome",
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ].find(existsSync);
+    const browser = await chromium.launch({ executablePath });
     try {
       const page = await browser.newPage();
       const errors: string[] = [];

@@ -10,7 +10,7 @@ function registerDesktopBridge(contextBridge, ipcRenderer) {
   });
 }
 
-exports.registerDesktopBridge = registerDesktopBridge;
+if (typeof exports !== "undefined") exports.registerDesktopBridge = registerDesktopBridge;
 if (/** @type {{type?: string}} */ (process).type === "renderer") {
   const electronModule = "electron";
   const { contextBridge, ipcRenderer } = require(electronModule);
