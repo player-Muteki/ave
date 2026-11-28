@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, linkSync, mkdirSync, realpathSync, unlinkSync } from "node:fs";
 import os from "node:os";
-import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync as NodeDatabaseSync, type SQLInputValue } from "node:sqlite";
 import { ContentAddressedStore, sha256File } from "@ave/cas";
@@ -156,6 +156,17 @@ function collectBlobRefs(value: unknown, out: Map<string, BlobRef>): void {
   for (const child of Object.values(rec)) {
     collectBlobRefs(child, out);
   }
+}
+
+function referencedBlobs(rows: Pick<MigrationManifest, "assets" | "jobs" | "artifacts" | "mask_anchors" | "preview_sheets" | "contact_sheets">) {
+  const refs = new Map<string, BlobRef>();
+  for (const table of [rows.assets, rows.jobs, rows.artifacts, rows.mask_anchors]) {
+    for (const row of table) collectBlobRefs(JSON.parse(row.document), refs);
+  }
+  for (const table of [rows.preview_sheets, rows.contact_sheets]) {
+    for (const row of table) collectBlobRefs(JSON.parse(row.blob), refs);
+  }
+  return refs;
 }
 
 function casObjectPath(casDir: string, sha256Hex: string): string {
@@ -317,14 +328,7 @@ export async function exportLegacyProjectManifest(options: {
       }
     }
 
-    const blobMap = new Map<string, BlobRef>();
-    for (const row of assets) collectBlobRefs(JSON.parse(row.document), blobMap);
-    for (const row of jobs) collectBlobRefs(JSON.parse(row.document), blobMap);
-    for (const row of artifacts) collectBlobRefs(JSON.parse(row.document), blobMap);
-    for (const row of mask_anchors) collectBlobRefs(JSON.parse(row.document), blobMap);
-    for (const row of preview_sheets) collectBlobRefs(JSON.parse(row.blob), blobMap);
-    for (const row of contact_sheets) collectBlobRefs(JSON.parse(row.blob), blobMap);
-
+    const blobMap = referencedBlobs({ assets, jobs, artifacts, mask_anchors, preview_sheets, contact_sheets });
     for (const blob of blobMap.values()) {
       const srcFile = casObjectPath(casDir, blob.sha256);
       if (!existsSync(srcFile)) {
@@ -367,8 +371,15 @@ export async function exportLegacyProjectManifest(options: {
     };
 
     if (options.outputManifestPath) {
-      await mkdir(path.dirname(path.resolve(options.outputManifestPath)), { recursive: true });
-      await writeFile(options.outputManifestPath, JSON.stringify(manifest, null, 2), "utf8");
+      const directory = path.dirname(path.resolve(options.outputManifestPath));
+      await mkdir(directory, { recursive: true });
+      const temporaryManifest = path.join(directory, ".ave-migration-" + randomUUID());
+      try {
+        await writeFile(temporaryManifest, JSON.stringify(manifest, null, 2), { flag: "wx", mode: 0o600 });
+        await rename(temporaryManifest, options.outputManifestPath);
+      } finally {
+        await rm(temporaryManifest, { force: true });
+      }
     }
     return manifest;
   } finally {
@@ -432,6 +443,11 @@ export async function importMigrationManifest(options: {
   const targetHome = path.resolve(options.targetAveHome);
   assertPathsDisjoint(options.manifest.sourceRoot, targetHome, "legacy sourceRoot");
   assertPathsDisjoint(options.legacyCasDir, targetHome, "legacy CAS directory");
+
+  const declared = new Map(options.manifest.blobs.map(blob => [blob.sha256, blob.bytes]));
+  for (const ref of referencedBlobs(options.manifest).values()) {
+    if (declared.get(ref.sha256) !== ref.bytes) editorFailure("ARTIFACT_HASH_MISMATCH", "Manifest omits or changes a referenced blob: " + ref.sha256);
+  }
 
   await mkdir(targetHome, { recursive: true, mode: 0o700 });
   const cas = new ContentAddressedStore(path.join(targetHome, "cas"));

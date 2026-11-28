@@ -178,6 +178,9 @@ describe("Legacy Paseo -> Native AVE Migration Tool", () => {
       }),
     ).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 
+    await expect(importMigrationManifest({ manifest: { ...manifest, blobs: manifest.blobs.filter(b => b.sha256 !== indexSha) },
+      legacyCasDir: legacyCas, targetAveHome: targetHome })).rejects.toMatchObject({ code: "ARTIFACT_HASH_MISMATCH" });
+
     // 4. Clean import into isolated native AVE_HOME
     const imported = await importMigrationManifest({
       manifest,
@@ -242,4 +245,22 @@ describe("Legacy Paseo -> Native AVE Migration Tool", () => {
       exportLegacyProjectManifest({ legacyRootDir: legacyRoot }),
     ).rejects.toMatchObject({ code: "ARTIFACT_HASH_MISMATCH" });
   });
+});
+
+it("exports committed WAL records without touching any active database sidecar", async () => {
+  const root = await makeTempDir("ave-live-legacy-");
+  const database = new DatabaseSync(path.join(root, "editor.sqlite"));
+  try {
+    database.exec(AVE_SQLITE_SCHEMA);
+    database.exec("PRAGMA wal_autocheckpoint=0");
+    database.prepare("INSERT INTO projects VALUES (?, ?, ?, ?, ?)").run("live", "WAL row", "0", "a".repeat(64), new Date().toISOString());
+    const names = await readdir(root);
+    expect(names).toContain("editor.sqlite-wal");
+    const fingerprints = () => Promise.all(names.map(async name => sha256Hex(await readFile(path.join(root, name)))));
+    const before = await fingerprints();
+    const manifest = await exportLegacyProjectManifest({ legacyRootDir: root });
+    expect(manifest.projects[0]?.title).toBe("WAL row");
+    expect(await readdir(root)).toEqual(names);
+    expect(await fingerprints()).toEqual(before);
+  } finally { database.close(); }
 });
