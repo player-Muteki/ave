@@ -349,7 +349,7 @@ type ExportManifest = {
 | `import_asset` | 桌面原生授权导入 | operator；hash/配额 |
 | `create_upload/write_upload_chunk` | 初始化上传、写一块 | operator；uploadId/requestId/offset/chunkSha256 |
 | `get_upload_status/commit_upload/cancel_upload` | 查询 nextOffset、完成或取消 | operator；最终长度和 SHA-256，重复 commit 返回同 Asset |
-| `get_asset_metadata` | 流描述符 + 输出时长/帧数（读 CAS 内 probe/presentation index），有界元数据 | viewer；requestId + projectId + assetId |
+| `get_asset_metadata` | 流描述符、时长和帧数。传入可选的 `requestedTrimRange` 时，返回主视频流的 `resolvedTrimRange`。已验证恒定帧率的素材按最近的整帧边界取值，可变帧率保留请求的时间范围。 | viewer；requestId + projectId + assetId |
 | `get_analysis` | 最新 analysis job 的有界元数据：state/速率/artifact 引用（含 hash）/error，字节不出 CAS | viewer；requestId + projectId + assetId |
 | `analyze_asset` | rate 为正整数比，默认 25/1；约分后低于 1 fps 取 1/1，超过 1000 fps 取 1000/1。任务、Python 采样映射与分析报告使用相同采样率 | operator；requestId + projectId + assetId + rate? |
 | `get_scene_cuts` / `get_waveform` | 确定性切点（整帧对齐、≤64 条；aligned 延续工作台使用的有理数毫秒，按 FFmpeg 播放时间轴的整数 PTS 换算）与首音轨 RMS 波形桶（100ms、≤1200 桶），有界只读，无像素 | viewer；requestId + projectId + assetId |

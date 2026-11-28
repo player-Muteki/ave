@@ -15,12 +15,16 @@ import {
   type EditorPrincipal,
   type ProjectSnapshot,
   type SourceAsset,
+  type TimeRange,
 } from "@ave/contracts";
 import {
+  alignCfrTrimRange,
+  assertPositiveRange,
   assertRoleAtLeast,
   playbackDurationSeconds,
   presentationSpans,
   probeStartTime,
+  rationalSub,
   removalTargets,
   sha256Json,
   type FrameIndex,
@@ -295,21 +299,35 @@ export class ProjectAssetRevisionRepository {
       inputStartTime,
       streams,
     );
-    return { asset, frameCount, durationSeconds, inputStartTime, streams };
+    return { asset, frameCount, durationSeconds, inputStartTime, streams, index };
   }
 
-  async assetMetadata(projectId: string, assetId: string, principal: EditorPrincipal) {
-    const { asset, durationSeconds, frameCount } = await this.readAssetMetadata(
+  async assetMetadata(projectId: string, assetId: string, principal: EditorPrincipal, requestedTrimRange?: TimeRange) {
+    const { asset, durationSeconds, frameCount, inputStartTime, index } = await this.readAssetMetadata(
       projectId,
       assetId,
       principal,
     );
+    let resolvedTrimRange = requestedTrimRange;
+    if (requestedTrimRange) {
+      assertPositiveRange(requestedTrimRange, "INVALID_ARGUMENT");
+      const video = asset.streams.find(stream => stream.kind === "video");
+      if (!video) editorFailure("INVALID_ARGUMENT", "所选素材不包含视频流。");
+      if (video.averageRate && frameCount && this.hasConstantRate(asset.presentationIndex.sha256, video.streamUid)) {
+        const pts = index.frames.find(frame => frame.stream_index === video.streamIndex)?.pts;
+        const firstFrameTime = pts !== undefined && inputStartTime
+          ? rationalSub({ num: (BigInt(pts) * BigInt(video.timeBase.num)).toString(), den: video.timeBase.den }, inputStartTime)
+          : undefined;
+        resolvedTrimRange = alignCfrTrimRange(requestedTrimRange, video.averageRate, frameCount, firstFrameTime);
+      }
+    }
     return {
       assetId,
       contentHash: asset.original.sha256,
       durationSeconds,
       frameCount,
       streams: asset.streams,
+      ...(resolvedTrimRange && { resolvedTrimRange }),
     };
   }
 

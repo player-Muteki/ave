@@ -4,6 +4,7 @@ import {
   type Rational,
   type SourceAsset,
   type StreamDescriptor,
+  type TimeRange,
 } from "@ave/contracts";
 
 export interface FrameIndex {
@@ -53,6 +54,52 @@ export function rationalCompare(a: Rational, b: Rational): -1 | 0 | 1 {
 export function rationalSeconds(r: Rational): string {
   const value = Number(r.num) / Number(r.den);
   return Number.isFinite(value) ? value.toFixed(3) : "0";
+}
+
+function reduced(num: bigint, den: bigint): Rational {
+  let a = num < 0n ? -num : num;
+  let b = den;
+  while (b !== 0n) [a, b] = [b, a % b];
+  return { num: (num / a).toString(), den: (den / a).toString() };
+}
+
+/** Resolve a user's playback-time selection on a *verified* constant-rate video stream. */
+export function alignCfrTrimRange(
+  requested: TimeRange, rate: Rational, frameCount: number, firstFrameTime?: Rational,
+): TimeRange {
+  assertPositiveRange(requested, "INVALID_ARGUMENT");
+  const fpsNum = BigInt(rate.num);
+  const fpsDen = BigInt(rate.den);
+  const frames = BigInt(frameCount);
+  if (fpsNum <= 0n || frames <= 0n) editorFailure("INVALID_ARGUMENT", "所选素材没有可裁剪的视频帧。");
+  const secondsForFrames = (count: bigint) => reduced(count * fpsDen, fpsNum);
+  function clampFrame(frame: bigint, min: bigint, max: bigint): bigint {
+    if (frame < min) return min;
+    return frame > max ? max : frame;
+  }
+  function nearestFrame(seconds: Rational): bigint {
+    const divisor = BigInt(seconds.den) * fpsDen;
+    return (2n * BigInt(seconds.num) * fpsNum + divisor) / (2n * divisor);
+  }
+  // Without a known demuxer origin, keep the user's seek time in the original clock.
+  if (!firstFrameTime) {
+    const count = nearestFrame(requested.duration);
+    return { start: requested.start, duration: secondsForFrames(clampFrame(count, 1n, frames)) };
+  }
+  const start = rationalSub(requested.start, firstFrameTime);
+  const end = rationalAdd(start, requested.duration);
+  if (BigInt(end.num) <= 0n || rationalCompare(start, secondsForFrames(frames)) >= 0) {
+    editorFailure("INVALID_ARGUMENT", "所选时间已超出视频范围，请调整开始时间或时长。");
+  }
+  // Skip frames starting before playback time zero (e.g. a leading edit list).
+  const zero = rationalSub({ num: "0", den: "1" }, firstFrameTime);
+  const divisor = BigInt(zero.den) * fpsDen;
+  const firstUsable = BigInt(zero.num) > 0n ? (BigInt(zero.num) * fpsNum + divisor - 1n) / divisor : 0n;
+  if (firstUsable >= frames) editorFailure("INVALID_ARGUMENT", "所选范围没有可裁剪的视频帧。");
+  const first = clampFrame(nearestFrame(start), firstUsable, frames - 1n);
+  const stop = clampFrame(nearestFrame(end), first + 1n, frames);
+  const actualStart = rationalAdd(firstFrameTime, secondsForFrames(first));
+  return { start: reduced(BigInt(actualStart.num), BigInt(actualStart.den)), duration: secondsForFrames(stop - first) };
 }
 
 export function assertPositiveRange(

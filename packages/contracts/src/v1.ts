@@ -1415,11 +1415,12 @@ export const AssetMetadataSchema = z
     durationSeconds: z.string().nullable(),
     frameCount: z.number().int().min(0).nullable(),
     streams: z.array(StreamDescriptorSchema),
+    resolvedTrimRange: TimeRangeSchema.optional(),
   })
   .strict();
 export type AssetMetadata = z.infer<typeof AssetMetadataSchema>;
 export const GetAssetMetadataInputSchema = z
-  .object({ requestId, projectId: id, assetId: id })
+  .object({ requestId, projectId: id, assetId: id, requestedTrimRange: TimeRangeSchema.optional() })
   .strict();
 export const GetAssetMetadataResultSchema = AssetMetadataSchema.extend({ requestId }).strict();
 export const getAssetMetadataRpc = {

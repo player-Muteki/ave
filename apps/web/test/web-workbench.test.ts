@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSingleTrimDraft } from "../src/workbench-state.js";
+import { buildSingleTrimDraft, readTrimRange } from "../src/workbench-state.js";
 
 describe("@ave/web workbench", () => {
   it("builds single-trim EditPlanDraftV1 with rational time and ffmpeg backend", () => {
@@ -36,13 +36,8 @@ describe("@ave/web workbench", () => {
         probe: { sha256: hash, bytes: "10", mediaType: "application/json" },
         sourceNeverWritable: true,
       },
-      {
-        startNum: "0",
-        startDen: "1",
-        durationNum: "2",
-        durationDen: "1",
-        intent: "Keep 2s",
-      },
+      readTrimRange("0", "2"),
+      "Keep 2s",
     );
 
     expect(draft.preferredDeterministicBackendId).toBe("ffmpeg");
@@ -71,8 +66,16 @@ describe("@ave/web workbench", () => {
           probe: { sha256: hash, bytes: "10", mediaType: "application/json" },
           sourceNeverWritable: true,
         },
-        { startNum: "0", startDen: "1", durationNum: "0", durationDen: "1", intent: "bad" },
+        readTrimRange("0", "1"), "bad",
       ),
     ).toThrow();
+  });
+
+  it("preserves decimal seconds without floating-point conversion", () => {
+    expect(readTrimRange(".25", "2.0020")).toEqual({
+      start: { num: "25", den: "100" }, duration: { num: "2002", den: "1000" },
+    });
+    expect(() => readTrimRange("-1", "2")).toThrow();
+    expect(() => readTrimRange("0", "0.00")).toThrow();
   });
 });

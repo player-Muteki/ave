@@ -8,12 +8,14 @@ import {
 } from "@ave/client-sdk";
 import type {
   ApprovalRequest,
+  AssetMetadata,
   JobSnapshot,
   ObjectEditWorkflow,
   ProjectSnapshot,
 } from "@ave/contracts";
 import { ObjectEditPanel } from "./ObjectEditPanel.js";
-import { buildSingleTrimDraft, formatError } from "./workbench-state.js";
+import { SourcePreview } from "./SourcePreview.js";
+import { buildSingleTrimDraft, formatError, readTrimRange } from "./workbench-state.js";
 
 declare global {
   interface Window {
@@ -40,6 +42,10 @@ export function App() {
   const [startSec, setStartSec] = useState("0");
   const [durSec, setDurSec] = useState("2");
   const [uploadProgress, setUploadProgress] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [trimFeedback, setTrimFeedback] = useState<{ assetId: string; message: string }>({ assetId: "", message: "" });
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [objectEdits, setObjectEdits] = useState<ObjectEditWorkflow[]>([]);
 
@@ -63,6 +69,8 @@ export function App() {
       setSnapshot(null);
       setObjectEdits([]);
       setPreviewUrl("");
+      setUploadProgress("");
+      setTrimFeedback({ assetId: "", message: "" });
     }
     await refreshProject(projectId);
   }, [refreshProject]);
@@ -140,35 +148,50 @@ export function App() {
 
   const handleUploadFile = async (file: File | undefined) => {
     const client = clientRef.current;
-    if (!client || !snapshot || !file) return;
+    if (!client || !snapshot || !file || uploading) return;
+    const project = snapshot.projectId;
+    setUploading(true);
+    setUploadProgress(`正在读取 ${file.name}…`);
     try {
-      const importer = new SourceImport(snapshot.projectId, file, nextReqId("upload"));
+      const importer = new SourceImport(project, file, nextReqId("upload"));
       const asset = await importer.transfer(
         createUploadChannels(client),
         sha256HexBrowserSafe,
-        (bytes) => setUploadProgress(`已上传 ${bytes} / ${file.size} 字节`),
+        (bytes) => {
+          if (selectedProject.current !== project) return;
+          setUploadProgress(bytes === file.size ? `正在解析 ${file.name} 并生成预览…`
+            : `正在导入 ${file.name} · ${Math.floor(bytes * 100 / file.size)}%`);
+        },
       );
+      if (selectedProject.current !== project) return;
+      await refreshProject(project);
+      if (selectedProject.current !== project) return;
       setSelectedAssetId(asset.assetId);
-      setUploadProgress("");
-      await refreshProject(snapshot.projectId);
-      setStatus(`素材 ${asset.displayName} 导入完成`);
+      setUploadProgress(`已导入 ${asset.displayName}`);
     } catch (err) {
-      setUploadProgress("");
-      setStatus(formatError(err));
+      if (selectedProject.current === project) setUploadProgress(`导入失败 · ${formatError(err)}`);
+    } finally {
+      setUploading(false);
     }
   };
 
   const handleSubmitTrimPlan = async () => {
     const client = clientRef.current;
-    if (!client || !snapshot || !selectedAsset) return;
+    if (!client || !snapshot || !selectedAsset || submitting) return;
+    const assetId = selectedAsset.assetId;
+    setSubmitting(true);
+    setTrimFeedback({ assetId, message: "正在核对素材时间并提交方案…" });
     try {
-      const draft = buildSingleTrimDraft(snapshot, selectedAsset, {
-        startNum: startSec,
-        startDen: "1",
-        durationNum: durSec,
-        durationDen: "1",
-        intent: trimIntent,
+      const requestedTrimRange = readTrimRange(startSec, durSec);
+      const metadata = await client.call<AssetMetadata>("video.v1.get_asset_metadata", {
+        requestId: nextReqId("trim-range"), projectId: snapshot.projectId, assetId, requestedTrimRange,
       });
+      if (selectedProject.current !== snapshot.projectId) return;
+      if (metadata.contentHash !== selectedAsset.original.sha256 || !metadata.resolvedTrimRange) {
+        throw new Error("素材时间信息已变化，请重新选择素材。");
+      }
+      const range = metadata.resolvedTrimRange;
+      const draft = buildSingleTrimDraft(snapshot, selectedAsset, range, trimIntent);
       await client.submitPlan({
         requestId: nextReqId("plan"),
         runId: nextReqId("run"),
@@ -176,9 +199,14 @@ export function App() {
         draft,
       });
       await refreshProject(snapshot.projectId);
-      setStatus("剪辑方案已提交，等待人工审批");
+      if (selectedProject.current === snapshot.projectId) {
+        const seconds = Number(range.duration.num) / Number(range.duration.den);
+        setTrimFeedback({ assetId, message: `裁剪方案已提交 · 实际时长 ${Number(seconds.toFixed(6))} 秒，请在审批队列确认。` });
+      }
     } catch (err) {
-      setStatus(formatError(err));
+      if (selectedProject.current === snapshot.projectId) setTrimFeedback({ assetId, message: `裁剪方案提交失败 · ${formatError(err)}` });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -239,10 +267,7 @@ export function App() {
         projectId: snapshot.projectId,
         assetId: selectedAsset.assetId,
         expectedRevision: snapshot.revision,
-        sourceRange: {
-          start: { num: startSec, den: "1" },
-          duration: { num: durSec, den: "1" },
-        },
+        sourceRange: readTrimRange(startSec, durSec),
       });
       await refreshProject(snapshot.projectId);
       setStatus("已开启对象编辑工作流");
@@ -286,12 +311,18 @@ export function App() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <section style={{ background: "var(--panel)", padding: 14, borderRadius: 10, border: "1px solid var(--border)" }}>
             <h3 style={{ marginTop: 0 }}>1. 源素材（不可变 CAS）</h3>
-            <input type="file" accept="video/*" onChange={(e) => void handleUploadFile(e.target.files?.[0])} />
-            {uploadProgress && <p style={{ fontSize: 12 }}>{uploadProgress}</p>}
+            <button disabled={uploading} onClick={() => fileInput.current?.click()}>{uploading ? "正在导入…" : "导入视频"}</button>
+            <input ref={fileInput} hidden type="file" accept="video/*" onChange={(e) => {
+              const file = e.currentTarget.files?.[0];
+              e.currentTarget.value = "";
+              void handleUploadFile(file);
+            }} />
+            {uploadProgress && <p role="status">{uploadProgress}</p>}
             <ul>
               {snapshot.assets.map((a) => (
                 <li key={a.assetId} style={{ marginBottom: 6 }}>
-                  <button className="secondary" onClick={() => setSelectedAssetId(a.assetId)}>
+                  <button className={a.assetId === selectedAssetId ? "" : "secondary"} aria-pressed={a.assetId === selectedAssetId}
+                    onClick={() => setSelectedAssetId(a.assetId)}>
                     {a.displayName} ({a.original.bytes} B)
                   </button>
                 </li>
@@ -299,12 +330,15 @@ export function App() {
             </ul>
             {selectedAsset && (
               <div style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                {clientRef.current && <SourcePreview key={snapshot.projectId + "/" + selectedAsset.assetId}
+                  client={clientRef.current} projectId={snapshot.projectId} revision={snapshot.revision} asset={selectedAsset} />}
                 <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                   <input value={trimIntent} onChange={(e) => setTrimIntent(e.target.value)} placeholder="剪辑意图" />
                   <input aria-label="开始秒数" value={startSec} onChange={(e) => setStartSec(e.target.value)} style={{ width: 60 }} title="起始秒" />
                   <input aria-label="时长秒数" value={durSec} onChange={(e) => setDurSec(e.target.value)} style={{ width: 60 }} title="时长秒" />
-                  <button onClick={() => void handleSubmitTrimPlan()}>提交裁剪方案</button>
+                  <button disabled={submitting} onClick={() => void handleSubmitTrimPlan()}>提交裁剪方案</button>
                 </div>
+                {trimFeedback.assetId === selectedAsset.assetId && <p role="status">{trimFeedback.message}</p>}
               </div>
             )}
           </section>

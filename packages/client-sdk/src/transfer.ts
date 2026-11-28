@@ -195,7 +195,7 @@ export class SourceImport {
 
 export async function downloadArtifactBytes(
   client: AveClient,
-  input: { projectId: string; assetId: string; revision: string; chunkSize?: number },
+  input: { projectId: string; assetId: string; revision: string; chunkSize?: number; signal?: AbortSignal },
   hashFn: (bytes: Uint8Array) => Promise<string> = sha256HexBrowserSafe,
 ): Promise<{ bytes: Uint8Array; sha256: string }> {
   const chunkSize = input.chunkSize ?? 262_144;
@@ -205,6 +205,7 @@ export async function downloadArtifactBytes(
   const parts: Uint8Array[] = [];
 
   while (totalBytes === undefined || offset < totalBytes) {
+    input.signal?.throwIfAborted();
     const frame = await client.callBinary("video.v1.read_asset_chunk", {
       projectId: input.projectId,
       assetId: input.assetId,
@@ -213,6 +214,7 @@ export async function downloadArtifactBytes(
       length: String(chunkSize),
     });
     const decoded = decodeFramedChunk(frame);
+    input.signal?.throwIfAborted();
     const meta = ReadAssetChunkMetadataSchema.parse(
       JSON.parse(new TextDecoder().decode(decoded.metadata)),
     );

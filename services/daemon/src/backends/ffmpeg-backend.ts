@@ -811,6 +811,8 @@ export class FfmpegBackend implements DeterministicBackend {
           "yuv420p",
           "-c:a",
           "copy",
+          "-movie_timescale",
+          "48000",
           "-movflags",
           "+faststart",
           output,
@@ -942,7 +944,7 @@ export class FfmpegBackend implements DeterministicBackend {
           editorFailure("CAPABILITY_UNAVAILABLE", "Mixed audio channel counts require an explicit mix");
         }
         audioSegments.push(i);
-        let chain = `[${audioIdx}:${stream.streamIndex}]atrim=${audioRange},asetpts=PTS-STARTPTS`;
+        let chain = `[${audioIdx}:${stream.streamIndex}]aresample=48000,atrim=${audioRange},asetpts=PTS-STARTPTS`;
         if (audioOp) {
           const gainDb = audioOp.mute ? "-inf" : (Number(audioOp.gainMilli) / 1000).toFixed(3);
           chain += `,volume=${gainDb}dB`;
@@ -956,7 +958,7 @@ export class FfmpegBackend implements DeterministicBackend {
             chain += `,afade=t=out:st=${Math.max(0, durSec - d).toFixed(6)}:d=${d.toFixed(6)}`;
           }
         }
-        filters.push(`${chain},aresample=48000[as${i}]`);
+        filters.push(`${chain}[as${i}]`);
       } else if (audioProfile) {
         const layout =
           audioProfile.channels === 1 ? "mono" : audioProfile.channels === 2 ? "stereo" : undefined;
@@ -1149,7 +1151,8 @@ export class FfmpegBackend implements DeterministicBackend {
     );
     if (audioSegments.length) args.push("-map", "[acat]", "-c:a", "aac", "-ar", "48000");
     if (metaSrtIndex >= 0) args.push("-map", `${metaSrtIndex}:0`, "-c:s", "mov_text");
-    args.push("-movflags", "+faststart", output);
+    // Keep the AAC edit list on the output sample clock, including sub-millisecond endpoints.
+    args.push("-movie_timescale", "48000", "-movflags", "+faststart", output);
 
     const normalized = args.map((a) =>
       a === output ? "<output>" : shot && a === shot.path ? shot.trace.compositeHash : subDir ? a.split(subDir).join("<tmp>") : a,
@@ -1589,17 +1592,17 @@ function checkCandidate(
       den: total.den * BigInt(tr.duration.den),
     };
   }
-  const dur: Rational = { num: total.num.toString(), den: total.den.toString() };
   for (const s of doc.streams) {
     if (s.codec_type === "subtitle") continue;
     if (!s.time_base || !Number.isSafeInteger(s.duration_ts) || s.start_pts !== 0) {
       editorFailure("QA_FAILED", "Missing or invalid candidate timeline");
     }
     const base = parseRational(s.time_base);
-    const error =
-      BigInt(s.duration_ts!) * BigInt(base.num) * BigInt(dur.den) -
-      BigInt(dur.num) * BigInt(base.den);
-    if (error !== 0n) {
+    // A video-frame boundary can lie between two audio samples (e.g. 29.97 fps).
+    const expected = s.codec_type === "audio"
+      ? { num: (total.num * 48000n + total.den / 2n) / total.den, den: 48000n }
+      : total;
+    if (BigInt(s.duration_ts!) * BigInt(base.num) * expected.den !== expected.num * BigInt(base.den)) {
       editorFailure("QA_FAILED", "Candidate stream duration differs from the approved trim");
     }
   }

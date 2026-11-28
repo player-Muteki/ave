@@ -7,6 +7,7 @@ import {
   MANAGE_METHODS,
   MODEL_REGISTRY,
   READ_METHODS,
+  alignCfrTrimRange,
   assertObjectEditTransition,
   assertRenderablePreview,
   authorizeVideoMethod,
@@ -46,6 +47,21 @@ const R0_SPEC = JSON.parse(
 };
 
 describe("@ave/domain", () => {
+  it("selects whole source frames on the verified playback clock", () => {
+    const time = (num: number, den = 1) => ({ num: String(num), den: String(den) });
+    const rate = time(30000, 1001);
+    const align = (start: number, duration: number, origin = time(0), frames = 464) =>
+      alignCfrTrimRange({ start: time(start, 1000), duration: time(duration, 1000) }, rate, frames, origin);
+    expect(align(0, 2000)).toEqual({ start: time(0), duration: time(1001, 500) });
+    expect(align(20, 20)).toEqual({ start: time(1001, 30000), duration: time(1001, 30000) });
+    expect(align(0, 2000, time(1), 1)).toEqual({ start: time(1), duration: time(1001, 30000) });
+    expect(align(0, 40, time(-1, 100))).toEqual({ start: time(701, 30000), duration: time(1001, 30000) });
+    expect(() => align(16000, 100)).toThrow(/超出/);
+    expect(() => align(0, 100, time(1))).toThrow(/超出/);
+    expect(alignCfrTrimRange({ start: time(1, 4), duration: time(2) }, rate, 464))
+      .toEqual({ start: time(1, 4), duration: time(1001, 500) });
+  });
+
   it("performs exact rational arithmetic and analysis rate clamping", () => {
     const a = { num: "1", den: "3" };
     const b = { num: "2", den: "6" };

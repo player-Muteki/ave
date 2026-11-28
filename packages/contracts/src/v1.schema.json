@@ -1172,6 +1172,9 @@
           "items": {
             "$ref": "urn:video-editor:v1:StreamDescriptor"
           }
+        },
+        "resolvedTrimRange": {
+          "$ref": "urn:video-editor:v1:TimeRange"
         }
       },
       "required": [
@@ -3003,6 +3006,9 @@
         "assetId": {
           "type": "string",
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "requestedTrimRange": {
+          "$ref": "urn:video-editor:v1:TimeRange"
         }
       },
       "required": [
@@ -3048,6 +3054,9 @@
           "items": {
             "$ref": "urn:video-editor:v1:StreamDescriptor"
           }
+        },
+        "resolvedTrimRange": {
+          "$ref": "urn:video-editor:v1:TimeRange"
         },
         "requestId": {
           "type": "string",

@@ -1,24 +1,31 @@
-import type { EditPlanDraftV1, ProjectSnapshot, Rational, SourceAsset } from "@ave/contracts";
+import type { EditPlanDraftV1, ProjectSnapshot, Rational, SourceAsset, TimeRange } from "@ave/contracts";
 
-export interface TrimInput {
-  startNum: string;
-  startDen: string;
-  durationNum: string;
-  durationDen: string;
-  intent: string;
+function parseSeconds(value: string): Rational {
+  const text = value.trim();
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) throw new Error("请输入非负秒数，可以使用小数。");
+  const [whole, decimals = ""] = text.split(".");
+  const fraction = decimals.replace(/0+$/, "");
+  return { num: BigInt((whole || "0") + fraction).toString(), den: (10n ** BigInt(fraction.length)).toString() };
+}
+
+export function readTrimRange(startSeconds: string, durationSeconds: string): TimeRange {
+  const start = parseSeconds(startSeconds);
+  const duration = parseSeconds(durationSeconds);
+  if (duration.num === "0") throw new Error("裁剪时长必须大于零。");
+  return { start, duration };
 }
 
 export function buildSingleTrimDraft(
   project: ProjectSnapshot,
   asset: SourceAsset,
-  trim: TrimInput,
+  range: TimeRange,
+  intent: string,
 ): EditPlanDraftV1 {
   const video = asset.streams.find((s) => s.kind === "video");
   if (!video) {
     throw new Error("所选素材不包含视频流。");
   }
-  const start: Rational = { num: trim.startNum.trim(), den: trim.startDen.trim() };
-  const duration: Rational = { num: trim.durationNum.trim(), den: trim.durationDen.trim() };
+  const { start, duration } = range;
   if (!/^(0|[1-9][0-9]*)$/.test(start.num) || !/^[1-9][0-9]*$/.test(start.den)) {
     throw new Error("起始时间必须是非负有理数。");
   }
@@ -31,7 +38,7 @@ export function buildSingleTrimDraft(
     baseTimelineRevision: project.revision,
     baseAssetManifestHash: project.baseAssetManifestHash,
     preferredDeterministicBackendId: "ffmpeg",
-    intent: trim.intent.trim() || "桌面端裁剪片段",
+    intent: intent.trim() || "桌面端裁剪片段",
     trimOperations: [
       {
         opId: "trim-main-1",

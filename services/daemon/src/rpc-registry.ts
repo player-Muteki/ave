@@ -459,7 +459,7 @@ export class AveRpcRegistry {
       const parsed = this.parse(GetAssetMetadataInputSchema, input);
       return {
         requestId: parsed.requestId,
-        ...(await store.projects.assetMetadata(parsed.projectId, parsed.assetId, principal)),
+        ...(await store.projects.assetMetadata(parsed.projectId, parsed.assetId, principal, parsed.requestedTrimRange)),
       };
     });
 
