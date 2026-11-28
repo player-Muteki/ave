@@ -192,6 +192,7 @@ export class FfmpegBackend implements DeterministicBackend {
     job: JobSnapshot;
     plan: AcceptedEditPlan;
     generateShot?: GenerateShot;
+    constantRate?: Rational;
     assets: Map<string, SourceAsset>;
     cas: ContentAddressedStore;
     signal: AbortSignal;
@@ -212,6 +213,7 @@ export class FfmpegBackend implements DeterministicBackend {
     let outputBlob: BlobRef;
     let recipeSha256: string;
     let shot: GeneratedShot | undefined;
+    const rate = plan.generationRequests[0]?.sampleFps ?? input.constantRate;
     try {
       const output = path.join(directory, "candidate.mp4");
       if (plan.generationRequests.length) {
@@ -219,10 +221,10 @@ export class FfmpegBackend implements DeterministicBackend {
         if (!input.generateShot) editorFailure("CAPABILITY_UNAVAILABLE", "This backend requires a VACE worker");
         shot = await input.generateShot(plan, directory, signal);
       }
-      recipeSha256 = await this.renderToFile(assets, firstAsset, plan, job.kind, output, cas, signal, shot);
+      recipeSha256 = await this.renderToFile(assets, firstAsset, plan, job.kind, output, cas, signal, rate, shot);
       if (shot) {
         const control = path.join(directory, "trim-control.mp4");
-        await this.renderToFile(assets, firstAsset, plan, job.kind, control, cas, signal);
+        await this.renderToFile(assets, firstAsset, plan, job.kind, control, cas, signal, rate);
         const digest = async (file: string) => (await this.run(this.tools.ffmpeg, ["-v", "error", "-nostdin", "-i", file,
           "-map", "0:v:0", "-pix_fmt", "rgb24", "-f", "hash", "-hash", "sha256", "-"])).stdout.trim();
         if (await digest(output) === await digest(control)) editorFailure("QA_FAILED", "Encoded candidate matches the plain trim");
@@ -269,7 +271,7 @@ export class FfmpegBackend implements DeterministicBackend {
 
     const reviewProxy =
       job.kind === "final"
-        ? await this.createFinalReviewProxy(outputBlob, probe.document, cas, signal)
+        ? await this.createFinalReviewProxy(outputBlob, probe.document, cas, signal, rate)
         : undefined;
     if (reviewProxy) {
       checkCandidate(
@@ -773,6 +775,7 @@ export class FfmpegBackend implements DeterministicBackend {
     probe: ProbeDocument,
     cas: ContentAddressedStore,
     signal: AbortSignal,
+    rate?: Rational,
   ): Promise<BlobRef> {
     const clock = probe.streams.find((stream) => stream.codec_type === "video")?.time_base;
     if (!clock || !/^[1-9][0-9]*\/[1-9][0-9]*$/.test(clock)) {
@@ -796,9 +799,10 @@ export class FfmpegBackend implements DeterministicBackend {
           "0:a:0?",
           "-vf",
           "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1",
-          ...(await ffmpegOutputTimingArgs(this.tools.ffmpeg, "vfr")),
+          ...(await ffmpegOutputTimingArgs(this.tools.ffmpeg, rate ? "cfr" : "vfr")),
           "-enc_time_base:v",
-          clock,
+          rate ? rate.den + "/" + rate.num : clock,
+          ...(rate ? ["-r:v", rate.num + "/" + rate.den] : []),
           "-c:v",
           "libx264",
           "-crf",
@@ -827,6 +831,7 @@ export class FfmpegBackend implements DeterministicBackend {
     output: string,
     cas: ContentAddressedStore,
     signal: AbortSignal,
+    rate?: Rational,
     shot?: GeneratedShot,
   ): Promise<string> {
     assertRenderablePreview(plan);
@@ -1128,15 +1133,14 @@ export class FfmpegBackend implements DeterministicBackend {
       metaSrtIndex = args.reduce((n, a) => (a === "-i" ? n + 1 : n), 0) - 1;
     }
 
-    const generationRate = plan.generationRequests[0]?.sampleFps;
     const previewClock = trackOrder.length === 1 && !transitions.size ? sourceTimeBase : "filter";
     args.push(
       "-filter_complex",
       filters.join(";"),
       "-map",
       vOut,
-      ...(await ffmpegOutputTimingArgs(this.tools.ffmpeg, generationRate ? "cfr" : "vfr")),
-      ...(generationRate ? ["-r:v", generationRate.num + "/" + generationRate.den, "-enc_time_base:v", generationRate.den + "/" + generationRate.num]
+      ...(await ffmpegOutputTimingArgs(this.tools.ffmpeg, rate ? "cfr" : "vfr")),
+      ...(rate ? ["-r:v", rate.num + "/" + rate.den, "-enc_time_base:v", rate.den + "/" + rate.num]
         : kind === "preview" ? ["-enc_time_base:v", previewClock] : []),
       "-c:v",
       "libx264",

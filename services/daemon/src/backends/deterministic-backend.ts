@@ -64,6 +64,7 @@ export interface DeterministicBackend {
     job: JobSnapshot;
     plan: AcceptedEditPlan;
     generateShot?: GenerateShot;
+    constantRate?: Rational;
     assets: Map<string, SourceAsset>;
     cas: ContentAddressedStore;
     signal: AbortSignal;

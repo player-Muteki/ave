@@ -243,10 +243,16 @@ export class AveJobSupervisor {
 
     const renderBackend = this.backends.get(plan.deterministicBackendId);
     const assets = new Map(project.assets.map((a) => [a.assetId, a]));
+    const single = plan.trimOperations.length === 1 ? plan.trimOperations[0] : undefined;
+    const source = single && assets.get(single.source.assetId);
+    const stream = source?.streams.find(s => s.streamUid === single!.source.streamUid);
+    const constantRate = source && stream && this.store.projects.hasConstantRate(source.presentationIndex.sha256, stream.streamUid)
+      ? stream.averageRate : undefined;
     const rendered = await renderBackend.renderPlan({
       job,
       plan,
       assets,
+      constantRate,
       generateShot: this.mediaWorker?.generateShot.bind(this.mediaWorker),
       cas: this.cas,
       signal,

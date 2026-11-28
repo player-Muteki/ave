@@ -325,27 +325,33 @@ describe("@ave/sqlite 5-repository coordinator", () => {
     // Generation guard blocks before mask review approval
     expect(() => store.objectEdits.objectEditGenerationGuard(p.projectId, wf.workflowId)).toThrow();
 
-    // Rejection keeps workflow in awaiting_mask_review
-    wf = store.objectEdits.reviewObjectMask({
-      requestId: "oe-4a",
-      projectId: p.projectId,
-      workflowId: wf.workflowId,
-      expectedWorkflowRevision: wf.workflowRevision,
-      maskRevisionId: "mask-bad",
-      approved: false,
-      actor: authed,
-    });
-    expect(wf.state).toBe("awaiting_mask_review");
-
-    wf = store.objectEdits.reviewObjectMask({
-      requestId: "oe-4b",
-      projectId: p.projectId,
-      workflowId: wf.workflowId,
-      expectedWorkflowRevision: wf.workflowRevision,
-      maskRevisionId: "mask-good",
-      approved: true,
-      actor: authed,
-    });
+    // Only an anchor committed by this workflow's worker can advance the state.
+    expect(() => store.objectEdits.reviewObjectMask({ requestId: "oe-forged", projectId: p.projectId,
+      workflowId: wf.workflowId, expectedWorkflowRevision: wf.workflowRevision, maskRevisionId: "invented", approved: true, actor: authed }))
+      .toThrow(/matching generated mask/);
+    const cas = new ContentAddressedStore(path.join(root, "cas"));
+    await cas.initialize();
+    store.bindCas(cas);
+    const label = await cas.writeBytes(Uint8Array.of(255), "application/octet-stream");
+    const image = await cas.writeBytes(Uint8Array.of(0xff, 0xd8, 0xff), "image/jpeg");
+    for (const approved of [false, true]) {
+      const job = store.jobs.getJob(p.projectId, wf.workerJobId!, OWNER);
+      const anchor = { projectId: p.projectId, assetId: a1.assetId, streamUid: a1.streams[0]!.streamUid,
+        sourcePresentationIndexHash: a1.presentationIndex.sha256, frame: 0, points: [{ x: 0, y: 0, foreground: true }] };
+      store.objectEdits.finishWorker(job, OWNER, {
+        request: { anchor, requestId: "save-" + job.jobId, expectedRevision: snap.revision,
+          expectedLabelSha256: label.sha256, expectedPreviewSha256: image.sha256 },
+        sourceFrames: { streamUid: anchor.streamUid, firstFrame: 0, frameCount: 9 },
+        header: { ...anchor, sourceSha256: a1.original.sha256, pts: "0", timeBase: a1.streams[0]!.timeBase,
+          frameCount: 9, width: 1, height: 1, previewWidth: 1, previewHeight: 1,
+          previewSha256: image.sha256, mask: { engine: "sam2.1-tiny", weightsSha256: "7".repeat(64), labelSha256: label.sha256, foregroundPixels: 1 } },
+        label, image,
+      });
+      wf = store.objectEdits.getObjectEdit(p.projectId, wf.workflowId, authed);
+      wf = store.objectEdits.reviewObjectMask({ requestId: "review-" + job.jobId, projectId: p.projectId,
+        workflowId: wf.workflowId, expectedWorkflowRevision: wf.workflowRevision, maskRevisionId: wf.maskRevisionId!, approved, actor: authed });
+      if (!approved) expect(wf.state).toBe("awaiting_mask_review");
+    }
     expect(wf.state).toBe("awaiting_generation_review");
     expect(store.objectEdits.objectEditGenerationGuard(p.projectId, wf.workflowId).workflowId).toBe(wf.workflowId);
 
