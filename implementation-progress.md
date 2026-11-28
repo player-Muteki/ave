@@ -37,6 +37,8 @@
 
 - CI 补齐（native-tests.yml）： push/PR 现在实跑全部套件—— `tsc -b` typecheck、generate:schema 同步校验、全工作以 vitest run（16 文件/39 项）、pytest（division + media-worker）、R0 基线 verify_r0_baseline（196 fixtures/63 RPC/17 工具/golden media 解码）、native rpc-surface 与边界检查，以及 FFmpeg 版本矩阵（apt-24.04 / apt-latest / static-9）跑媒体与 R0 golden media。
 
+- 安全边界直接单测：`packages/domain/test/authorization.test.ts` 穷举全部 63 个 RPC 的 viewer/operator/owner/anon 权限矩阵（含 R0 冻结基线对照）；`services/daemon/test/rpc-registry.test.ts` 盖盖注册方法与 R0 main-switch 一致、越权在 handler 之前拦截、输入 schema 校验；`services/daemon/test/tool-broker.test.ts` 盖盖 17 工具完整性、项目绑定越权、走 错误包。ROADMAP 改为代码完成/本机验证/实机验证 三列，“已完成”不再单独作为证据。vitest 19 文件/55 项全过，CI native-tests 必跑。
+
 ## 2026-11-25 · M1 启动
 
 - [x] 等 FilmCraft 调研 Phase 14 完成：根提交 `21c2892` 与统计提交 `8a6954c`，18 份 Markdown、2 份 SVG 和三个锁定参考校验通过。
