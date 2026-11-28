@@ -50,9 +50,9 @@ export async function startElectronDesktopApp(): Promise<void> {
     return res.canceled ? null : (res.filePaths[0] ?? null);
   });
 
-  const preloadPath = path.join(__dirname, "preload.js");
+  const preloadPath = path.join(__dirname, "preload.cjs");
   const win = new electron.BrowserWindow(buildDesktopWindowOptions(preloadPath));
-  const webHtml = path.resolve(__dirname, "../../web/dist/index.html");
+  const webHtml = path.resolve(__dirname, "../../web/dist/browser/index.html");
   await win.loadFile(webHtml);
 
   electron.app.on("window-all-closed", () => {

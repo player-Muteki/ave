@@ -290,7 +290,7 @@ export function App() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+          <input aria-label="项目名称" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
           <button onClick={() => void handleCreateProject()}>新建项目</button>
         </div>
       </header>

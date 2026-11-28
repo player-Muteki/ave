@@ -1,6 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
     "rootDir": "src",
     "outDir": "dist"
   },
@@ -8,5 +10,5 @@
     { "path": "../../packages/contracts" },
     { "path": "../../packages/protocol" }
   ],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.cjs"]
 }

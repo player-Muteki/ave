@@ -43,6 +43,7 @@ export async function launchDesktopDaemon(
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
+      ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
       ...(options.aveHome ? { AVE_HOME: options.aveHome } : {}),
       AVE_HOST: options.host ?? "127.0.0.1",
       AVE_PORT: String(options.port ?? 0),

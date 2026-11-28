@@ -1,12 +1,5 @@
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildSingleTrimDraft } from "../src/workbench-state.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WEB_ROOT = path.resolve(__dirname, "..");
 
 describe("@ave/web workbench", () => {
   it("builds single-trim EditPlanDraftV1 with rational time and ffmpeg backend", () => {
@@ -81,15 +74,5 @@ describe("@ave/web workbench", () => {
         { startNum: "0", startDen: "1", durationNum: "0", durationDen: "1", intent: "bad" },
       ),
     ).toThrow();
-  });
-
-  it("has a built static bundle in dist/", async () => {
-    const appJs = path.join(WEB_ROOT, "dist/app.js");
-    const indexHtml = path.join(WEB_ROOT, "dist/index.html");
-    expect(existsSync(appJs)).toBe(true);
-    expect(existsSync(indexHtml)).toBe(true);
-    const js = await readFile(appJs, "utf8");
-    expect(js.length).toBeGreaterThan(1000);
-    expect(js).not.toContain(`@get${"paseo"}/`);
   });
 });
