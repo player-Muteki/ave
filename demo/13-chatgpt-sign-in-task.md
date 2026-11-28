@@ -1,6 +1,8 @@
 # AVE 桌面端 ChatGPT 账号登录与 AI 剪辑任务书
 
-**状态**　待实施 · **本轮开发**　macOS arm64、Windows x64、Linux x64（Ubuntu 24.04） · **本轮正式实机验收**　仅 macOS Apple Silicon · **代码基线**　`main@9cd9e33` · **编制日期**　2026-11-28
+**状态**　三端功能已接入，macOS 真实账号实机验收待完成 · **本轮开发**　macOS arm64、Windows x64、Linux x64（Ubuntu 24.04） · **本轮正式实机验收**　仅 macOS Apple Silicon · **代码基线**　`main@9cd9e33` · **编制日期**　2026-11-28
+
+已接入桌面设置、账号会话、Responses 规划器和项目云模型策略。自动化已用模拟 OAuth 授权及模型响应验证，真实 FFmpeg 成片为 50 帧、2 秒，音轨解码后静音。三端安装包使用原生构建流程，实际构建结果见对应运行记录。[原生安装包构建](../.github/workflows/native-installers.yml)
 
 ## 一、交付目标
 

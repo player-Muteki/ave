@@ -31,7 +31,7 @@
 | [08 测试、发布与验收](demo/08-delivery.md) | 测试矩阵、benchmark、CI/CD、发布与回滚 | 全员 |
 | [09 风险、许可与实验](demo/09-risks-research.md) | ADR、实验问题、许可、隐私与风险门 | K、L |
 | [11 原生收敛与 R0–R5 计划](demo/11-native-migration-plan.md) | 去 Paseo/Pi/FilmCraft 原生化架构、存储拆分与验收记录 | 全员 |
-| [13 ChatGPT 账号登录与 AI 剪辑任务书](demo/13-chatgpt-sign-in-task.md) | Windows、macOS、Linux 三端登录与 AI 剪辑实现，本轮仅验收 macOS 安装包（待实施） | K、L、C |
+| [13 ChatGPT 账号登录与 AI 剪辑任务书](demo/13-chatgpt-sign-in-task.md) | Windows、macOS、Linux 三端登录与 AI 剪辑已接入，待 macOS 真实账号实机验收 | K、L、C |
 
 ## 快速导航
 

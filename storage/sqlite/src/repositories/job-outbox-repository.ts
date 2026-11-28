@@ -832,10 +832,13 @@ export class JobOutboxRepository {
     this.grants.authorizeProject(projectId, principal, "viewer");
     const documents = this.tx.rows(
       `SELECT document FROM events
-       WHERE project_id = ? AND json_extract(document, '$.runId') = ?
-         AND CAST(seq AS INTEGER) > CAST(? AS INTEGER)
+       WHERE project_id = ? AND (
+         json_extract(document, '$.runId') = ? OR
+         (json_extract(document, '$.type') LIKE 'run.%' AND json_extract(document, '$.payload.runId') = ?)
+       ) AND CAST(seq AS INTEGER) > CAST(? AS INTEGER)
        ORDER BY CAST(seq AS INTEGER) LIMIT 200`,
       projectId,
+      runId,
       runId,
       afterSeq,
     );

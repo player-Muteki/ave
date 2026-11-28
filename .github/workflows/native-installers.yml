@@ -69,6 +69,14 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/ave-builder" electron-builder@26.18.0 --no-audit --no-fund
           python release/desktop/native/pack.py --builder-cli "$RUNNER_TEMP/ave-builder/node_modules/electron-builder/cli.js" --media native-media --output dist/installers
+      - name: Check installed Mac desktop and login entry
+        if: runner.os == 'macOS'
+        run: |
+          mount_dir=$(mktemp -d)
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount_dir" dist/installers/*.dmg
+          trap 'hdiutil detach "$mount_dir"' EXIT
+          ditto "$mount_dir/AVE.app" "$RUNNER_TEMP/AVE.app"
+          node release/desktop/native/check-mac.mjs "$RUNNER_TEMP/AVE.app/Contents/MacOS/AVE"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: AVE-native-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}

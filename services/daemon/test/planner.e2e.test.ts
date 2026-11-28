@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
@@ -460,3 +460,86 @@ describe("@ave/daemon R3 Native Planner E2E", () => {
     client2.close();
   });
 });
+
+it("authorizes a desktop Responses run, submits once, and renders exactly 50 muted frames after approval", async () => {
+  const home = await makeTempDir("ave-chatgpt-test-");
+  const stub = path.join(home, "worker.mjs");
+  const draftFile = path.join(home, "draft.json");
+  const entry = path.resolve(__dirname, "../../planner-worker/dist/worker-main.js");
+  // Replace only the worker's network transport, keeping the real planner, broker and FFmpeg.
+  await writeFile(stub, `
+    import { readFileSync } from "node:fs";
+    let turn = 0;
+    globalThis.fetch = async (url, request) => {
+      if (url !== "https://api.openai.com/v1/responses" || request.headers.authorization !== "Bearer fixture") throw Error("unexpected transport");
+      const body = JSON.parse(request.body);
+      if (body.tools[0].tools.length !== 17 || !body.stream || body.store) throw Error("unexpected request");
+      const draft = JSON.parse(readFileSync(${JSON.stringify(draftFile)}, "utf8"));
+      const first = turn++ === 0;
+      if (!first && !body.input.some(item => item.type === "function_call_output" && item.call_id === "validate")) throw Error("missing result");
+      const output = [{type:"function_call",namespace:"ave",name:first?"validate_edit_plan":"submit_edit_plan",
+        call_id:first?"validate":"submit",arguments:JSON.stringify(draft)}];
+      return new Response("data: " + JSON.stringify({type:"response.completed",response:{output}}) + "\\n\\n");
+    };
+    await import(${JSON.stringify(pathToFileURL(entry).href)});
+  `);
+  const daemon = await AveDaemon.create({aveHome:home,plannerWorkerEntryPath:stub});
+  daemons.push(daemon);
+  const address=await daemon.start();
+  const client=new AveClient({url:address.wsUrl,auth:{kind:"localOwner",token:address.ownerToken},
+    WebSocketImpl:WebSocket as unknown as new(url:string)=>never,reconnect:false});
+  await client.connect();
+  try {
+    const project=await client.createProject({requestId:"project",title:"ChatGPT fixture"});
+    const projectId=project.projectId;
+    await execFileAsync("python3",[GOLDEN_SCRIPT,"--out-dir",home]);
+    const bytes=await readFile(path.join(home,"cfr_25fps_av.mp4"));
+    const asset=await new SourceImport(projectId,new File([new Uint8Array(bytes)],"sample.mp4",{type:"video/mp4"}),"upload")
+      .transfer(createUploadChannels(client),sha256HexBrowserSafe);
+    const model={provider:"chatgpt",id:"fixture-model"};
+    const input={projectId,requestId:"run",model,prompt:"只保留开头两秒，并把这段静音"};
+    const owner=daemon.ownerPrincipal();
+    let tokenRequests=0;
+    const access=async()=>{tokenRequests++;return "fixture";};
+    await expect(daemon.planner.startRun(input,owner,access)).rejects.toThrow();
+    expect(tokenRequests).toBe(0);
+    await client.call("video.v1.set_project_cloud_policy",{projectId,requestId:"cloud",allowCloudModels:true});
+    await client.call("video.v1.set_model_policy",{projectId,requestId:"policy",
+      policy:{provider:model.provider,modelId:model.id,stages:["planning"],location:"cloud",enabled:true}});
+    await expect(client.call("video.v1.start_planning_run",input)).rejects.toThrow();
+    const base=await client.getProject(projectId);
+    const range={start:{num:"0",den:"1"},duration:{num:"2",den:"1"}};
+    const source=(kind:string)=>({assetId:asset.assetId,assetContentHash:asset.original.sha256,
+      streamUid:asset.streams.find(s=>s.kind===kind)!.streamUid,probeRevision:"1"});
+    const trim={opId:"trim",order:"1",trackId:"v1",clipId:"c",source:source("video"),sourceRange:range,recordRange:range};
+    const draft:EditPlanDraftV1={schemaVersion:"video.edit-plan/v1",projectId,baseTimelineRevision:base.revision,
+      baseAssetManifestHash:base.baseAssetManifestHash,preferredDeterministicBackendId:"ffmpeg",intent:input.prompt,
+      trimOperations:[trim],audioOperations:[{...trim,opId:"mute",source:source("audio"),gainMilli:"0",mute:true}],
+      transformOperations:[],transitionOperations:[],subtitleOperations:[],generationRequests:[],qaRequirements:[],externalDestinations:[],maxCostMicros:"0"};
+    await writeFile(draftFile,JSON.stringify(draft));
+    const run=await daemon.planner.startRun(input,owner,access);
+    expect((await daemon.planner.startRun(input,owner,access)).runId).toBe(run.runId);
+    expect((await waitForRunTerminal(client,projectId,run.runId)).state).toBe("settled");
+    const events=await client.call<{events:Array<{type:string;payload:{planId?:string}}>}>(
+      "video.v1.get_run_events",{projectId,runId:run.runId,requestId:"terminal"});
+    expect(events.events.find(e=>e.type==="run.settled")?.payload.planId).toBeTruthy();
+    const pending=await client.getProject(projectId);
+    expect(pending.jobs).toHaveLength(0);
+    expect(pending.plans).toHaveLength(1);
+    expect(pending.approvals).toHaveLength(1);
+    const approval=pending.approvals[0];
+    expect(approval.status).toBe("pending");
+    const decision=await client.decideApproval({requestId:"approve",approvalId:approval.approvalId,expectedRevision:pending.revision,decision:"approve"});
+    const job=await client.createJob({requestId:"render",projectId,approvalId:approval.approvalId,grantId:decision.grant!.grantId,expectedRevision:pending.revision});
+    const done=await waitForJobTerminal(client,projectId,job.job.jobId,["awaiting_review"]);
+    const artifact=done.artifacts.find(a=>a.kind==="candidate")!;
+    const file=daemon.cas.pathFor(artifact.blob);
+    const probe=await execFileAsync("ffprobe",["-v","error","-select_streams","v:0","-count_frames","-show_entries","stream=nb_read_frames,duration","-of","json",file]);
+    const [video]=JSON.parse(probe.stdout).streams;
+    expect(Number(video.nb_read_frames)).toBe(50);
+    expect(Number(video.duration)).toBe(2);
+    const audio=await execFileAsync("ffmpeg",["-v","error","-i",file,"-map","0:a:0","-f","s16le","pipe:1"],{encoding:"buffer"});
+    expect(audio.stdout.length).toBeGreaterThan(0);
+    expect(audio.stdout.every(b=>b===0)).toBe(true);
+  } finally {client.close();}
+},60000);

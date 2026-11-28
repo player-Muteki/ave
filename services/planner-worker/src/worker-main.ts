@@ -107,7 +107,7 @@ function main(): void {
               {
                 kind: "run_state",
                 state: "settled",
-                detail: outcome.summary,
+                detail: outcome.summary.slice(0, 2000),
                 ...(outcome.planId ? { planId: outcome.planId } : {}),
                 ...(outcome.planHash ? { planHash: outcome.planHash } : {}),
               },
