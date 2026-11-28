@@ -18,6 +18,7 @@ import {
 import {
   sha256Json,
   summarizeDraftTimeline,
+  rationalAdd,
   validateEditPlanSemantics,
 } from "@ave/domain";
 import type { TransactionCoordinator } from "../coordinator.js";
@@ -201,7 +202,8 @@ export class PlanApprovalRepository {
       const anchor = input.anchor.anchor;
       const rate = BigInt(g.sampleFps.num);
       const period = BigInt(g.sampleFps.den);
-      const { start, duration } = op.sourceRange;
+      const duration = op.sourceRange.duration;
+      const start = rationalAdd(op.sourceRange.start, anchor.inputStartTime ?? { num: "0", den: "1" });
       const offset = BigInt(anchor.frame - input.tracking.firstFrame);
       const atAnchor = BigInt(start.num) * rate + offset * period * BigInt(start.den);
       if (

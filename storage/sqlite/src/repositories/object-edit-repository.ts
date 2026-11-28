@@ -343,11 +343,13 @@ export class ObjectEditRepository {
         const mask = this.maskInput(approval, input.actor);
         const asset = this.projects.getAsset(workflow.projectId, workflow.assetId, workflow.baseTimelineRevision, input.actor);
         const span = workflow.sourceFrames;
+        const stream = asset.streams.find(s => s.streamUid === span.streamUid);
         if (mask.kind !== "anchor" || approval.subjectId !== workflow.maskRevisionId ||
             mask.revision.baseTimelineRevision !== workflow.baseTimelineRevision ||
             mask.revision.anchor.assetId !== asset.assetId || mask.revision.anchor.sourceSha256 !== workflow.assetContentHash ||
             mask.revision.anchor.sourcePresentationIndexHash !== asset.presentationIndex.sha256 ||
-            mask.revision.anchor.streamUid !== span.streamUid || mask.revision.anchor.frame !== workflow.anchorFrame ||
+            mask.revision.anchor.streamUid !== span.streamUid || mask.revision.anchor.width !== stream?.width ||
+            mask.revision.anchor.height !== stream?.height || mask.revision.anchor.frame !== workflow.anchorFrame ||
             workflow.anchorFrame < span.firstFrame || workflow.anchorFrame >= span.firstFrame + span.frameCount) {
           editorFailure("REVISION_CONFLICT", "The reviewed anchor belongs to a different source, frame or revision");
         }

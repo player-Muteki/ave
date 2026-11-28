@@ -266,7 +266,7 @@ describe("@ave/sqlite 5-repository coordinator", () => {
   });
 
   it("enforces ObjectEdit 6-state FSM, invalidation on asset change, and SQLite device grants", async () => {
-    const { root, store } = await createTempEnv();
+    const { root, store, cas } = await createTempEnv();
     const p = store.projects.createProject({ requestId: "oe-proj", title: "Obj", principal: OWNER });
     const a1 = makeAsset("a1", Buffer.from("clip-1"));
     store.projects.addAsset(p.projectId, a1, "oe-add-1", OWNER);
@@ -329,10 +329,10 @@ describe("@ave/sqlite 5-repository coordinator", () => {
     expect(() => store.objectEdits.reviewObjectMask({ requestId: "oe-forged", projectId: p.projectId,
       workflowId: wf.workflowId, expectedWorkflowRevision: wf.workflowRevision, maskRevisionId: "invented", approved: true, actor: authed }))
       .toThrow(/matching generated mask/);
-    const cas = new ContentAddressedStore(path.join(root, "cas"));
-    await cas.initialize();
-    store.bindCas(cas);
-    const label = await cas.writeBytes(Uint8Array.of(255), "application/octet-stream");
+    const width = a1.streams[0]!.width!, height = a1.streams[0]!.height!;
+    const raster = new Uint8Array(width * height);
+    raster[0] = 255;
+    const label = await cas.writeBytes(raster, "application/octet-stream");
     const image = await cas.writeBytes(Uint8Array.of(0xff, 0xd8, 0xff), "image/jpeg");
     for (const approved of [false, true]) {
       const job = store.jobs.getJob(p.projectId, wf.workerJobId!, OWNER);
@@ -343,7 +343,7 @@ describe("@ave/sqlite 5-repository coordinator", () => {
           expectedLabelSha256: label.sha256, expectedPreviewSha256: image.sha256 },
         sourceFrames: { streamUid: anchor.streamUid, firstFrame: 0, frameCount: 9 },
         header: { ...anchor, sourceSha256: a1.original.sha256, pts: "0", timeBase: a1.streams[0]!.timeBase,
-          frameCount: 9, width: 1, height: 1, previewWidth: 1, previewHeight: 1,
+          frameCount: 9, width, height, previewWidth: width, previewHeight: height,
           previewSha256: image.sha256, mask: { engine: "sam2.1-tiny", weightsSha256: "7".repeat(64), labelSha256: label.sha256, foregroundPixels: 1 } },
         label, image,
       });

@@ -1048,6 +1048,7 @@ export const InspectFrameRequestSchema = z.object({
 export type InspectFrameRequest = z.infer<typeof InspectFrameRequestSchema>;
 
 export const InspectFrameHeaderSchema = InspectFrameRequestSchema.extend({
+  inputStartTime: RationalSchema.optional(),
   sourceSha256: sha256, pts: z.string().regex(/^-?[0-9]+$/), timeBase: RationalSchema,
   frameCount: z.number().int().positive(),
   width: z.number().int().positive(), height: z.number().int().positive(),

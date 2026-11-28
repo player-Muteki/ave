@@ -9,6 +9,7 @@ import type { ContentAddressedStore } from "@ave/cas";
 import { sha256File } from "@ave/cas";
 import {
   EditPlanDraftV1Schema,
+  EditorError,
   InspectFrameHeaderSchema,
   TrackedMaskManifestSchema,
   VACE_MODEL,
@@ -163,6 +164,7 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
       editorFailure("INVALID_ARGUMENT", "No such video raster");
     }
     const { width, height } = video;
+    const probe = await this.cas.readJson<{ format?: { start_time?: string } }>(asset.probe);
     const index = JSON.parse((await this.cas.readBytes(asset.presentationIndex)).toString("utf8")) as {
       schemaVersion?: string;
       sourceSha256?: string;
@@ -217,6 +219,7 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
       height,
       pts,
       frameCount: frames.length,
+      inputStartTime: probeStartTime(probe.format?.start_time),
       original,
       previewWidth,
       previewHeight,
@@ -372,6 +375,7 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
         ...request,
         pts,
         timeBase: frame.video.timeBase,
+        inputStartTime: frame.inputStartTime,
         frameCount,
         width,
         height,
@@ -384,10 +388,9 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
 
       if (!save) return { header, jpeg: stdout };
 
-      if (
-        !header.mask?.foregroundPixels || (save !== "workflow" && (header.mask.labelSha256 !== save.expectedLabelSha256 ||
-        header.previewSha256 !== save.expectedPreviewSha256))
-      ) {
+      if (!header.mask?.foregroundPixels) editorFailure("QA_FAILED", "The anchor has no foreground pixels");
+      if (save !== "workflow" && (header.mask.labelSha256 !== save.expectedLabelSha256 ||
+        header.previewSha256 !== save.expectedPreviewSha256)) {
         editorFailure("REVISION_CONFLICT", "Recomputed mask differs from the reviewed anchor");
       }
       const rawLabelMask = await this.cas.importFile(
@@ -395,11 +398,18 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
         "application/octet-stream",
       );
       if (
-        rawLabelMask.sha256 !== header.mask!.labelSha256 ||
+        rawLabelMask.sha256 !== header.mask.labelSha256 ||
         BigInt(rawLabelMask.bytes) !== BigInt(width) * BigInt(height)
       ) {
         editorFailure("QA_FAILED", "Stored mask does not match the reviewed source raster");
       }
+      const label = await this.cas.readBytes(rawLabelMask);
+      let foreground = 0;
+      for (const value of label) {
+        if (value !== 0 && value !== 255) editorFailure("QA_FAILED", "The anchor label must be binary");
+        if (value) foreground++;
+      }
+      if (foreground !== header.mask.foregroundPixels) editorFailure("QA_FAILED", "The anchor foreground count changed");
       return { header, jpeg: stdout, rawLabelMask };
     } finally {
       if (acquired) this.inspecting = false;
@@ -920,8 +930,14 @@ export class AveMediaWorkerBridge implements MediaWorkerHook {
       if (signal.aborted) editorFailure("CANCELLED", "VACE generation was cancelled");
       editorFailure("WORKER_FAILED", "VACE generation failed or timed out", true);
     }
-    if (await sha256File(sourcePath) !== sourceRgbHash) editorFailure("QA_FAILED", "VACE modified its reference frames");
-    const changedPixels = await verifyGeneratedPixels(directory, this.cas, doc.frames, doc.width, doc.height, seed);
+    let changedPixels: number[];
+    try {
+      if (await sha256File(sourcePath) !== sourceRgbHash) editorFailure("QA_FAILED", "VACE modified its reference frames");
+      changedPixels = await verifyGeneratedPixels(directory, this.cas, doc.frames, doc.width, doc.height, seed);
+    } catch (error) {
+      if (error instanceof EditorError) throw error;
+      editorFailure("QA_FAILED", "VACE returned an incomplete composite or pixel report");
+    }
     const output = path.join(directory, "composite.rgb");
     return { path: output, width: doc.width, height: doc.height, rate: clock.rate, trace: {
       modelRevision: g.modelId, seed, promptHash: sha256Json([g.prompt, g.negativePrompt]),

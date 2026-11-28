@@ -428,7 +428,7 @@ describe("@ave/daemon R4 Media Worker & Object-Edit Loop", () => {
 
 it("runs scheduled detection, mask review and approved nine-frame preview and final renders", async () => {
   const dir = await makeTempDir("ave-two-people-");
-  const clip = await makePeopleClip(dir);
+  const clip = await makePeopleClip(dir, 2);
   let mode: WorkerMode = "normal";
   const daemon = await AveDaemon.create({ aveHome: await makeTempDir("ave-edit-home-"), mediaWorkerTestAdapter: recordedWorker(() => mode) });
   daemons.push(daemon);
@@ -478,6 +478,12 @@ it("runs scheduled detection, mask review and approved nine-frame preview and fi
     daemon.store.plans.updateApproval({ ...mask, expiresAt: new Date(0).toISOString() });
     await expect(client.call("video.v1.review_object_mask", review(true))).rejects.toMatchObject({ code: "APPROVAL_EXPIRED" });
     daemon.store.plans.updateApproval(mask);
+    const revision = daemon.store.objectEdits.getMaskRevision(projectId, wf.maskRevisionId!, { principalId: "owner", role: "owner", projectIds: null });
+    expect(BigInt(revision.anchor.inputStartTime!.num)).toBeGreaterThan(0n);
+    const savedLabel = await daemon.cas.readBytes(revision.rawLabelMask);
+    await writeFile(daemon.cas.pathFor(revision.rawLabelMask), Buffer.alloc(savedLabel.length));
+    await expect(client.call("video.v1.review_object_mask", review(true))).rejects.toMatchObject({ code: "ARTIFACT_HASH_MISMATCH" });
+    await writeFile(daemon.cas.pathFor(revision.rawLabelMask), savedLabel);
     const request = review(true);
     const accepted = await client.call<{ workflow: ObjectEditWorkflow }>("video.v1.review_object_mask", request);
     expect(await client.call("video.v1.review_object_mask", request)).toEqual(accepted);
@@ -509,7 +515,7 @@ it("runs scheduled detection, mask review and approved nine-frame preview and fi
       return settledJob(client, projectId, job.jobId);
     }
     let seed = 1;
-    for (const scenario of ["no-change", "leak", "timeout"] as const) {
+    for (const scenario of ["no-change", "leak", "missing-output", "timeout"] as const) {
       mode = scenario;
       const job = await render((await proposal(++seed)).approval);
       expect(job.state, scenario).toBe("failed");

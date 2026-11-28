@@ -4613,6 +4613,9 @@
             "additionalProperties": false
           }
         },
+        "inputStartTime": {
+          "$ref": "urn:video-editor:v1:Rational"
+        },
         "sourceSha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
@@ -5269,6 +5272,9 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "inputStartTime": {
+              "$ref": "urn:video-editor:v1:Rational"
             },
             "sourceSha256": {
               "type": "string",

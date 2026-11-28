@@ -7,16 +7,16 @@ import { VACE_MODEL } from "@ave/contracts";
 import type { MediaWorkerTestAdapter } from "../src/index.js";
 
 const execute = promisify(execFile);
-export async function makePeopleClip(directory: string): Promise<string> {
+export async function makePeopleClip(directory: string, offsetSeconds = 0): Promise<string> {
   const file = path.join(directory, "two-people.mp4");
   await execute("ffmpeg", ["-v", "error", "-nostdin", "-f", "lavfi", "-i",
     "color=c=gray:s=160x128:r=25:d=1,drawbox=x=16:y=16:w=32:h=64:c=red:t=fill,drawbox=x=96:y=16:w=32:h=64:c=blue:t=fill",
     "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
-    "-c:v", "libx264", "-threads:v", "1", "-pix_fmt", "yuv420p", "-c:a", "aac", file]);
+    "-c:v", "libx264", "-threads:v", "1", "-pix_fmt", "yuv420p", "-c:a", "aac", "-output_ts_offset", String(offsetSeconds), file]);
   return file;
 }
 
-export type WorkerMode = "normal" | "empty" | "unavailable" | "no-change" | "leak" | "timeout";
+export type WorkerMode = "normal" | "empty" | "unavailable" | "no-change" | "leak" | "timeout" | "missing-output";
 export function recordedWorker(mode: () => WorkerMode = () => "normal"): MediaWorkerTestAdapter {
   return {
     async detectPeople(directory) {
@@ -47,6 +47,7 @@ export function recordedWorker(mode: () => WorkerMode = () => "normal"): MediaWo
       return Array(count).fill(anchorRaw.filter(Boolean).length);
     },
     async generateShot(directory) {
+      if (mode() === "missing-output") return;
       if (mode() === "timeout") throw new Error("Recorded timeout");
       const { width, height, seed } = JSON.parse(await readFile(path.join(directory, "request.json"), "utf8"));
       const composite = await readFile(path.join(directory, "source.rgb"));
