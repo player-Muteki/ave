@@ -1,5 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -59,9 +61,9 @@ describe("Legacy Paseo -> Native AVE Migration Tool", () => {
       [indexSha, indexBytes],
       [probeSha, probeBytes],
     ] as const) {
-      const shardDir = path.join(legacyCas, "blobs", sha.slice(0, 2));
+      const shardDir = path.join(legacyCas, "objects", sha.slice(0, 2));
       await mkdir(shardDir, { recursive: true });
-      await writeFile(path.join(shardDir, sha), bytes);
+      await writeFile(path.join(shardDir, sha.slice(2) + ".blob"), bytes);
     }
 
     const now = new Date().toISOString();
@@ -156,6 +158,14 @@ describe("Legacy Paseo -> Native AVE Migration Tool", () => {
     expect(manifest.assets).toHaveLength(1);
     expect(manifest.devices).toHaveLength(1);
     expect(manifest.blobs).toHaveLength(3);
+    const cli = (command: string, ...args: string[]) => execFileSync(process.execPath,
+      ["scripts/migrate_legacy_project.mjs", command, ...args], { encoding: "utf8" });
+    const legacyFiles = await readdir(legacyRoot, { recursive: true });
+    const sourceBytes = await readFile(path.join(legacyRoot, "editor.sqlite"));
+    cli("export", "--legacy-dir", legacyRoot, "--out", manifestPath);
+    expect(await readdir(legacyRoot, { recursive: true })).toEqual(legacyFiles);
+    expect(await readFile(path.join(legacyRoot, "editor.sqlite"))).toEqual(sourceBytes);
+    expect(JSON.parse(cli("import", "--manifest", manifestPath, "--legacy-cas", legacyCas, "--target-home", targetHome)).blobs).toBe(3);
     const written = JSON.parse(await readFile(manifestPath, "utf8"));
     expect(written.projects[0].title).toBe("Legacy Video Project");
 
@@ -200,11 +210,32 @@ describe("Legacy Paseo -> Native AVE Migration Tool", () => {
         mediaType: "video/mp4",
       }),
     ).toBe(true);
+    expect(await nativeCas.readJson(snap.assets[0]!.presentationIndex)).toMatchObject({ sourceSha256: videoSha });
     nativeStore.close();
+    const local = new DatabaseSync(path.join(targetHome, "ave.sqlite"));
+    try {
+      local.prepare("UPDATE projects SET title = ?, revision = ? WHERE project_id = ?").run("Native edit", "2", projectId);
+      const extra = Buffer.from("new mixed-batch blob");
+      const extraSha = sha256Hex(extra);
+      const extraPath = new ContentAddressedStore(legacyCas).pathFor({ sha256: extraSha });
+      await mkdir(path.dirname(extraPath), { recursive: true });
+      await writeFile(extraPath, extra);
+      const mixed = { ...manifest,
+        projects: [{ ...manifest.projects[0]!, project_id: "incoming" }, ...manifest.projects],
+        blobs: [...manifest.blobs, { sha256: extraSha, bytes: String(extra.length), mediaType: "text/plain" }],
+      };
+      await expect(importMigrationManifest({ manifest: mixed, legacyCasDir: legacyCas, targetAveHome: targetHome }))
+        .rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+      expect(local.prepare("SELECT title, revision FROM projects").all()).toEqual([{ title: "Native edit", revision: "2" }]);
+      expect(existsSync(nativeCas.pathFor({ sha256: extraSha }))).toBe(false);
+      expect(await nativeCas.readBytes(snap.assets[0]!.original)).toEqual(sampleVideoBytes);
+    } finally {
+      local.close();
+    }
 
     // 6. Reject tampered legacy blob on export
     await writeFile(
-      path.join(legacyCas, "blobs", videoSha.slice(0, 2), videoSha),
+      new ContentAddressedStore(legacyCas).pathFor({ sha256: videoSha }),
       Buffer.from("corrupted"),
     );
     await expect(

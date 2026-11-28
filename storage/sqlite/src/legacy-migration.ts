@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync, linkSync, mkdirSync, realpathSync, unlinkSync } from "node:fs";
+import os from "node:os";
+import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DatabaseSync as NodeDatabaseSync } from "node:sqlite";
+import { DatabaseSync as NodeDatabaseSync, type SQLInputValue } from "node:sqlite";
 import { ContentAddressedStore, sha256File } from "@ave/cas";
 import { editorFailure, type BlobRef } from "@ave/contracts";
 import { AVE_SQLITE_SCHEMA } from "./schema.js";
@@ -158,18 +159,50 @@ function collectBlobRefs(value: unknown, out: Map<string, BlobRef>): void {
 }
 
 function casObjectPath(casDir: string, sha256Hex: string): string {
+  const historical = new ContentAddressedStore(casDir).pathFor({ sha256: sha256Hex });
+  if (existsSync(historical)) return historical;
   const flat = path.join(casDir, sha256Hex);
   if (existsSync(flat)) return flat;
   const sharded = path.join(casDir, "blobs", sha256Hex.slice(0, 2), sha256Hex);
   if (existsSync(sharded)) return sharded;
   const objs = path.join(casDir, "objects", sha256Hex.slice(0, 2), sha256Hex);
   if (existsSync(objs)) return objs;
-  return sharded;
+  return historical;
+}
+
+function resolvePhysicalPath(value: string): string {
+  const absolute = path.resolve(value);
+  if (existsSync(absolute)) return realpathSync(absolute);
+  return path.join(resolvePhysicalPath(path.dirname(absolute)), path.basename(absolute));
+}
+
+async function fileVersion(file: string): Promise<string | null> {
+  try {
+    const info = await stat(file, { bigint: true });
+    return [info.dev, info.ino, info.size, info.ctimeNs].join("/");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+// Opening a WAL database can create or modify its -shm sidecar even in read-only mode.
+async function openSnapshot(file: string, directory: string): Promise<ReadonlySqlite> {
+  const names = [file, file + "-wal"];
+  const before = await Promise.all(names.map(fileVersion));
+  for (const [i, name] of names.entries()) {
+    if (before[i]) await copyFile(name, path.join(directory, path.basename(name)));
+  }
+  const after = await Promise.all(names.map(fileVersion));
+  if (before.some((value, i) => value !== after[i])) {
+    editorFailure("REVISION_CONFLICT", "Legacy database changed during export. Retry the export.");
+  }
+  return new DatabaseSyncReadonly(path.join(directory, path.basename(file)), { readOnly: true });
 }
 
 function assertPathsDisjoint(sourceRoot: string, targetRoot: string, label: string): void {
-  const src = path.resolve(sourceRoot);
-  const dst = path.resolve(targetRoot);
+  const src = resolvePhysicalPath(sourceRoot);
+  const dst = resolvePhysicalPath(targetRoot);
   if (
     src === dst ||
     dst.startsWith(src + path.sep) ||
@@ -198,9 +231,11 @@ export async function exportLegacyProjectManifest(options: {
     editorFailure("NOT_FOUND", `Legacy database not found at ${sqlitePath}`);
   }
   const casDir = path.join(sourceRoot, "cas");
-  const db = new DatabaseSyncReadonly(sqlitePath, { readOnly: true });
-
+  if (options.outputManifestPath) assertPathsDisjoint(sourceRoot, options.outputManifestPath, "legacy sourceRoot");
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "ave-legacy-db-"));
+  let snapshot: ReadonlySqlite | undefined;
   try {
+    const db = snapshot = await openSnapshot(sqlitePath, temporary);
     const tableExists = (name: string) =>
       db
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
@@ -277,7 +312,7 @@ export async function exportLegacyProjectManifest(options: {
           role: dev.role,
           project_ids: dev.projectIds ? JSON.stringify(dev.projectIds) : null,
           revoked_at: null,
-          created_at: dev.createdAt ?? new Date().toISOString(),
+          created_at: dev.createdAt ?? new Date(0).toISOString(),
         });
       }
     }
@@ -296,7 +331,7 @@ export async function exportLegacyProjectManifest(options: {
         editorFailure("ASSET_NOT_FOUND", `Legacy CAS object missing: ${blob.sha256}`);
       }
       const actual = await sha256File(srcFile);
-      if (actual !== blob.sha256) {
+      if (actual !== blob.sha256 || (await stat(srcFile)).size.toString() !== blob.bytes) {
         editorFailure(
           "ARTIFACT_HASH_MISMATCH",
           `Legacy CAS object corrupted: ${blob.sha256}`,
@@ -337,7 +372,8 @@ export async function exportLegacyProjectManifest(options: {
     }
     return manifest;
   } finally {
-    db.close();
+    snapshot?.close();
+    await rm(temporary, { recursive: true, force: true });
   }
 }
 
@@ -350,6 +386,35 @@ export interface ImportMigrationResult {
   objectEdits: number;
   devices: number;
   blobs: number;
+}
+
+const migrationTables = [
+  "projects", "project_grants", "devices", "assets", "plans", "approvals", "mutations",
+  "jobs", "mask_tracking_jobs", "tracked_mask_reviews", "mask_anchors", "object_edits",
+  "constant_rate_streams", "preview_sheets", "contact_sheets", "artifacts", "events",
+  "outbox", "model_policies", "project_settings",
+] as const;
+
+function mergeRows(db: NodeDatabaseSync, manifest: MigrationManifest): void {
+  for (const table of migrationTables) {
+    const rows = manifest[table];
+    if (!rows.length) continue;
+    const info = db.prepare(`PRAGMA table_info(${table})`).all();
+    const columns = info.map((column) => String(column.name));
+    const keys = info.filter((column) => column.pk).map((column) => String(column.name));
+    const where = keys.map((key) => key + " = ?").join(" AND ");
+    const existing = db.prepare(`SELECT * FROM ${table} WHERE ${where}`);
+    const insert = db.prepare(`INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`);
+    for (const row of rows) {
+      const values: Record<string, SQLInputValue> = row;
+      const identity = keys.map((key) => values[key]);
+      const previous = existing.get(...identity);
+      if (!previous) insert.run(...columns.map((column) => values[column]));
+      else if (columns.some((column) => previous[column] !== values[column])) {
+        editorFailure("REVISION_CONFLICT", `Migration conflict in ${table} (${identity.join(", ")})`);
+      }
+    }
+  }
 }
 
 /**
@@ -372,172 +437,50 @@ export async function importMigrationManifest(options: {
   const cas = new ContentAddressedStore(path.join(targetHome, "cas"));
   await cas.initialize();
 
-  for (const blob of options.manifest.blobs) {
-    const srcFile = casObjectPath(options.legacyCasDir, blob.sha256);
-    if (!existsSync(srcFile)) {
-      editorFailure("ASSET_NOT_FOUND", `Source CAS object missing during import: ${blob.sha256}`);
-    }
-    const actual = await sha256File(srcFile);
-    if (actual !== blob.sha256) {
-      editorFailure(
-        "ARTIFACT_HASH_MISMATCH",
-        `Source CAS object hash mismatch during import: ${blob.sha256}`,
-      );
-    }
-    const dst = cas.pathFor(blob);
-    await mkdir(path.dirname(dst), { recursive: true });
-    if (!existsSync(dst)) {
-      await copyFile(srcFile, dst);
-    }
-  }
-
-  const db = new NodeDatabaseSync(path.join(targetHome, "ave.sqlite"));
+  const staging = await mkdtemp(path.join(targetHome, "cas", "temporary", "migration-"));
+  let database: NodeDatabaseSync | undefined;
   try {
+    const objects = new Map<string, { source: string; destination: string }>();
+    for (const blob of options.manifest.blobs) {
+      const destination = cas.pathFor(blob);
+      const legacy = casObjectPath(options.legacyCasDir, blob.sha256);
+      if (!existsSync(legacy)) editorFailure("ASSET_NOT_FOUND", `Source CAS object missing: ${blob.sha256}`);
+      const source = path.join(staging, blob.sha256);
+      await copyFile(legacy, source);
+      if ((await stat(source)).size.toString() !== blob.bytes || await sha256File(source) !== blob.sha256) {
+        editorFailure("ARTIFACT_HASH_MISMATCH", `Legacy CAS object corrupted: ${blob.sha256}`);
+      }
+      if (existsSync(destination) && !await cas.verifyBlob(blob)) {
+        editorFailure("ARTIFACT_HASH_MISMATCH", `Native CAS object corrupted: ${blob.sha256}`);
+      }
+      objects.set(blob.sha256, { source, destination });
+    }
+
+    const db = database = new NodeDatabaseSync(path.join(targetHome, "ave.sqlite"));
     db.exec(AVE_SQLITE_SCHEMA);
-    db.prepare(
-      "INSERT OR IGNORE INTO metadata(key, value) VALUES ('formatVersion', '1'), ('minReaderVersion', '1')",
-    ).run();
-    db.prepare("INSERT OR REPLACE INTO metadata(key, value) VALUES ('migratedFrom', ?)").run(
-      createHash("sha256").update(options.manifest.sourceRoot).digest("hex"),
-    );
-
     db.exec("BEGIN IMMEDIATE");
+    const published: string[] = [];
     try {
-      const m = options.manifest;
-
-      const insProj = db.prepare(
-        "INSERT OR REPLACE INTO projects(project_id, title, revision, asset_manifest_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-      );
-      for (const r of m.projects) {
-        insProj.run(r.project_id, r.title, r.revision, r.asset_manifest_hash, r.created_at);
+      mergeRows(db, options.manifest);
+      db.exec("INSERT OR IGNORE INTO metadata(key, value) VALUES ('formatVersion', '1'), ('minReaderVersion', '1')");
+      db.prepare("INSERT INTO metadata(key, value) VALUES ('migratedFrom', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value <> excluded.value")
+        .run(createHash("sha256").update(options.manifest.sourceRoot).digest("hex"));
+      for (const { source, destination } of objects.values()) {
+        mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+        try {
+          linkSync(source, destination);
+          published.push(destination);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        }
       }
-
-      const insGrant = db.prepare(
-        "INSERT OR REPLACE INTO project_grants(project_id, principal_id, role) VALUES (?, ?, ?)",
-      );
-      for (const r of m.project_grants) insGrant.run(r.project_id, r.principal_id, r.role);
-
-      const insDev = db.prepare(
-        "INSERT OR REPLACE INTO devices(device_id, token_hash, role, project_ids, revoked_at, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-      );
-      for (const r of m.devices) {
-        insDev.run(r.device_id, r.token_hash, r.role, r.project_ids, r.revoked_at, r.created_at);
-      }
-
-      const insAsset = db.prepare(
-        "INSERT OR REPLACE INTO assets(asset_id, project_id, revision, document) VALUES (?, ?, ?, ?)",
-      );
-      for (const r of m.assets) insAsset.run(r.asset_id, r.project_id, r.revision, r.document);
-
-      const insPlan = db.prepare(
-        "INSERT OR REPLACE INTO plans(plan_id, project_id, plan_hash, revision, document) VALUES (?, ?, ?, ?, ?)",
-      );
-      for (const r of m.plans) {
-        insPlan.run(r.plan_id, r.project_id, r.plan_hash, r.revision, r.document);
-      }
-
-      const insApp = db.prepare(
-        "INSERT OR REPLACE INTO approvals(approval_id, project_id, plan_hash, purpose, request, grant, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      );
-      for (const r of m.approvals) {
-        insApp.run(r.approval_id, r.project_id, r.plan_hash, r.purpose, r.request, r.grant, r.created_at);
-      }
-
-      const insMut = db.prepare(
-        "INSERT OR REPLACE INTO mutations(project_id, request_id, fingerprint, response, created_at) VALUES (?, ?, ?, ?, ?)",
-      );
-      for (const r of m.mutations) {
-        insMut.run(r.project_id, r.request_id, r.fingerprint, r.response, r.created_at);
-      }
-
-      const insJob = db.prepare(
-        "INSERT OR REPLACE INTO jobs(job_id, project_id, plan_hash, revision, kind, document, active) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      );
-      for (const r of m.jobs) {
-        insJob.run(r.job_id, r.project_id, r.plan_hash, r.revision, r.kind, r.document, r.active);
-      }
-
-      const insMtj = db.prepare(
-        "INSERT OR REPLACE INTO mask_tracking_jobs(job_id, project_id, request) VALUES (?, ?, ?)",
-      );
-      for (const r of m.mask_tracking_jobs) insMtj.run(r.job_id, r.project_id, r.request);
-
-      const insTmr = db.prepare(
-        "INSERT OR REPLACE INTO tracked_mask_reviews(approval_id, job_id, decided_by) VALUES (?, ?, ?)",
-      );
-      for (const r of m.tracked_mask_reviews) insTmr.run(r.approval_id, r.job_id, r.decided_by);
-
-      const insMa = db.prepare(
-        "INSERT OR REPLACE INTO mask_anchors(mask_revision_id, project_id, approval_id, request_id, request_hash, document, approved_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      );
-      for (const r of m.mask_anchors) {
-        insMa.run(
-          r.mask_revision_id,
-          r.project_id,
-          r.approval_id,
-          r.request_id,
-          r.request_hash,
-          r.document,
-          r.approved_by,
-        );
-      }
-
-      const insOe = db.prepare(
-        "INSERT OR REPLACE INTO object_edits(workflow_id, project_id, asset_id, document) VALUES (?, ?, ?, ?)",
-      );
-      for (const r of m.object_edits) {
-        insOe.run(r.workflow_id, r.project_id, r.asset_id, r.document);
-      }
-
-      const insCrs = db.prepare(
-        "INSERT OR REPLACE INTO constant_rate_streams(index_sha, stream_uid) VALUES (?, ?)",
-      );
-      for (const r of m.constant_rate_streams) insCrs.run(r.index_sha, r.stream_uid);
-
-      const insPs = db.prepare(
-        "INSERT OR REPLACE INTO preview_sheets(artifact_id, project_id, job_id, revision, blob) VALUES (?, ?, ?, ?, ?)",
-      );
-      for (const r of m.preview_sheets) {
-        insPs.run(r.artifact_id, r.project_id, r.job_id, r.revision, r.blob);
-      }
-
-      const insCs = db.prepare(
-        "INSERT OR REPLACE INTO contact_sheets(project_id, revision, artifact_id, blob) VALUES (?, ?, ?, ?)",
-      );
-      for (const r of m.contact_sheets) {
-        insCs.run(r.project_id, r.revision, r.artifact_id, r.blob);
-      }
-
-      const insArt = db.prepare(
-        "INSERT OR REPLACE INTO artifacts(artifact_id, job_id, document) VALUES (?, ?, ?)",
-      );
-      for (const r of m.artifacts) insArt.run(r.artifact_id, r.job_id, r.document);
-
-      const insEv = db.prepare(
-        "INSERT OR REPLACE INTO events(project_id, seq, document) VALUES (?, ?, ?)",
-      );
-      for (const r of m.events) insEv.run(r.project_id, r.seq, r.document);
-
-      const insOb = db.prepare(
-        "INSERT OR REPLACE INTO outbox(event_id, project_id, seq, document) VALUES (?, ?, ?, ?)",
-      );
-      for (const r of m.outbox) insOb.run(r.event_id, r.project_id, r.seq, r.document);
-
-      const insMp = db.prepare(
-        "INSERT OR REPLACE INTO model_policies(project_id, provider, model_id, document) VALUES (?, ?, ?, ?)",
-      );
-      for (const r of m.model_policies) {
-        insMp.run(r.project_id, r.provider, r.model_id, r.document);
-      }
-
-      const insSet = db.prepare(
-        "INSERT OR REPLACE INTO project_settings(project_id, document) VALUES (?, ?)",
-      );
-      for (const r of m.project_settings) insSet.run(r.project_id, r.document);
-
       db.exec("COMMIT");
     } catch (error) {
-      db.exec("ROLLBACK");
+      try {
+        for (const file of published) unlinkSync(file);
+      } finally {
+        db.exec("ROLLBACK");
+      }
       throw error;
     }
 
@@ -552,6 +495,7 @@ export async function importMigrationManifest(options: {
       blobs: options.manifest.blobs.length,
     };
   } finally {
-    db.close();
+    database?.close();
+    await rm(staging, { recursive: true, force: true });
   }
 }
