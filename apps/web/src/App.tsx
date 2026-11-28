@@ -13,13 +13,14 @@ import type {
   ObjectEditWorkflow,
   ProjectSnapshot,
 } from "@ave/contracts";
+import { ChatGptPanel, type ChatGptBridge } from "./ChatGptPanel.js";
 import { ObjectEditPanel } from "./ObjectEditPanel.js";
 import { SourcePreview } from "./SourcePreview.js";
 import { buildSingleTrimDraft, formatError, readTrimRange } from "./workbench-state.js";
 
 declare global {
   interface Window {
-    aveDesktop?: {
+    aveDesktop?: ChatGptBridge & {
       getDaemonConfig(): Promise<{ wsUrl: string; ownerToken: string; aveHome: string }>;
       pickSourceFile(): Promise<string | null>;
     };
@@ -292,6 +293,7 @@ export function App() {
           <button onClick={() => void handleCreateProject()}>新建项目</button>
         </div>
       </header>
+      {window.aveDesktop?.accountStatus && <ChatGptPanel key={projectId ?? "settings"} bridge={window.aveDesktop} client={clientRef.current} projectId={projectId} assetId={selectedAsset?.assetId} />}
 
       {projects.length > 0 && (
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
