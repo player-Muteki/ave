@@ -27,6 +27,8 @@ const descriptions = {
   list_artifacts: "List bounded artifact metadata for a job in this project.",
   estimate_timeline: "Estimate duration and validation issues. Supply only planId for a saved plan, or all fields of an edit-plan draft without planId.",
   get_waveform: "Inspect bounded RMS waveform buckets for the asset audio stream.",
+  get_object_edits:
+    "List object-edit workflows for the project (optionally filtered by assetId): detected candidates, user decisions, mask/QA review state. Read before planning a removal to avoid conflicting with a confirmed choice.",
   get_qa_summary:
     "Bounded QA summary of a rendered job (streams, duration, loudness, recipe/plan hashes, gates). Never returns pixels or full probe.",
 };

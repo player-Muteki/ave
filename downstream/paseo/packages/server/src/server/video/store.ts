@@ -938,7 +938,7 @@ export class EditorStore {
         this.authorize(projectId, principal, "owner");
         const info = this.database
           .prepare("DELETE FROM model_policies WHERE project_id = ? AND provider = ? AND model_id = ?")
-          .run(projectId, input.provider, input.modelId);
+          .run(projectId, input.provider, input.modelId) as { changes: number };
         const removed = info.changes > 0;
         if (removed)
           this.emit(projectId, "model.policy_removed", { provider: input.provider, modelId: input.modelId });

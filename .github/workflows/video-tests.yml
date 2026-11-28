@@ -1,0 +1,150 @@
+name: video-tests
+
+# Regression gate for the video-editor downstream: the documentation-only
+# project-check workflow stays fast; this one actually executes the suites
+# (python offline checks, vitest over the overlaid Paseo fork, tsc/tsgo
+# typecheck, and the FFmpeg media checks across versions).
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-offline:
+    name: python offline checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install python test dependencies
+        run: pip install jsonschema pytest numpy scenedetect opencv-python-headless pillow
+      - name: Division attribution regression test
+        run: python3 -m pytest scripts/test_update_division.py -q
+      - name: Offline wire contract (fixtures vs generated schema)
+        run: python3 downstream/paseo/plugins/video-editor/test/check_worker_contract.py
+      - name: RPC surface consistency (main switch vs contract vs authz)
+        run: python3 downstream/paseo/plugins/video-editor/test/test_rpc_surface.py
+      - name: Sampling map checks
+        run: python3 downstream/paseo/plugins/video-editor/test/test_sampling_map.py
+      - name: Worker python unit tests
+        run: >-
+          python3 -m pytest
+          downstream/paseo/plugins/video-editor/test/test_shot_index.py
+          downstream/paseo/plugins/video-editor/test/test_protected_composite.py
+          downstream/paseo/plugins/video-editor/test/test_people_detector.py
+          -q
+      - name: Docs, SVG, team data, stats and pin gates
+        run: python3 scripts/check_project.py
+
+  video-vitest:
+    name: video vitest + typecheck (paseo pin + downstream overlay)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.2.4
+        with:
+          node-version: "22.23.2"
+          cache: npm
+          cache-dependency-path: downstream/paseo/package-lock.json
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Resolve locked Paseo source (R0 research pin)
+        id: source
+        run: node -e "console.log('sha='+require('./research/upstream.json').references.find(r=>r.path==='paseo').commit)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: getpaseo/paseo
+          ref: ${{ steps.source.outputs.sha }}
+          path: runtime
+          persist-credentials: false
+      - name: Overlay downstream/paseo onto the pinned runtime
+        run: git archive HEAD:downstream/paseo | tar -x -C runtime
+      - name: Install system FFmpeg (media-backed unit tests)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install locked runtime dependencies
+        working-directory: runtime
+        run: npm ci --no-audit --no-fund
+      - name: Build video contracts (tsc, strict)
+        working-directory: runtime/packages/server
+        run: npm run build:video-contracts
+      - name: Vitest - server video suite
+        working-directory: runtime/packages/server
+        run: npx vitest run src/server/video --exclude "**/*.e2e.test.ts" --exclude "**/*.real.e2e.test.ts"
+      - name: Vitest - video-editor plugin suite
+        working-directory: runtime
+        run: npx vitest run plugins/video-editor --exclude "**/*.e2e.test.ts" --exclude "**/*.real.e2e.test.ts"
+      - name: Build server stack
+        working-directory: runtime
+        run: npm run build:server
+      - name: Typecheck server workspace (tsgo)
+        working-directory: runtime
+        run: npm run typecheck --workspace=@getpaseo/server
+
+  media-ffmpeg-matrix:
+    name: media checks (ffmpeg ${{ matrix.ffmpeg }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.informational }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Required legs: distro FFmpeg and the current FFmpeg 9 static line.
+          - { ffmpeg: "system-apt", informational: false }
+          - { ffmpeg: "static-9", informational: false }
+          # Informational leg: latest johnvansickle release build; surfaces
+          # upstream behavioural drift without blocking merges.
+          - { ffmpeg: "release-static", informational: true }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install python test dependencies
+        run: pip install pytest numpy scenedetect opencv-python-headless pillow imageio-ffmpeg
+      - name: Install FFmpeg (system apt)
+        if: matrix.ffmpeg == 'system-apt'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg (static 9.x line via imageio-ffmpeg + release ffprobe)
+        if: matrix.ffmpeg == 'static-9'
+        run: |
+          mkdir -p .tools/ff9 .tools/ffprobe
+          ln -sf "$(python3 -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')" .tools/ff9/ffmpeg
+          curl -sL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | tar -xJ --wildcards '*/ffprobe' -C .tools/ffprobe --strip-components=1
+          echo "$PWD/.tools/ff9:$PWD/.tools/ffprobe" >> "$GITHUB_PATH"
+      - name: Install FFmpeg (johnvansickle latest release)
+        if: matrix.ffmpeg == 'release-static'
+        run: |
+          mkdir -p .tools/release
+          curl -sL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | tar -xJ -C .tools/release --strip-components=1
+          echo "$PWD/.tools/release" >> "$GITHUB_PATH"
+      - name: Report FFmpeg version
+        run: ffmpeg -version | head -1 && ffprobe -version | head -1
+      - name: Media timebase / preview clock check
+        run: python3 scripts/check_media_timebase.py
+      - name: Protected composite + shot index + people detector tests
+        run: >-
+          python3 -m pytest
+          downstream/paseo/plugins/video-editor/test/test_protected_composite.py
+          downstream/paseo/plugins/video-editor/test/test_shot_index.py
+          downstream/paseo/plugins/video-editor/test/test_people_detector.py
+          -q
