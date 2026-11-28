@@ -1,0 +1,136 @@
+name: native-tests
+
+# Regression gate for the native AVE workspace (packages/, services/, apps/,
+# storage/, conformance/). The documentation-only project-check workflow stays
+# fast; this one executes the real suites on every push/PR:
+#   - node: npm ci, tsc -b typecheck, schema sync check, full vitest run
+#   - python: pytest (division + media-worker), R0 baseline, rpc-surface,
+#     boundary check, docs/stats/pin gates
+#   - media: FFmpeg version matrix over the media-worker and R0 golden media
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node-tests:
+    name: node - typecheck + schema + vitest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.2.4
+        with:
+          node-version: "22.23.2"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install python worker runtime (system-wide, visible to python3 -I)
+        run: pip install -r services/media-worker/requirements.txt
+      - name: Install FFmpeg (media-backed e2e tests)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install locked workspace dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build web workbench bundle (web-workbench test asserts dist/)
+        run: npm run build --workspace=@ave/web
+      - name: Typecheck all workspaces (tsc -b)
+        run: npm run typecheck
+      - name: Check generated contract schema is in sync
+        run: npm run generate:schema
+      - name: Vitest - all workspaces
+        run: npx vitest run
+
+  python-checks:
+    name: python - pytest + R0 baseline + surface/boundary/docs gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.2.4
+        with:
+          node-version: "22.23.2"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install python test dependencies
+        run: pip install pytest numpy pillow jsonschema
+      - name: Install FFmpeg (media-worker tests + R0 golden media)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Restore the pinned Paseo reference checkout (needed by update_division --check)
+        id: source
+        run: node -e "console.log('sha='+require('./research/upstream.json').references.find(r=>r.path==='paseo').commit)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: getpaseo/paseo
+          ref: ${{ steps.source.outputs.sha }}
+          path: paseo
+          persist-credentials: false
+      - name: Install workspace dependencies (R0 verify runs the schema generator)
+        run: npm ci --no-audit --no-fund
+      - name: Division attribution regression test
+        run: python3 -m pytest scripts/test_update_division.py -q
+      - name: Media worker python tests
+        run: python3 -m pytest services/media-worker/tests -q
+      - name: Verify R0 frozen-behavior baseline
+        run: python3 conformance/r0-baseline/verify_r0_baseline.py
+      - name: Native RPC surface consistency
+        run: python3 scripts/check_native_rpc_surface.py
+      - name: Native boundary check (no Paseo/Pi/FilmCraft coupling)
+        run: npm run check:boundaries
+      - name: Docs, SVG, team data, stats and pin gates
+        run: python3 scripts/check_project.py
+
+  media-ffmpeg-matrix:
+    name: media checks (ffmpeg ${{ matrix.ffmpeg }} on ${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Distro FFmpeg on the LTS runner (6.x line).
+          - { ffmpeg: "apt-6.x", runner: "ubuntu-24.04" }
+          # Distro FFmpeg on the latest runner (newer apt FFmpeg line).
+          - { ffmpeg: "apt-latest", runner: "ubuntu-latest" }
+          # Static FFmpeg 9 line (imageio-ffmpeg wheel) for ffmpeg, distro ffprobe.
+          - { ffmpeg: "static-9", runner: "ubuntu-24.04" }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.2.4
+        with:
+          node-version: "22.23.2"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install python test dependencies
+        run: pip install pytest numpy pillow imageio-ffmpeg
+      - name: Install distro FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Put static FFmpeg 9 first on PATH (ffprobe stays distro)
+        if: matrix.ffmpeg == 'static-9'
+        run: |
+          mkdir -p .tools/ff9
+          ln -sf "$(python3 -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')" .tools/ff9/ffmpeg
+          echo "$PWD/.tools/ff9" >> "$GITHUB_PATH"
+      - name: Install workspace dependencies (R0 verify runs the schema generator)
+        run: npm ci --no-audit --no-fund
+      - name: Report FFmpeg version
+        run: ffmpeg -version | head -1 && ffprobe -version | head -1
+      - name: Media worker python tests
+        run: python3 -m pytest services/media-worker/tests -q
+      - name: Verify R0 golden media under this FFmpeg
+        run: python3 conformance/r0-baseline/verify_r0_baseline.py
