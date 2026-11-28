@@ -35,6 +35,8 @@
 
 仍阻塞：`editor.e2e`/`edit-desk.browser.e2e` 需 protocol 生成的 AOT 校验产物（`generate-validation-aot.mjs` 依赖 zod-aot＋完整 protocol 消息树，深依赖且 exports 指向未构建 dist，完整 codegen/build OOM）；生产 agent-worker 真实模型、Android 真机、electron 打包同样需完整 build/真机/真实模型。`check_scene_cuts.py` 需 pinned `references/pyscenedetect-verified`（不存在，references 只读），shot_index 内核已由 `test_shot_index.py` 覆盖。
 
+- CI 补齐（native-tests.yml）： push/PR 现在实跑全部套件—— `tsc -b` typecheck、generate:schema 同步校验、全工作以 vitest run（16 文件/39 项）、pytest（division + media-worker）、R0 基线 verify_r0_baseline（196 fixtures/63 RPC/17 工具/golden media 解码）、native rpc-surface 与边界检查，以及 FFmpeg 版本矩阵（apt-24.04 / apt-latest / static-9）跑媒体与 R0 golden media。
+
 ## 2026-11-25 · M1 启动
 
 - [x] 等 FilmCraft 调研 Phase 14 完成：根提交 `21c2892` 与统计提交 `8a6954c`，18 份 Markdown、2 份 SVG 和三个锁定参考校验通过。
