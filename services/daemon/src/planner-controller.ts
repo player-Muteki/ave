@@ -140,6 +140,7 @@ export class AvePlannerController implements PlannerControllerHook {
       env: {
         PATH: process.env.PATH ?? "",
         NODE_ENV: process.env.NODE_ENV ?? "production",
+        ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
       },
     });
     const closed = new Promise<void>((resolve) => {
